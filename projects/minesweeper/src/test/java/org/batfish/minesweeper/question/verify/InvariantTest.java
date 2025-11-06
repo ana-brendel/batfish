@@ -261,32 +261,33 @@ public class InvariantTest {
 
         PrefixSpace checkedP = new PrefixSpace(PrefixRange.fromPrefix(Prefix.parse("25.13.0.0/16")));
         PrefixSpace matchesP = new PrefixSpace(PrefixRange.fromPrefix(Prefix.parse("25.13.24.0/24")));
-        PrefixSpace noMatchP = new PrefixSpace(PrefixRange.fromPrefix(Prefix.parse("128.0.0.0/16")));
+        PrefixSpace greaterP = new PrefixSpace(PrefixRange.fromPrefix(Prefix.parse("25.0.0.0/16")));
 
         Invariant.ClauseBuilder checked = Invariant.createClause(checkedP,null,null);
         Invariant.ClauseBuilder matches = Invariant.createClause(matchesP,null,null);
         Invariant.ClauseBuilder sub = Invariant.createClause(checkedP,matchesP,null);
-        Invariant.ClauseBuilder noMatch = Invariant.createClause(noMatchP,null,null);
-        Invariant.ClauseBuilder excluded = Invariant.createClause(noMatchP,checkedP,null);
+        Invariant.ClauseBuilder excluded = Invariant.createClause(greaterP,checkedP,null);
         Invariant.ClauseBuilder avoided = Invariant.createClause(null,checkedP,null);
 
         BDD checkedBDD = wellFormed(tbdd,prefixSpaceToBDD(checkedP, base, true));
         BDD avoidCheckedBDD = wellFormed(tbdd,prefixSpaceToBDD(checkedP, base, false));
         BDD matchesBDD = wellFormed(tbdd,prefixSpaceToBDD(matchesP, base, true));
-        BDD avoidMatchesBDD = wellFormed(tbdd,prefixSpaceToBDD(matchesP, base, false));
-        BDD noMatchBDD = wellFormed(tbdd,prefixSpaceToBDD(noMatchP, base, true));
+        BDD greaterBDD = wellFormed(tbdd,prefixSpaceToBDD(greaterP, base, true));
 
         Invariant checkedInv = new Invariant(tbdd,checked.build(tbdd,policyUsed));
         assertEquals(checkedBDD,checkedInv.getBDD());
 
-//        Invariant avoidInv = new Invariant(tbdd,avoid.build(tbdd,policyUsed));
-//        assertEquals(avoidInv.getBDD(), wellFormed(tbdd,match_100_1.id().not()));
-//
-//        Invariant bothInv = new Invariant(tbdd,both.build(tbdd,policyUsed));
-//        assertEquals(bothInv.getBDD(), wellFormed(tbdd,match_100_2.id().and(match_100_1.id().not())));
-//
-//        Invariant eitherInv = Invariant.builder().addClause(match).addClause(avoid).build(tbdd,policyUsed);
-//        assertEquals(eitherInv.getBDD(), wellFormed(tbdd,match_100_2.id().or(match_100_1.id().not())));
+        Invariant avoidInv = new Invariant(tbdd,avoided.build(tbdd,policyUsed));
+        assertEquals(avoidCheckedBDD,avoidInv.getBDD());
+
+        Invariant matchesInv = new Invariant(tbdd,matches.build(tbdd,policyUsed));
+        assertEquals(matchesBDD,matchesInv.getBDD());
+
+        Invariant subInv = new Invariant(tbdd,sub.build(tbdd,policyUsed));
+        assertEquals(checkedBDD.diff(matchesBDD),subInv.getBDD());
+
+        Invariant excludedInv = new Invariant(tbdd,excluded.build(tbdd,policyUsed));
+        assertEquals(greaterBDD.diff(checkedBDD),excludedInv.getBDD());
     }
 
     @Test

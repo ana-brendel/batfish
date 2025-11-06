@@ -29,6 +29,11 @@ public abstract class BDDInteger implements Serializable {
     return _bitvec.length;
   }
 
+  /** Returns a copy of the BDD for the corresponding bit in the vector.*/
+  public BDD getBitBDD(int i) {
+      return _bitvec[i].id();
+  }
+
   /** Find a representative value of the represented integer that satisfies a given constraint. */
   public abstract Optional<Long> getValueSatisfying(BDD bdd);
 

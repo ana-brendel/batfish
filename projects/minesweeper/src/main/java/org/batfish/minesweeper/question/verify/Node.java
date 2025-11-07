@@ -46,10 +46,15 @@ public class Node extends Location{
     }
 
     @Override
+    Location copy() {
+        return new Node(Ip.create(ip.asLong()), name);
+    }
+
+    @Override
     public boolean equals(Object obj) {
         if (this.getClass() == obj.getClass()) {
             Node node = (Node) obj;
-            return node.ip.equals(this.ip);
+            return node.ip.asLong() == (this.ip.asLong());
         } else {
             return false;
         }

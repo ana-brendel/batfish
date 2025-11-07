@@ -145,7 +145,7 @@ public class Invariant {
      */
     public static Invariant strongestCommonImplicant(Invariant left, Invariant right) {
         assert left.tbdd.equals(right.tbdd);
-        return new Invariant(left.tbdd, left.getBDD().and(right.getBDD()));
+        return new Invariant(left.tbdd, left.bdd.and(right.bdd));
     }
 
     private static BDDPairing getVariableMapping(TransferBDD tbdd, BDDRoute route) {

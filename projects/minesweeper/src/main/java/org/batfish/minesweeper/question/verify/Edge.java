@@ -21,6 +21,12 @@ public class Edge extends Location {
         this.dst = Ip.parse(dst);
     }
 
+    public Edge(@Nonnull Node src, @Nonnull Node dst) {
+        assert !src.equals(dst);
+        this.src = Ip.create(src.getIp().asLong());
+        this.dst = Ip.create(dst.getIp().asLong());
+    }
+
     public Ip getSrc() {
         return src;
     }
@@ -49,6 +55,11 @@ public class Edge extends Location {
     @Override
     boolean isNode() {
         return false;
+    }
+
+    @Override
+    Location copy() {
+        return new Edge(Ip.create(src.asLong()),Ip.create(dst.asLong()));
     }
 
     @Override

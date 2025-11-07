@@ -202,7 +202,7 @@ public class VerifierTest {
         }
         return result;
     }
-    
+
     @Test
     public void completedVerificationTest() {
         Verifier verifier = new Verifier(tbdd,configInput());

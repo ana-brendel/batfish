@@ -74,11 +74,22 @@ public class Verifier {
         processConfigs(configs);
     }
 
+    /**
+     * Add a location which should allow for any route
+     * @param anchor location where invariant should be true
+     * @return updated Verified object
+     */
     public Verifier addAnchor(Location anchor) {
         anchors.add(anchor);
         return this;
     }
 
+    /**
+     * Add a property to be verified at provided location
+     * @param loc location for invariant to hold at
+     * @param inv invariant to hold
+     * @return updated Verified object
+     */
     public Verifier addProperty(Location loc, Invariant inv) {
         targets.put(loc,inv);
         return this;
@@ -148,6 +159,12 @@ public class Verifier {
         return Optional.empty(); // success - no counterexample
     }
 
+    /**
+     * Based on configured values, runs verification by inferring invariants in order
+     * to verify whatever target properties and locations are provided.
+     * @return Result indicating if verification succeeded, what the inferred invariants are and a counterexample
+     * if applicable
+     */
     public Result run() {
         initializeInvariants();
         working.addAll(targets.keySet());

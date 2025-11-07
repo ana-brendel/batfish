@@ -4,8 +4,6 @@ import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.ImmutableSet;
 import com.google.common.collect.ImmutableSortedMap;
-import net.sf.javabdd.BDD;
-import net.sf.javabdd.BDDFactory;
 import org.batfish.datamodel.BgpActivePeerConfig;
 import org.batfish.datamodel.BgpProcess;
 import org.batfish.datamodel.Configuration;
@@ -41,7 +39,6 @@ import org.batfish.datamodel.routing_policy.statement.Statement;
 import org.batfish.datamodel.routing_policy.statement.Statements;
 import org.batfish.minesweeper.CommunityVar;
 import org.batfish.minesweeper.ConfigAtomicPredicates;
-import org.batfish.minesweeper.bdd.BDDRoute;
 import org.batfish.minesweeper.bdd.TransferBDD;
 import org.batfish.minesweeper.question.searchroutepolicies.RegexConstraint;
 import org.batfish.minesweeper.question.searchroutepolicies.RegexConstraints;
@@ -60,8 +57,8 @@ import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
 import static org.batfish.datamodel.LineAction.PERMIT;
-import static org.batfish.minesweeper.bdd.TransferBDD.isRelevantForDestination;
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 
 public class VerifierTest {
@@ -258,5 +255,45 @@ public class VerifierTest {
         assertEquals(inferred.get(new Edge(ALPHANODE,BETANODE)),alpha_beta);
         assertEquals(inferred.get(new Edge(GAMMANODE,BETANODE)),gamma_beta);
         assertTrue(inferred.get(new Edge(BETANODE,ALPHANODE)).isTrue());
+    }
+
+    @Test
+    public void failByUntrueAnchorTest() {
+        Verifier verifier = new Verifier(tbdd,configInput());
+        Invariant property = new Invariant(tbdd,Invariant.clauseBuilder().avoidPrefix(PREFIX).build(tbdd,imports.get(DELTANODE)));
+        verifier.addProperty(DELTANODE,property).addAnchor(new Edge(ALPHANODE,BETANODE));
+        Verifier.Result result = verifier.run();
+        assertFalse(result.verified());
+    }
+
+    @Test
+    public void validSafetyQuestionTest() {
+        Verifier verifier = new Verifier(tbdd,configInput());
+        RegexConstraints comm = new RegexConstraints(List.of(RegexConstraint.parse("100:2")));
+        Invariant property = new Invariant(tbdd,Invariant.clauseBuilder().setCommunities(comm).build(tbdd,imports.get(DELTANODE)));
+        verifier.addProperty(DELTANODE,property);
+        Verifier.Result result = verifier.run();
+        assertTrue(result.verified());
+    }
+
+    @Test
+    public void needToConstrainAllTest() {
+        Verifier verifier = new Verifier(tbdd,configInput());
+        RegexConstraints comm = new RegexConstraints(List.of(RegexConstraint.parse("100:1"),RegexConstraint.parse("!100:2")));
+        Invariant property = new Invariant(tbdd,Invariant.clauseBuilder().setCommunities(comm).build(tbdd,imports.get(DELTANODE)));
+        verifier.addProperty(DELTANODE,property);
+        Verifier.Result result = verifier.run();
+        assertTrue(result.verified());
+        assertFalse(result.inferredTrue());
+    }
+
+    @Test
+    public void cannotVerifyTest() {
+        Verifier verifier = new Verifier(tbdd,configInput());
+        RegexConstraints comm = new RegexConstraints(List.of(RegexConstraint.parse("100:1"),RegexConstraint.parse("!100:2")));
+        Invariant property = new Invariant(tbdd,Invariant.clauseBuilder().setCommunities(comm).build(tbdd,imports.get(GAMMANODE)));
+        verifier.addProperty(GAMMANODE,property);
+        Verifier.Result result = verifier.run();
+        assertFalse(result.verified());
     }
 }

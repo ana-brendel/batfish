@@ -255,7 +255,7 @@ public final class SearchRoutePoliciesAnswerer extends Answerer {
     };
   }
 
-  private BDD prefixSpaceToBDD(PrefixSpace space, BDDRoute r, boolean complementPrefixes) {
+  private static BDD prefixSpaceToBDD(PrefixSpace space, BDDRoute r, boolean complementPrefixes) {
     BDDFactory factory = r.getPrefix().getFactory();
     if (space.isEmpty()) {
       return factory.one();
@@ -287,7 +287,7 @@ public final class SearchRoutePoliciesAnswerer extends Answerer {
         BoundType.CLOSED);
   }
 
-  private BDD longSpaceToBDD(LongSpace space, BDDInteger bddInt) {
+  private static BDD longSpaceToBDD(LongSpace space, BDDInteger bddInt) {
     if (space.isEmpty()) {
       return bddInt.getFactory().one();
     } else {
@@ -300,8 +300,8 @@ public final class SearchRoutePoliciesAnswerer extends Answerer {
     }
   }
 
-  private BDD nextHopIpConstraintsToBDD(
-      Optional<Prefix> optNextHopIp, BDDRoute r, boolean outputRoute) {
+  private static BDD nextHopIpConstraintsToBDD(
+          Optional<Prefix> optNextHopIp, BDDRoute r, boolean outputRoute, Environment.Direction direction) {
     if (!optNextHopIp.isPresent()) {
       return r.getFactory().one();
     }
@@ -319,7 +319,7 @@ public final class SearchRoutePoliciesAnswerer extends Answerer {
           // results
           return r.getFactory().one();
         default:
-          if (_direction == Environment.Direction.OUT && !r.getNextHopSet()) {
+          if (direction == Environment.Direction.OUT && !r.getNextHopSet()) {
             // in the OUT direction we can only use the next-hop IP in the route
             // if the route-map explicitly sets it
             return r.getFactory().zero();
@@ -337,8 +337,8 @@ public final class SearchRoutePoliciesAnswerer extends Answerer {
    * @param route the symbolic route
    * @return the BDD
    */
-  private BDD asPathRegexConstraintListToBDD(
-      List<RegexConstraint> regexConstraints, ConfigAtomicPredicates configAPs, BDDRoute route) {
+  private static BDD asPathRegexConstraintListToBDD(
+          List<RegexConstraint> regexConstraints, ConfigAtomicPredicates configAPs, BDDRoute route) {
     return TransferBDD.asPathRegexesToBDD(
         regexConstraints.stream()
             .map(RegexConstraint::getRegex)
@@ -356,8 +356,8 @@ public final class SearchRoutePoliciesAnswerer extends Answerer {
    * @param route the symbolic route
    * @return the constraint as a BDD
    */
-  private BDD communityRegexConstraintToBDD(
-      RegexConstraint regex, TransferBDD tbdd, BDDRoute route, TransferBDD.Context context) {
+  private static BDD communityRegexConstraintToBDD(
+          RegexConstraint regex, TransferBDD tbdd, BDDRoute route, TransferBDD.Context context) {
     return switch (regex.getRegexType()) {
       case REGEX ->
           tbdd.getFactory()
@@ -387,8 +387,8 @@ public final class SearchRoutePoliciesAnswerer extends Answerer {
    * @param route the symbolic route
    * @return the overall constraint as a BDD
    */
-  private BDD communityRegexConstraintsToBDD(
-      RegexConstraints regexes, TransferBDD tbdd, BDDRoute route, Context context) {
+  private static BDD communityRegexConstraintsToBDD(
+          RegexConstraints regexes, TransferBDD tbdd, BDDRoute route, Context context) {
 
     BDDFactory factory = tbdd.getFactory();
 
@@ -426,8 +426,8 @@ public final class SearchRoutePoliciesAnswerer extends Answerer {
    *     path
    * @return a BDD representing atomic predicates that satisfy the given regex constraints
    */
-  private BDD outputAsPathConstraintsToBDDAndUpdatedAPs(
-      RegexConstraints asPathRegexes, ConfigAtomicPredicates configAPs, BDDRoute r) {
+  private static BDD outputAsPathConstraintsToBDDAndUpdatedAPs(
+          RegexConstraints asPathRegexes, ConfigAtomicPredicates configAPs, BDDRoute r) {
     // update the atomic predicates to include any prepended ASes and then to constrain them to
     // satisfy the given regex constraints
     AsPathRegexAtomicPredicates aps = configAPs.getAsPathRegexAtomicPredicates();
@@ -446,7 +446,7 @@ public final class SearchRoutePoliciesAnswerer extends Answerer {
                 .collect(ImmutableSet.toImmutableSet()));
   }
 
-  private <T> BDD setToBDD(Set<T> set, BDDRoute bddRoute, BDDDomain<T> bddDomain) {
+  private static <T> BDD setToBDD(Set<T> set, BDDRoute bddRoute, BDDDomain<T> bddDomain) {
     if (set.isEmpty()) {
       return bddRoute.getFactory().one();
     } else {
@@ -457,12 +457,13 @@ public final class SearchRoutePoliciesAnswerer extends Answerer {
   // Produce a BDD that represents all truth assignments for the given BDDRoute r that satisfy the
   // given set of BgpRouteConstraints.  The way to represent next-hop constraints depends on whether
   // r is an input or output route, so the outputRoute flag distinguishes these cases.
-  private BDD routeConstraintsToBDD(
+  public static BDD routeConstraintsToBDD(
       BgpRouteConstraints constraints,
       BDDRoute r,
       boolean outputRoute,
       TransferBDD tbdd,
-      Context context) {
+      Context context,
+      Environment.Direction direction) {
 
     ConfigAtomicPredicates configAPs = tbdd.getConfigAtomicPredicates();
 
@@ -487,7 +488,7 @@ public final class SearchRoutePoliciesAnswerer extends Answerer {
           (pos.isEmpty() ? r.getFactory().one() : asPathRegexConstraintListToBDD(pos, configAPs, r))
               .diffWith(asPathRegexConstraintListToBDD(neg, configAPs, r)));
     }
-    result.andWith(nextHopIpConstraintsToBDD(constraints.getNextHopIp(), r, outputRoute));
+    result.andWith(nextHopIpConstraintsToBDD(constraints.getNextHopIp(), r, outputRoute,direction));
     result.andWith(setToBDD(constraints.getOriginType(), r, r.getOriginType()));
     result.andWith(setToBDD(constraints.getProtocol(), r, r.getProtocolHistory()));
 
@@ -530,7 +531,7 @@ public final class SearchRoutePoliciesAnswerer extends Answerer {
     Set<PrefixSpace> blockedPrefixes = new HashSet<>();
     BDD inConstraints =
         routeConstraintsToBDD(
-            _inputConstraints, new BDDRoute(tbdd.getFactory(), configAPs), false, tbdd, context);
+            _inputConstraints, new BDDRoute(tbdd.getFactory(), configAPs), false, tbdd, context, _direction);
     ImmutableList.Builder<Row> builder = ImmutableList.builder();
     for (TransferReturn path : relevantPaths) {
       BDD pathAnnouncements = path.getInputConstraints();
@@ -551,7 +552,7 @@ public final class SearchRoutePoliciesAnswerer extends Answerer {
                 outputRoute,
                 true,
                 new TransferBDD(outputRoute.getFactory(), outConfigAPs),
-                context);
+                context, _direction);
         intersection = intersection.and(outConstraints);
       }
 

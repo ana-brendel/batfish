@@ -60,6 +60,7 @@ import java.util.stream.Stream;
 
 import static org.batfish.datamodel.LineAction.PERMIT;
 import static org.batfish.minesweeper.bdd.TransferBDD.isRelevantForDestination;
+import static org.batfish.minesweeper.question.verify.TestConfigConstructionUtils.getBgpActivePeerConfig;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertTrue;
 
@@ -107,20 +108,6 @@ public class InvariantTest {
                 .setVrf(vrf).build();
     }
 
-    private BgpActivePeerConfig getBgpActivePeerConfig(Node node,String importPolicy, String exportPolicy) {
-        BgpActivePeerConfig.Builder builder = BgpActivePeerConfig.builder().setGroup(NEXT_DOOR);
-        if (importPolicy != null && exportPolicy != null) {
-            return builder.setIpv4UnicastAddressFamily(Ipv4UnicastAddressFamily.builder().setImportPolicy(importPolicy).setExportPolicy(exportPolicy).build()).build();
-        } else if (importPolicy != null) {
-            return builder.setIpv4UnicastAddressFamily(Ipv4UnicastAddressFamily.builder().setImportPolicy(importPolicy).build()).build();
-        } else if (exportPolicy != null) {
-            return builder.setIpv4UnicastAddressFamily(Ipv4UnicastAddressFamily.builder().setImportPolicy(exportPolicy).build()).build();
-        } else {
-            return builder.build();
-        }
-
-    }
-
     @Before
     public void setup() throws IOException {
         // Instantiate configurations
@@ -146,18 +133,18 @@ public class InvariantTest {
         // Create BGP processes
         BgpProcess alphaBgp = getBgpProcess(ALPHANODE);
         alphaBgp.setNeighbors(ImmutableSortedMap.of(
-                BETANODE.getIp(),getBgpActivePeerConfig(ALPHANODE,null,EXPORT_POLICY_NAME)));
+                BETANODE.getIp(),getBgpActivePeerConfig(NEXT_DOOR,null,EXPORT_POLICY_NAME)));
         BgpProcess betaBgp = getBgpProcess(BETANODE);
         betaBgp.setNeighbors(ImmutableSortedMap.of(
-                ALPHANODE.getIp(),getBgpActivePeerConfig(BETANODE,null,EXPORT_POLICY_NAME),
-                GAMMANODE.getIp(),getBgpActivePeerConfig(BETANODE,null,EXPORT_POLICY_NAME)));
+                ALPHANODE.getIp(),getBgpActivePeerConfig(NEXT_DOOR,null,EXPORT_POLICY_NAME),
+                GAMMANODE.getIp(),getBgpActivePeerConfig(NEXT_DOOR,null,EXPORT_POLICY_NAME)));
         BgpProcess gammaBgp = getBgpProcess(GAMMANODE);
         gammaBgp.setNeighbors(ImmutableSortedMap.of(
-                BETANODE.getIp(),getBgpActivePeerConfig(GAMMANODE,null,EXPORT_POLICY_NAME),
-                DELTANODE.getIp(),getBgpActivePeerConfig(GAMMANODE,null,EXPORT_POLICY_NAME)));
+                BETANODE.getIp(),getBgpActivePeerConfig(NEXT_DOOR,null,EXPORT_POLICY_NAME),
+                DELTANODE.getIp(),getBgpActivePeerConfig(NEXT_DOOR,null,EXPORT_POLICY_NAME)));
         BgpProcess deltaBgp = getBgpProcess(DELTANODE);
         deltaBgp.setNeighbors(ImmutableSortedMap.of(
-                GAMMANODE.getIp(),getBgpActivePeerConfig(DELTANODE,null,null)));
+                GAMMANODE.getIp(),getBgpActivePeerConfig(NEXT_DOOR,null,null)));
 
         BooleanExpr check_comm_100_1 = new MatchCommunities(new InputCommunities(), new HasCommunity(new CommunityIs(StandardCommunity.parse("100:1"))));
         BooleanExpr check_comm_100_2 = new MatchCommunities(new InputCommunities(), new HasCommunity(new CommunityIs(StandardCommunity.parse("100:2"))));

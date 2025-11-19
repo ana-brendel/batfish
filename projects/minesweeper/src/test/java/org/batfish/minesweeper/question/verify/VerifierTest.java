@@ -94,7 +94,8 @@ public class VerifierTest {
     private void setUpConfigs(Map<Node, Configuration> configs, Node ... nodes) {
         for (Node node : nodes) {
             Configuration.Builder configBuilder = nf.configurationBuilder().setHostname(node.getName());
-            configs.put(node, configBuilder.setConfigurationFormat(ConfigurationFormat.CISCO_IOS).build());
+            configs.put(node, configBuilder.setConfigurationFormat(ConfigurationFormat.CISCO_IOS)
+                    .setDefaultInboundAction(PERMIT).build());
         }
     }
 
@@ -183,7 +184,7 @@ public class VerifierTest {
     }
 
     @Test
-    public void completedVerificationTest() {
+    public void originalExampleTest() {
         Node ALPHANODE = new Node("10.0.0.1","alphaNode");
         Node BETANODE = new Node("10.0.0.2","betaNode");
         Node GAMMANODE = new Node("10.0.0.3","gammaNode");
@@ -226,7 +227,7 @@ public class VerifierTest {
     }
 
     @Test
-    public void invariantsAsExpectedTest() {
+    public void originalExampleInvariantsAsExpectedTest() {
         Node ALPHANODE = new Node("10.0.0.10","alphaNode");
         Node BETANODE = new Node("10.0.0.20","betaNode");
         Node GAMMANODE = new Node("10.0.0.30","gammaNode");

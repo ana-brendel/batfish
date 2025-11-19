@@ -113,20 +113,24 @@ public class InvariantTest {
         CommunityMatchExpr comm_100_2 = new CommunityMatchRegex(ColonSeparatedRendering.instance(),"^100:2$");
         RouteFilterList prefixMatch = new RouteFilterList(PREFIX_MATCH, ImmutableList.of(new RouteFilterLine(PERMIT, PrefixRange.fromPrefix(Prefix.parse("25.13.0.0/16")))));
         Configuration.Builder alphaCB = nf.configurationBuilder().setHostname(ALPHANODE.getName());
-        configs.put(ALPHANODE, alphaCB.setConfigurationFormat(ConfigurationFormat.CISCO_IOS).build());
+        configs.put(ALPHANODE, alphaCB.setConfigurationFormat(ConfigurationFormat.CISCO_IOS)
+                .setDefaultInboundAction(PERMIT).build());
         configs.get(ALPHANODE).setRouteFilterLists(ImmutableMap.of(PREFIX_MATCH,prefixMatch));
         configs.get(ALPHANODE).setCommunityMatchExprs(ImmutableMap.of("comm_100_2",comm_100_2));
         configs.get(ALPHANODE).setCommunitySetMatchExprs(ImmutableMap.of("comm_100_2", new HasCommunity(new CommunityIs(StandardCommunity.parse("100:2")))));
         Configuration.Builder betaCB = nf.configurationBuilder().setHostname(BETANODE.getName());
-        configs.put(BETANODE, betaCB.setConfigurationFormat(ConfigurationFormat.CISCO_IOS).build());
+        configs.put(BETANODE, betaCB.setConfigurationFormat(ConfigurationFormat.CISCO_IOS)
+                .setDefaultInboundAction(PERMIT).build());
         configs.get(BETANODE).setCommunityMatchExprs(ImmutableMap.of("comm_100_1",comm_100_1));
         configs.get(BETANODE).setCommunitySetMatchExprs(ImmutableMap.of("comm_100_1", new HasCommunity(new CommunityIs(StandardCommunity.parse("100:1")))));
         Configuration.Builder gammaCB = nf.configurationBuilder().setHostname(GAMMANODE.getName());
-        configs.put(GAMMANODE, gammaCB.setConfigurationFormat(ConfigurationFormat.CISCO_IOS).build());
+        configs.put(GAMMANODE, gammaCB.setConfigurationFormat(ConfigurationFormat.CISCO_IOS)
+                .setDefaultInboundAction(PERMIT).build());
         configs.get(GAMMANODE).setCommunityMatchExprs(ImmutableMap.of("comm_100_2",comm_100_2));
         configs.get(GAMMANODE).setCommunitySetMatchExprs(ImmutableMap.of("comm_100_2", new HasCommunity(new CommunityIs(StandardCommunity.parse("100:2")))));
         Configuration.Builder deltaCB = nf.configurationBuilder().setHostname(DELTANODE.getName());
-        configs.put(DELTANODE, deltaCB.setConfigurationFormat(ConfigurationFormat.CISCO_IOS).build());
+        configs.put(DELTANODE, deltaCB.setConfigurationFormat(ConfigurationFormat.CISCO_IOS)
+                .setDefaultInboundAction(PERMIT).build());
 
         // Create BGP processes
         BgpProcess alphaBgp = getBgpProcess(ALPHANODE);

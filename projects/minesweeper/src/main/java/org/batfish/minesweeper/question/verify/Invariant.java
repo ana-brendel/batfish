@@ -6,6 +6,7 @@ import net.sf.javabdd.BDD;
 import net.sf.javabdd.BDDFactory;
 import net.sf.javabdd.BDDPairing;
 import org.batfish.common.BatfishException;
+import org.batfish.datamodel.LineAction;
 import org.batfish.datamodel.PrefixRange;
 import org.batfish.datamodel.PrefixSpace;
 import org.batfish.datamodel.routing_policy.Environment;
@@ -255,9 +256,13 @@ public class Invariant {
      * @param policy weakest precondition for this policy
      * @return weakest precondition for this invariant to hold on policy
      */
-    public Invariant weakestPrecondition(RoutingPolicy policy) {
-        if (policy == null || policy.getStatements().isEmpty() || this.isTrue()) {
-            return this.copy();
+    public Invariant weakestPrecondition(@Nonnull RoutingPolicy policy) {
+        if (policy.getStatements().isEmpty()) {
+            if (policy.getOwner() == null || policy.getOwner().getDefaultInboundAction() == LineAction.PERMIT) {
+                return this.copy(); // default is permit, so invariant itself is the weakest precondition
+            } else {
+                return new Invariant(tbdd); // default is deny so the weakest precondition is true
+            }
         } else {
             TransferBDD.Context context = TransferBDD.Context.forPolicy(policy);
             List<TransferReturn> paths;

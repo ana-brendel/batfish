@@ -1,20 +1,12 @@
 package org.batfish.minesweeper.question.verify;
-
-import com.google.common.collect.ImmutableList;
-import com.google.common.collect.ImmutableSet;
 import org.batfish.datamodel.BgpProcess;
 import org.batfish.datamodel.Configuration;
 import org.batfish.datamodel.Ip;
 import org.batfish.datamodel.Vrf;
 import org.batfish.datamodel.bgp.Ipv4UnicastAddressFamily;
 import org.batfish.datamodel.routing_policy.RoutingPolicy;
-import org.batfish.minesweeper.CommunityVar;
-import org.batfish.minesweeper.ConfigAtomicPredicates;
 import org.batfish.minesweeper.bdd.TransferBDD;
-import org.batfish.minesweeper.communities.CommunityMatchExprVarCollector;
-import org.batfish.minesweeper.question.searchroutepolicies.RegexConstraint;
 
-import java.util.AbstractMap;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Hashtable;

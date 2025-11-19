@@ -1,12 +1,15 @@
 package org.batfish.minesweeper.question.verify;
 
 import com.google.common.annotations.VisibleForTesting;
+import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableSet;
+import com.google.common.collect.Sets;
 import net.sf.javabdd.BDD;
 import net.sf.javabdd.BDDFactory;
 import net.sf.javabdd.BDDPairing;
 import org.batfish.common.BatfishException;
 import org.batfish.datamodel.LineAction;
+import org.batfish.datamodel.Prefix;
 import org.batfish.datamodel.PrefixRange;
 import org.batfish.datamodel.PrefixSpace;
 import org.batfish.datamodel.routing_policy.Environment;
@@ -23,10 +26,15 @@ import org.batfish.minesweeper.question.searchroutepolicies.RegexConstraint;
 import org.batfish.minesweeper.question.searchroutepolicies.RegexConstraints;
 
 import javax.annotation.Nonnull;
+import java.util.AbstractMap;
 import java.util.ArrayList;
 import java.util.Collection;
+import java.util.Comparator;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
+import java.util.Set;
 import java.util.stream.Collectors;
 
 import static org.apache.commons.lang3.ObjectUtils.firstNonNull;
@@ -320,6 +328,99 @@ public class Invariant {
     @Override
     public int hashCode() {
         return Objects.hash(tbdd, bdd);
+    }
+
+    /// Returns invariant as string, but is not robust ("quick and dirty")
+    public String weakDisplay(List<String> prefixesConsidered) {
+        WeakReader reader = new WeakReader(this);
+        return String.join(" OR ",reader.read(prefixesConsidered));
+    }
+
+    /// Class for displaying the invariant (easily separated)
+    private class WeakReader {
+        private final Invariant inv;
+
+        private WeakReader(Invariant inv) { this.inv = inv;}
+
+        private BDD communityBDD(RegexConstraint comm) {
+            return Invariant.createClause(null,null,new RegexConstraints(List.of(comm))).build(inv.tbdd,null);
+        }
+
+        private BDD prefixBDD(PrefixSpace space, boolean positive) {
+            return Invariant.createClause(positive ? space : null,positive ? null : space,null).build(inv.tbdd,null);
+        }
+
+        private boolean filterRedundant(Set<Map.Entry<String,BDD>> set) {
+            List<String> positives = set.stream().map(Map.Entry::getKey).filter(key -> key.startsWith("has"))
+                    .map(key -> key.replaceFirst("has ","")).toList();
+            List<String> negatives = set.stream().map(Map.Entry::getKey).filter(key -> key.startsWith("does not have"))
+                    .map(key -> key.replaceFirst("does not have ","")).toList();
+            return positives.stream().noneMatch(negatives::contains);
+        }
+
+        private Map.Entry<String,BDD> makeOneEntry(Set<Map.Entry<String,BDD>> set) {
+            ImmutableList.Builder<String> builder = ImmutableList.builder();
+            BDD clause = inv.base.wellFormednessConstraints(true);
+            for (Map.Entry<String,BDD> entry : set) {
+                clause = clause.and(entry.getValue());
+                builder.add(entry.getKey());
+            }
+            return new AbstractMap.SimpleEntry<>(String.join(" and ",builder.build()),clause);
+        }
+
+        private List<String> read(List<String> prefixesConsidered) {
+            Map<String,BDD> atoms = new HashMap<>();
+
+            // Currently fixed -- could be input
+            // List<String> prefixesConsidered = ImmutableList.of("25.13.0.0/16","24.4.0.0/16","36.6.0.0/16","42.7.0.0/16");
+
+            for (CommunityVar cv : inv.tbdd.getConfigAtomicPredicates().getStandardCommunityAtomicPredicates().getRegexes()) {
+                String regex = cv.getRegex();
+                atoms.put("has comm " + regex, communityBDD(new RegexConstraint(regex,false)));
+                atoms.put("does not have comm " + regex, communityBDD(new RegexConstraint(regex,true)));
+            }
+
+            for (String prefixString : prefixesConsidered) {
+                PrefixSpace PREFIX = new PrefixSpace(PrefixRange.fromPrefix(Prefix.parse(prefixString)));
+                atoms.put("has prefix " + prefixString,prefixBDD(PREFIX,true));
+                atoms.put("does not have prefix " + prefixString,prefixBDD(PREFIX,false));
+            }
+
+            Set<Set<Map.Entry<String,BDD>>> combos = Sets.powerSet(atoms.entrySet());
+
+            Set<Map.Entry<String,BDD>> clauses = combos.stream().filter(this::filterRedundant).map(this::makeOneEntry).collect(Collectors.toSet());
+
+            if (inv.isFalse()) {
+                return ImmutableList.of("false");
+            } else if (inv.isTrue()) {
+                return ImmutableList.of("true");
+            } else {
+                ImmutableList.Builder<Map.Entry<String, BDD>> builder = ImmutableList.builder();
+                List<Map.Entry<String, BDD>> sorted = clauses.stream()
+                        .sorted(Comparator.comparingInt(entry -> entry.getKey().length())).toList();
+                BDD disjunction = tbdd.getFactory().zero();
+                for (Map.Entry<String, BDD> entry : sorted) {
+                    BDD clause = base.wellFormednessConstraints(true).and(entry.getValue());
+                    if (clause.imp(inv.wellFormedBDD()).isOne()) {
+                        boolean keep = true;
+                        for (Map.Entry<String, BDD> added : builder.build()) {
+                            if (keep) {
+                                BDD in = added.getValue().and(base.wellFormednessConstraints(true));
+                                if (clause.imp(in).isOne()) { // if this clause implies any that are kept, we don't need to add
+                                    keep = false;
+                                }
+                            }
+                        }
+                        if (keep) {
+                            builder.add(entry);
+                            disjunction = disjunction.or(entry.getValue());
+                        }
+                    }
+                }
+                assert inv.wellFormedBDD().equals(disjunction);
+                return builder.build().stream().map(Map.Entry::getKey).toList();
+            }
+        }
     }
 
     /**

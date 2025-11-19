@@ -40,6 +40,11 @@ public class Verifier {
             }
             return false;
         }
+        public Map<Location,String> weakDisplay(List<String> prefixes) {
+            Map<Location,String> strings = new HashMap<>();
+            invariants.forEach((loc,inv) -> strings.put(loc,inv.weakDisplay(prefixes)));
+            return strings;
+        }
     }
 
     private void processConfigs(Map<String, Configuration> configs) {

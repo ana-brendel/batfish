@@ -77,7 +77,6 @@ public class TransferBDDUtils {
      * @param route the BDDRoute
      * @param tbdd the routing analysis object that produced the given route
      */
-
     public static BDDPairing makeRoutePairing(BDDRoute route, TransferBDD tbdd) {
         BDDRoute base = new BDDRoute(tbdd.getFactory(),tbdd.getConfigAtomicPredicates());
         BDDPairing pairs = tbdd.getFactory().makePair();

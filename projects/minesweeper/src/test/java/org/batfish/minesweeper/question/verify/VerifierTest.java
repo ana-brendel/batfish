@@ -52,6 +52,7 @@ import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
@@ -205,9 +206,10 @@ public class VerifierTest {
         Verifier verifier = new Verifier(tbdd,configInput());
         Invariant property = new Invariant(tbdd,Invariant.clauseBuilder().avoidPrefix(PREFIX).build(tbdd,imports.get(DELTANODE)));
         verifier.addProperty(DELTANODE,property);
-        Verifier.Result result = verifier.run();
+        Verifier.VerificationResult result = verifier.run();
         assertTrue(result.verified());
         assertTrue(result.inferredTrue());
+        assertTrue(result.counter().isEmpty());
     }
 
     @Test
@@ -215,7 +217,7 @@ public class VerifierTest {
         Verifier verifier = new Verifier(tbdd,configInput());
         Invariant property = new Invariant(tbdd,Invariant.clauseBuilder().avoidPrefix(PREFIX).build(tbdd,imports.get(DELTANODE)));
         verifier.addProperty(DELTANODE,property);
-        Verifier.Result result = verifier.run();
+        Verifier.VerificationResult result = verifier.run();
         Map<Location, Invariant> inferred = result.invariants();
 
         Invariant.ClauseBuilder avoidPrefix = Invariant.clauseBuilder().avoidPrefix(PREFIX);
@@ -239,6 +241,8 @@ public class VerifierTest {
         Invariant delta_gamma = prefix_implies_100_2.build(tbdd,exports.get(DELTANODE));
 
         assertEquals(10,inferred.size());
+        assertTrue(result.verified());
+        assertTrue(result.counter().isEmpty());
 
         Set<Map.Entry<Location, Invariant>> filtered = inferred.entrySet().stream().filter(entry -> entry.getValue().isTrue()).collect(Collectors.toSet());
 
@@ -262,8 +266,10 @@ public class VerifierTest {
         Verifier verifier = new Verifier(tbdd,configInput());
         Invariant property = new Invariant(tbdd,Invariant.clauseBuilder().avoidPrefix(PREFIX).build(tbdd,imports.get(DELTANODE)));
         verifier.addProperty(DELTANODE,property).addAnchor(new Edge(ALPHANODE,BETANODE));
-        Verifier.Result result = verifier.run();
+        Verifier.VerificationResult result = verifier.run();
         assertFalse(result.verified());
+        Optional<Verifier.CounterExample> counter = result.counter();
+        assertTrue(result.counter().isPresent());
     }
 
     @Test
@@ -272,7 +278,7 @@ public class VerifierTest {
         RegexConstraints comm = new RegexConstraints(List.of(RegexConstraint.parse("100:2")));
         Invariant property = new Invariant(tbdd,Invariant.clauseBuilder().setCommunities(comm).build(tbdd,imports.get(DELTANODE)));
         verifier.addProperty(DELTANODE,property);
-        Verifier.Result result = verifier.run();
+        Verifier.VerificationResult result = verifier.run();
         assertTrue(result.verified());
     }
 
@@ -282,7 +288,7 @@ public class VerifierTest {
         RegexConstraints comm = new RegexConstraints(List.of(RegexConstraint.parse("100:1"),RegexConstraint.parse("!100:2")));
         Invariant property = new Invariant(tbdd,Invariant.clauseBuilder().setCommunities(comm).build(tbdd,imports.get(DELTANODE)));
         verifier.addProperty(DELTANODE,property);
-        Verifier.Result result = verifier.run();
+        Verifier.VerificationResult result = verifier.run();
         assertTrue(result.verified());
         assertFalse(result.inferredTrue());
     }
@@ -293,7 +299,7 @@ public class VerifierTest {
         RegexConstraints comm = new RegexConstraints(List.of(RegexConstraint.parse("100:1"),RegexConstraint.parse("!100:2")));
         Invariant property = new Invariant(tbdd,Invariant.clauseBuilder().setCommunities(comm).build(tbdd,imports.get(GAMMANODE)));
         verifier.addProperty(GAMMANODE,property);
-        Verifier.Result result = verifier.run();
+        Verifier.VerificationResult result = verifier.run();
         assertFalse(result.verified());
     }
 }

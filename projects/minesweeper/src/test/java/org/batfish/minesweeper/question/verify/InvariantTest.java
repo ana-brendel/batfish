@@ -442,4 +442,39 @@ public class InvariantTest {
         assertTrue(wp_beta_alpha.isTrue());
         assertEquals(wp_beta_alpha,beta_alpha);
     }
+
+    @Test
+    public void strongestPostconditionTests() {
+        Invariant.ClauseBuilder clauseP = Invariant.clauseBuilder().matchPrefix(new PrefixSpace(PrefixRange.fromPrefix(Prefix.parse("13.25.0.0/16"))));
+        Invariant.ClauseBuilder avoidPrefix = Invariant.clauseBuilder().avoidPrefix(PREFIX);
+        Invariant.ClauseBuilder match_100_1 = Invariant.clauseBuilder().setCommunities(new RegexConstraints(List.of(RegexConstraint.parse("100:1"))));
+        Invariant.ClauseBuilder match_100_2 = Invariant.clauseBuilder().setCommunities(new RegexConstraints(List.of(RegexConstraint.parse("100:2"))));
+        Invariant.ClauseBuilder avoid_100_2 = Invariant.clauseBuilder().setCommunities(new RegexConstraints(List.of(RegexConstraint.parse("!100:2"))));
+
+        // [1] 100:1 in Comm \/ not_prefix = strongestPost(Export_alpha,true)
+        Invariant inv1 = new Invariant(tbdd);
+        Invariant result1 = inv1.strongestPostcondition(exports.get(ALPHANODE));
+        Invariant expected1 = Invariant.builder().addClause(match_100_1).addClause(avoidPrefix).build(tbdd,exports.get(ALPHANODE));
+        assertEquals(result1.getBDD(),expected1.getBDD());
+
+        // [2] 100:1 in Comm \/ not_prefix = strongestPost(Export_beta,not_prefix)
+        Invariant inv2 = Invariant.builder().addClause(avoidPrefix).build(tbdd,exports.get(BETANODE));
+        Invariant result2 = inv2.strongestPostcondition(exports.get(BETANODE));
+        Invariant.ClauseBuilder has = Invariant.clauseBuilder().avoidPrefix(PREFIX).setCommunities(new RegexConstraints(List.of(RegexConstraint.parse("100:2"))));
+        Invariant.ClauseBuilder notHas = Invariant.clauseBuilder().avoidPrefix(PREFIX).setCommunities(new RegexConstraints(List.of(RegexConstraint.parse("!100:1"))));
+        Invariant expected2 = Invariant.builder().addClause(has).addClause(notHas).build(tbdd,exports.get(BETANODE));
+        assertEquals(result2.getBDD(),expected2.getBDD());
+
+        // [3] ? = strongestPost(clearComm,match_100_1 \/ match_100_2)
+        // todo figure out how to clear communities
+        List<Statement> clear_action = Development.clearCommunities();
+        RoutingPolicy clearComm = nf.routingPolicyBuilder().setOwner(configs.get(ALPHANODE)).setName("clear_attempt")
+                .setStatements(clear_action).build();
+        Invariant inv3 = Invariant.builder().addClause(match_100_2).addClause(match_100_1).build(tbdd,clearComm);
+        Invariant result3 = inv3.strongestPostcondition(clearComm);
+        String s = String.join(" or ", result3.dirtyReadability(ImmutableList.of("25.13.0.0/16")));
+        assertTrue(false);
+        //assertEquals(result2.getBDD(),expected2.getBDD());
+
+    }
 }

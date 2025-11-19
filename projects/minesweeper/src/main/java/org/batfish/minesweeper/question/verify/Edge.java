@@ -58,7 +58,7 @@ public class Edge extends Location {
     }
 
     @Override
-    Location copy() {
+    Edge copy() {
         return new Edge(Ip.create(src.asLong()),Ip.create(dst.asLong()));
     }
 

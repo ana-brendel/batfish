@@ -1,7 +1,6 @@
 package org.batfish.minesweeper.question.verify;
 
 import com.google.common.annotations.VisibleForTesting;
-import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableSet;
 import net.sf.javabdd.BDD;
 import net.sf.javabdd.BDDFactory;
@@ -29,12 +28,14 @@ import java.util.stream.Collectors;
 
 import static org.apache.commons.lang3.ObjectUtils.firstNonNull;
 import static org.batfish.minesweeper.bdd.TransferBDD.isRelevantForDestination;
+import static org.batfish.minesweeper.question.verify.TransferBDDUtils.makeRoutePairing;
 
 public class Invariant {
     private final TransferBDD tbdd;
-    private final BDD bdd;
+    private final BDD bdd; // the bdd stored here is not assumed to be well-formed
     private final BDDRoute base;
 
+    /// Provided BDD is not assumed to represent a well-formed BDDRoute
     public Invariant(TransferBDD tbdd, BDD bdd) {
         this.tbdd = tbdd;
         this.bdd = bdd;
@@ -45,126 +46,6 @@ public class Invariant {
         this.tbdd = tbdd;
         this.bdd = tbdd.getFactory().one();
         this.base = new BDDRoute(tbdd.getFactory(),tbdd.getConfigAtomicPredicates());
-    }
-
-    public static Builder builder() {
-        return new Builder();
-    }
-
-    public static ClauseBuilder clauseBuilder() {
-        return new ClauseBuilder();
-    }
-
-    public static ClauseBuilder createClause(PrefixSpace pos, PrefixSpace neg, RegexConstraints comms) {
-        return clauseBuilder()
-                .matchPrefix(firstNonNull(pos,new PrefixSpace()))
-                .avoidPrefix(firstNonNull(neg,new PrefixSpace()))
-                .setCommunities(firstNonNull(comms,new RegexConstraints()));
-    }
-
-    public BDD getBDD() {
-        return base.wellFormednessConstraints(true).and(bdd.id());
-    }
-
-    public boolean isFalse() {
-        return base.wellFormednessConstraints(true).and(bdd).isZero();
-    }
-
-    public boolean isTrue() {
-        return this.getBDD().equals(base.wellFormednessConstraints(true));
-    }
-
-    public Invariant copy() {
-        return new Invariant(tbdd,bdd.id());
-    }
-
-    /**
-     * Determines BDD corresponding to the input constraints that must hold in order for the invariant condition to hold on output.
-     * @param tbdd transfer bdd used
-     * @param inv invariant to hold on output route
-     * @param isOutputRoute (not used yet) route after import or after export ?
-     * @param r route holding the modifications and conditions after policy
-     * @return bdd constraining input in order to satisfy invariant on output
-     */
-    public static BDD conditionsForConstraint(TransferBDD tbdd, BDD inv, boolean isOutputRoute, @Nonnull BDDRoute r) {
-        if (inv.isOne()) { // if the invariant is always true... should I do one for always false too?
-            return r.wellFormednessConstraints(true).and(tbdd.getFactory().one());
-        } else {
-            BDDPairing pairing = getVariableMapping(tbdd, r);
-            BDD composed = inv.veccompose(pairing);
-            return r.wellFormednessConstraints(true).and(composed);
-        }
-    }
-
-    /**
-     * Synthesizes the weakest precondition for this invariant to hold after the provided policy is executed. Note, this
-     * method does not guarantee that there exists a route that satisfies the invariant, just that any route which is permitted
-     * will satisfy the invariant.
-     * @param policy weakest precondition for this policy
-     * @return weakest precondition for this invariant to hold on policy
-     */
-    public Invariant weakestPrecondition(RoutingPolicy policy) {
-        if (policy == null || policy.getStatements().isEmpty() || this.isTrue()) {
-            return this.copy();
-        }
-        TransferBDD.Context context = TransferBDD.Context.forPolicy(policy);
-        List<TransferReturn> paths;
-        try {
-            paths = tbdd.computePaths(policy.getStatements(),context,true);
-        } catch (Exception e) {
-            String name = policy.getOwner() != null ? policy.getOwner().getHostname() : "policy owner null";
-            throw new BatfishException("Unexpected error analyzing policy " + policy.getName() + " in node " + name, e);
-        }
-        if (paths.stream().filter(TransferReturn::getAccepted).toList().isEmpty()) {
-            return new Invariant(tbdd); // no permitted paths means any input is safe
-        } else {
-            ImmutableList.Builder<BDD> builder = ImmutableList.builder();
-            for (TransferReturn path : paths) {
-                BDD pathAnnouncements = path.getInputConstraints();
-                if (path.getAccepted()) { // path is permitted, only get the input conditions that satisfy invariant
-                    BDDRoute route = path.getOutputRoute();
-                    BDD constraintsMatchingOutput = conditionsForConstraint(tbdd,this.getBDD(),false,route);
-                    BDD intersection = pathAnnouncements.and(constraintsMatchingOutput);
-                    builder.add(intersection);
-                } else { // path is produced denied route, so this condition is safe
-                    // might want to think more about this, so we want to accept conditions that contradict post condition
-                    BDDRoute wf_base = new BDDRoute(tbdd.getFactory(),tbdd.getConfigAtomicPredicates());
-                    builder.add(pathAnnouncements.and(wf_base.wellFormednessConstraints(true)));
-                }
-            }
-            BDD disjunction = tbdd.getFactory().orAll(builder.build());
-            return new Invariant(tbdd,disjunction);
-        }
-    }
-
-    /**
-     * Finds a strong common implicant for provided invariants via conjoining the invariants.
-     * @param left first condition
-     * @param right second condition
-     * @return common and strong (non-false if possible) implicant for both conditions
-     */
-    public static Invariant strongestCommonImplicant(Invariant left, Invariant right) {
-        assert left.tbdd.equals(right.tbdd);
-        return new Invariant(left.tbdd, left.bdd.and(right.bdd));
-    }
-
-    private static BDDPairing getVariableMapping(TransferBDD tbdd, BDDRoute route) {
-        BDDRoute base = new BDDRoute(tbdd.getFactory(),tbdd.getConfigAtomicPredicates());
-        BDDPairing pairs = tbdd.getFactory().makePair();
-        // PREFIX CONSTRAINTS
-        for (int i = 0; i < base.getPrefix().size(); i++) {
-            BDD bdd_var = base.getPrefix().getBitBDD(i);
-            BDD new_bdd = route.getPrefix().getBitBDD(i);
-            assert bdd_var != null;
-            pairs.set(bdd_var.var(),new_bdd);
-        }
-        // COMMUNITY CONSTRAINTS
-        for (int i = 0; i < base.getCommunityAtomicPredicates().length; i++) {
-            BDD bdd_var = base.getCommunityAtomicPredicates()[i];
-            BDD new_bdd = route.getCommunityAtomicPredicates()[i];
-            pairs.set(bdd_var.var(),new_bdd);
-        }
-        return pairs;
     }
 
     public static final class Builder {
@@ -195,12 +76,20 @@ public class Invariant {
         private ClauseBuilder() {}
 
         public ClauseBuilder matchPrefix(PrefixSpace prefix) {
-            _positivePrefix = prefix;
+            if (_positivePrefix == null) {
+                _positivePrefix = prefix;
+            } else {
+                _positivePrefix = _positivePrefix.intersection(prefix);
+            }
             return this;
         }
 
         public ClauseBuilder avoidPrefix(PrefixSpace prefix) {
-            _negativePrefix = prefix;
+            if (_negativePrefix == null) {
+                _negativePrefix = prefix;
+            } else {
+                _negativePrefix.addSpace(prefix);
+            }
             return this;
         }
 
@@ -277,18 +166,115 @@ public class Invariant {
         }
     }
 
-    public boolean implies(Invariant post) {
-        return (this.getBDD().imp(post.getBDD())).isOne();
+    public static Builder builder() {
+        return new Builder();
     }
 
-    public boolean impliedBy(Invariant post) {
-        return (post.getBDD().imp(this.getBDD())).isOne();
+    public static ClauseBuilder clauseBuilder() {
+        return new ClauseBuilder();
+    }
+
+    public static ClauseBuilder createClause(PrefixSpace pos, PrefixSpace neg, RegexConstraints comms) {
+        return clauseBuilder()
+                .matchPrefix(firstNonNull(pos,new PrefixSpace()))
+                .avoidPrefix(firstNonNull(neg,new PrefixSpace()))
+                .setCommunities(firstNonNull(comms,new RegexConstraints()));
+    }
+
+    /// Returns the BDD stored in this invariant (with well-formed constraint applied)
+    public BDD wellFormedBDD() {
+        return base.wellFormednessConstraints(true).and(bdd.id());
+    }
+
+    /// Returns true if the invariant is false
+    public boolean isFalse() {
+        return this.wellFormedBDD().isZero();
+    }
+
+    /// Returns true if the invariant is true (for any well-formed route)
+    public boolean isTrue() {
+        return this.wellFormedBDD().equals(base.wellFormednessConstraints(true));
+    }
+
+    public Invariant copy() {
+        return new Invariant(tbdd,bdd.id());
+    }
+
+    /**
+     * Determines BDD corresponding to the input constraints that must hold in order for the invariant condition to hold on output.
+     * @param tbdd transfer bdd used
+     * @param inv invariant to hold on output route
+     * @param r route holding the modifications and conditions after policy
+     * @return bdd constraining input in order to satisfy invariant on output
+     */
+    public static BDD conditionsForConstraint(TransferBDD tbdd, BDD inv, @Nonnull BDDRoute r) {
+        if (inv.isOne()) { // if the invariant is always true... should I do one for always false too?
+            return tbdd.getFactory().one();
+        } else {
+            BDDPairing pairing = makeRoutePairing(r,tbdd);
+            return inv.veccompose(pairing);
+        }
+    }
+
+    /**
+     * Synthesizes the weakest precondition for this invariant to hold after the provided policy is executed. Note, this
+     * method does not guarantee that there exists a route that satisfies the invariant, just that any route which is permitted
+     * will satisfy the invariant.
+     * @param policy weakest precondition for this policy
+     * @return weakest precondition for this invariant to hold on policy
+     */
+    public Invariant weakestPrecondition(RoutingPolicy policy) {
+        if (policy == null || policy.getStatements().isEmpty() || this.isTrue()) {
+            return this.copy();
+        } else {
+            TransferBDD.Context context = TransferBDD.Context.forPolicy(policy);
+            List<TransferReturn> paths;
+            try {
+                paths = tbdd.computePaths(policy.getStatements(),context,true);
+            } catch (Exception e) {
+                String name = policy.getOwner() != null ? policy.getOwner().getHostname() : "policy owner null";
+                throw new BatfishException("Unexpected error analyzing policy " + policy.getName() + " in node " + name, e);
+            }
+            BDD acceptedWP = TransferBDDUtils.weakestPrecondition(paths,this.wellFormedBDD(),tbdd,
+                    (post,path) -> conditionsForConstraint(tbdd,post,path.getOutputRoute()));
+            BDD weakest = acceptedWP.or(TransferBDDUtils.deniedRoutes(paths,tbdd));
+            return new Invariant(tbdd,weakest);
+        }
+    }
+
+    /**
+     * Finds a strong common implicant for provided invariants via conjoining the invariants.
+     * @param left first condition
+     * @param right second condition
+     * @return common and strong (non-false if possible) implicant for both conditions
+     */
+    public static Invariant strongestCommonImplicant(Invariant left, Invariant right) {
+        assert left.tbdd.equals(right.tbdd);
+        return new Invariant(left.tbdd, left.bdd.and(right.bdd));
+    }
+
+    /**
+     * Indicates if this invariant implies the provided invariant
+     * @param post postcondition for implication
+     * @return true if implies provided invariant
+     */
+    public boolean implies(Invariant post) {
+        return (this.wellFormedBDD().imp(post.wellFormedBDD())).isOne();
+    }
+
+    /**
+     * Indicates if this invariant is implied by provided invariant
+     * @param pre precondition for implication
+     * @return true if implied by provided invariant
+     */
+    public boolean impliedBy(Invariant pre) {
+        return (pre.wellFormedBDD().imp(this.wellFormedBDD())).isOne();
     }
 
     @Override
     public boolean equals(Object obj) {
-        if (obj.getClass() == this.getClass()) {
-            return this.getBDD().equals(((Invariant) obj).getBDD());
+        if (obj != null && obj.getClass() == this.getClass()) {
+            return this.wellFormedBDD().equals(((Invariant) obj).wellFormedBDD());
         } else {
             return false;
         }
@@ -299,6 +285,13 @@ public class Invariant {
         return Objects.hash(tbdd, bdd);
     }
 
+    /**
+     * Intended for testing, checks if the provided precondition ensures this invariant holds on
+     * the result of the policy being applied.
+     * @param pre precondition for incoming routes
+     * @param policy policy to be executed
+     * @return true if this invariant holds as postcondition
+     */
     @VisibleForTesting
     boolean validPrecondition(@Nonnull  Invariant pre, @Nonnull RoutingPolicy policy) {
         TransferBDD.Context context = TransferBDD.Context.forPolicy(policy);
@@ -315,8 +308,8 @@ public class Invariant {
                 BDD pathAnnouncements = path.getInputConstraints();
                 if (path.getAccepted()) { // path is permitted, need to check if precondition is sat, so are output
                     BDDRoute route = path.getOutputRoute();
-                    BDD constraintsMatchingOutput = conditionsForConstraint(tbdd,this.getBDD(),false, route);
-                    BDD constrainedInput = pathAnnouncements.and(pre.getBDD());
+                    BDD constraintsMatchingOutput = conditionsForConstraint(tbdd,this.wellFormedBDD(), route);
+                    BDD constrainedInput = pathAnnouncements.and(pre.wellFormedBDD());
                     BDD intersection = constrainedInput.and(constraintsMatchingOutput);
                     BDD diff = constrainedInput.diff(intersection); // this should be empty
                     if (!diff.isZero()) {

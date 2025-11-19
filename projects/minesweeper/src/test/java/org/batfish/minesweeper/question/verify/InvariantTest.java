@@ -242,16 +242,16 @@ public class InvariantTest {
         BDD match_100_2 = commBDDString("100:2");
 
         Invariant matchInv = new Invariant(tbdd,match.build(tbdd,policyUsed));
-        assertEquals(matchInv.getBDD(), wellFormed(tbdd,match_100_2.id()));
+        assertEquals(matchInv.wellFormedBDD(), wellFormed(tbdd,match_100_2.id()));
 
         Invariant avoidInv = new Invariant(tbdd,avoid.build(tbdd,policyUsed));
-        assertEquals(avoidInv.getBDD(), wellFormed(tbdd,match_100_1.id().not()));
+        assertEquals(avoidInv.wellFormedBDD(), wellFormed(tbdd,match_100_1.id().not()));
 
         Invariant bothInv = new Invariant(tbdd,both.build(tbdd,policyUsed));
-        assertEquals(bothInv.getBDD(), wellFormed(tbdd,match_100_2.id().and(match_100_1.id().not())));
+        assertEquals(bothInv.wellFormedBDD(), wellFormed(tbdd,match_100_2.id().and(match_100_1.id().not())));
 
         Invariant eitherInv = Invariant.builder().addClause(match).addClause(avoid).build(tbdd,policyUsed);
-        assertEquals(eitherInv.getBDD(), wellFormed(tbdd,match_100_2.id().or(match_100_1.id().not())));
+        assertEquals(eitherInv.wellFormedBDD(), wellFormed(tbdd,match_100_2.id().or(match_100_1.id().not())));
     }
 
     @Test
@@ -275,19 +275,19 @@ public class InvariantTest {
         BDD greaterBDD = wellFormed(tbdd,prefixSpaceToBDD(greaterP, base, true));
 
         Invariant checkedInv = new Invariant(tbdd,checked.build(tbdd,policyUsed));
-        assertEquals(checkedBDD,checkedInv.getBDD());
+        assertEquals(checkedBDD,checkedInv.wellFormedBDD());
 
         Invariant avoidInv = new Invariant(tbdd,avoided.build(tbdd,policyUsed));
-        assertEquals(avoidCheckedBDD,avoidInv.getBDD());
+        assertEquals(avoidCheckedBDD,avoidInv.wellFormedBDD());
 
         Invariant matchesInv = new Invariant(tbdd,matches.build(tbdd,policyUsed));
-        assertEquals(matchesBDD,matchesInv.getBDD());
+        assertEquals(matchesBDD,matchesInv.wellFormedBDD());
 
         Invariant subInv = new Invariant(tbdd,sub.build(tbdd,policyUsed));
-        assertEquals(checkedBDD.diff(matchesBDD),subInv.getBDD());
+        assertEquals(checkedBDD.diff(matchesBDD),subInv.wellFormedBDD());
 
         Invariant excludedInv = new Invariant(tbdd,excluded.build(tbdd,policyUsed));
-        assertEquals(greaterBDD.diff(checkedBDD),excludedInv.getBDD());
+        assertEquals(greaterBDD.diff(checkedBDD),excludedInv.wellFormedBDD());
     }
 
     @Test
@@ -302,7 +302,7 @@ public class InvariantTest {
         Invariant P = Invariant.builder().addClause(clauseP).build(tbdd,exports.get(GAMMANODE));
         Invariant wp1 = P.weakestPrecondition(exports.get(GAMMANODE));
         Invariant expected1 = Invariant.builder().addClause(clauseP).addClause(match_100_2).build(tbdd,exports.get(GAMMANODE));
-        assertEquals(wp1.getBDD(),expected1.getBDD());
+        assertEquals(wp1.wellFormedBDD(),expected1.wellFormedBDD());
 
         // [2] False = WP(Export_alpha,prefix /\ 100:1 not in Comm)
         BDD avoid_100_1_match_prefix = Invariant.clauseBuilder()
@@ -316,19 +316,19 @@ public class InvariantTest {
         Invariant R = Invariant.builder().addClause(match_100_2).build(tbdd,exports.get(BETANODE));
         Invariant wp3 = R.weakestPrecondition(exports.get(BETANODE));
         Invariant expected3 = Invariant.builder().addClause(match_100_1).addClause(match_100_2).build(tbdd,exports.get(BETANODE));
-        assertEquals(wp3.getBDD(),expected3.getBDD());
+        assertEquals(wp3.wellFormedBDD(),expected3.wellFormedBDD());
 
         // [4] not_prefix \/ 100:2 in Comm \/ 100:1 in Comm = WP(Export_beta,not_prefix \/ 100:2 in Comm)
         Invariant S = Invariant.builder().addClause(avoidPrefix).addClause(match_100_2).build(tbdd,exports.get(BETANODE));
         Invariant wp4 = S.weakestPrecondition(exports.get(BETANODE));
         Invariant expected4 = Invariant.builder().addClause(avoidPrefix).addClause(match_100_1).addClause(match_100_2).build(tbdd,exports.get(BETANODE));
-        assertEquals(wp4.getBDD(),expected4.getBDD());
+        assertEquals(wp4.wellFormedBDD(),expected4.wellFormedBDD());
 
         // [5] 100:2 in Comm = WP(Export_gamma,100:2 in Comm)
         Invariant T = Invariant.builder().addClause(match_100_2).build(tbdd,exports.get(GAMMANODE));
         Invariant wp5 = T.weakestPrecondition(exports.get(GAMMANODE));
         Invariant expected5 = Invariant.builder().addClause(match_100_2).build(tbdd,exports.get(GAMMANODE));
-        assertEquals(wp5.getBDD(),expected5.getBDD());
+        assertEquals(wp5.wellFormedBDD(),expected5.wellFormedBDD());
 
         // [6] True (well-formed) = WP(Export_gamma,100:2 not in Comm)
         Invariant U = Invariant.builder().addClause(avoid_100_2).build(tbdd,exports.get(GAMMANODE));
@@ -339,7 +339,7 @@ public class InvariantTest {
         Invariant W = Invariant.builder().addClause(avoidPrefix).build(tbdd,exports.get(GAMMANODE));
         Invariant wp7 = W.weakestPrecondition(exports.get(GAMMANODE));
         Invariant expected7 = Invariant.builder().addClause(match_100_2).addClause(avoidPrefix).build(tbdd,exports.get(GAMMANODE));
-        assertEquals(wp7.getBDD(),expected7.getBDD());
+        assertEquals(wp7.wellFormedBDD(),expected7.wellFormedBDD());
     }
 
     @Test

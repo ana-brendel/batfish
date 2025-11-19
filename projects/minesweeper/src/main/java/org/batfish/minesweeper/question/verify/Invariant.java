@@ -8,6 +8,7 @@ import net.sf.javabdd.BDDPairing;
 import org.batfish.common.BatfishException;
 import org.batfish.datamodel.PrefixRange;
 import org.batfish.datamodel.PrefixSpace;
+import org.batfish.datamodel.routing_policy.Environment;
 import org.batfish.datamodel.routing_policy.RoutingPolicy;
 import org.batfish.datamodel.routing_policy.communities.CommunityMatchExpr;
 import org.batfish.minesweeper.CommunityVar;
@@ -16,6 +17,7 @@ import org.batfish.minesweeper.bdd.CommunityMatchExprToBDD;
 import org.batfish.minesweeper.bdd.CommunitySetMatchExprToBDD;
 import org.batfish.minesweeper.bdd.TransferBDD;
 import org.batfish.minesweeper.bdd.TransferReturn;
+import org.batfish.minesweeper.question.searchroutepolicies.BgpRouteConstraints;
 import org.batfish.minesweeper.question.searchroutepolicies.RegexConstraint;
 import org.batfish.minesweeper.question.searchroutepolicies.RegexConstraints;
 
@@ -28,6 +30,7 @@ import java.util.stream.Collectors;
 
 import static org.apache.commons.lang3.ObjectUtils.firstNonNull;
 import static org.batfish.minesweeper.bdd.TransferBDD.isRelevantForDestination;
+import static org.batfish.minesweeper.question.searchroutepolicies.SearchRoutePoliciesAnswerer.routeConstraintsToBDD;
 import static org.batfish.minesweeper.question.verify.TransferBDDUtils.makeRoutePairing;
 
 public class Invariant {
@@ -35,17 +38,42 @@ public class Invariant {
     private final BDD bdd; // the bdd stored here is not assumed to be well-formed
     private final BDDRoute base;
 
-    /// Provided BDD is not assumed to represent a well-formed BDDRoute
+    /**
+     * Provided BDD is not assumed to represent a well-formed BDDRoute
+     * @param tbdd the TransferBDD to be used
+     * @param bdd BDD to be represented by invariant
+     */
     public Invariant(TransferBDD tbdd, BDD bdd) {
         this.tbdd = tbdd;
         this.bdd = bdd;
         this.base = new BDDRoute(tbdd.getFactory(),tbdd.getConfigAtomicPredicates());
     }
 
+    /**
+     * Default invariant is true
+     * @param tbdd the TransferBDD to be used
+     */
     public Invariant(TransferBDD tbdd) {
         this.tbdd = tbdd;
         this.bdd = tbdd.getFactory().one();
         this.base = new BDDRoute(tbdd.getFactory(),tbdd.getConfigAtomicPredicates());
+    }
+
+    /**
+     * Creates an invariant type from a BgpRouteConstraint (constants used for routeConstraintsToBDD expect that
+     * this invariant will be used to start a weakest precondition based inference)
+     * @param tbdd the TransferBDD to be used
+     * @param constraint constraint to be reflected by invariant
+     * @param direction IN for invariant on node, OUT for invariant on edge (inherited from routeConstraintsToBDD)
+     * @param context context used (inherited from routeConstraintsToBDD)
+     * @return invariant representative of constraint
+     */
+    // TODO check if this makes sense
+    public static Invariant ofBgpRouteConstraints(TransferBDD tbdd, BgpRouteConstraints constraint,
+                     Environment.Direction direction, TransferBDD.Context context) {
+        BDDRoute base = new BDDRoute(tbdd.getFactory(),tbdd.getConfigAtomicPredicates());
+        // outputRoute fixed to true because if an invariant is created this way, we will be using it as a post constraint
+        return new Invariant(tbdd,routeConstraintsToBDD(constraint,base.deepCopy(),true,tbdd,context,direction));
     }
 
     public static final class Builder {

@@ -32,7 +32,7 @@ public class Verifier {
     private final Queue<Location> working = new LinkedList<>();
     private final Map<Location, Invariant> inferred = new Hashtable<>();
 
-    public record CounterExample(Location location, Invariant post) { }
+    public record CounterExample(Location location, Invariant post, Location cause) { }
     public record Result(boolean verified, Map<Location, Invariant> invariants, Optional<CounterExample> counter) {
         public boolean inferredTrue() {
             if (verified) {
@@ -62,7 +62,7 @@ public class Verifier {
                                 ? new RoutingPolicy("from null",config)
                                 : config.getRoutingPolicies().get(unicast.getExportPolicy()));
                     });
-            // add the edges
+            // add the edges, specifically, all the edges which go into the given node
             bgpProcesses.stream().flatMap(proc -> proc.getActiveNeighbors().entrySet().stream())
                     .forEach(entry -> locations.add(new Edge(entry.getKey(),nodeIp)));
         }
@@ -73,10 +73,12 @@ public class Verifier {
         processConfigs(configs);
     }
 
+    ///  Added for pybatfish question development
     public TransferBDD getTBDD() {
         return tbdd;
     }
 
+    ///  Added for pybatfish question development
     public RoutingPolicy getPolicy(Edge location, boolean getImport) {
         if (getImport) {
             return imports.getOrDefault(location,null);
@@ -85,6 +87,7 @@ public class Verifier {
         }
     }
 
+    ///  Added for pybatfish question development
     public Edge getAnyIncomingEdge(Node node) {
         for (Location location : locations) {
             if (location instanceof Edge edge) {
@@ -117,6 +120,7 @@ public class Verifier {
         return this;
     }
 
+    /// Initializes all invariants to true except for setting the targets
     private void initializeInvariants() {
         for (Location location : locations) {
             // add the default invariants to the inferred, and the target property
@@ -128,19 +132,19 @@ public class Verifier {
         }
     }
 
+    /// Checks if the source of the edge is within our network
     private boolean sourceInNetwork(Edge edge) {
         Ip srcIp = edge.getSrc();
         return nodes.containsKey(srcIp);
     }
 
+    /// Performs iterative invariant inference using the weakest preconditions
     private Optional<CounterExample> inferenceLoop() {
         while (!working.isEmpty()) {
             Location location = working.remove();
             Invariant property = inferred.get(location);
-            if (property.isFalse()) {
-                // need to figure out formatting
-                return Optional.of(new CounterExample(location.copy(),property.copy()));
-            } else if (location instanceof Edge && sourceInNetwork(((Edge) location))) {
+            assert !property.isFalse();
+            if (location instanceof Edge && sourceInNetwork(((Edge) location))) {
                 RoutingPolicy exportPolicy = exports.getOrDefault(location, null);
                 assert exportPolicy != null;
                 Node src = nodes.get(((Edge) location).getSrc());
@@ -148,13 +152,10 @@ public class Verifier {
                 Invariant wp = property.weakestPrecondition(exportPolicy);
                 Invariant updated = strongestCommonImplicant(existing,wp);
                 inferred.put(src,updated);
-                if (!existing.equals(updated)) {
+                if (updated.isFalse()) {
+                    return Optional.of(new CounterExample(src.copy(),property.copy(),location.copy()));
+                } else if (!existing.equals(updated) && !working.contains(src)) {
                     working.add(src);
-                }
-                if (anchors.contains(src) && !inferred.get(src).isTrue()) {
-                    // builder.put(COUNTEREXAMPLE, getCounterExamplePreTrue(OUT,property, exportPolicy));
-                    // TODO figure out how to return invariant description
-                    return Optional.of(new CounterExample(location.copy(),property.copy()));
                 }
             } else if (location instanceof Node) {
                 Ip dst = ((Node) location).getIp();
@@ -166,19 +167,21 @@ public class Verifier {
                         Invariant wp = property.weakestPrecondition(importPolicy);
                         Invariant updated = strongestCommonImplicant(existing,wp);
                         inferred.put(edge,updated);
-                        if (!existing.equals(updated)) {
+                        if (updated.isFalse()) {
+                            return Optional.of(new CounterExample(edge.copy(),property.copy(),location.copy()));
+                        } else if (!existing.equals(updated) && !working.contains(edge)) {
                             working.add(edge);
-                        }
-                        if (anchors.contains(edge) && !inferred.get(edge).isTrue()) {
-                            // builder.put(COUNTEREXAMPLE, getCounterExamplePreTrue(IN,property, importPolicy));
-                            // TODO figure out how to return invariant description
-                            return Optional.of(new CounterExample(location.copy(),property.copy()));
                         }
                     }
                 }
             }
         }
         return Optional.empty(); // success - no counterexample
+    }
+
+    /// Checks if verification succeed by checking assumptions (all anchors true)
+    private boolean verificationAnchorCheck() {
+        return anchors.stream().allMatch(anchor -> inferred.getOrDefault(anchor,Invariant.getFalse(tbdd)).isTrue());
     }
 
     /**
@@ -188,12 +191,15 @@ public class Verifier {
      * if applicable
      */
     public Result run() {
+        inferred.clear();
+        working.clear();
         initializeInvariants();
         working.addAll(targets.keySet());
         Optional<CounterExample> counter = inferenceLoop();
-        return new Result(counter.isEmpty(),copyInferred(),counter);
+        return new Result(counter.isEmpty() && verificationAnchorCheck(),copyInferred(),counter);
     }
 
+    /// Deep copies invariants inferred
     private Map<Location, Invariant> copyInferred() {
         Map<Location, Invariant> result = new HashMap<>();
         for (Location location : inferred.keySet()) {

@@ -59,6 +59,10 @@ public class Invariant {
         this.base = new BDDRoute(tbdd.getFactory(),tbdd.getConfigAtomicPredicates());
     }
 
+    public static Invariant getFalse(TransferBDD tbdd) {
+        return new Invariant(tbdd,tbdd.getFactory().zero());
+    }
+
     /**
      * Creates an invariant type from a BgpRouteConstraint (constants used for routeConstraintsToBDD expect that
      * this invariant will be used to start a weakest precondition based inference)

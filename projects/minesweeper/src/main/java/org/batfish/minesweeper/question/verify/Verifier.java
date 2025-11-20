@@ -35,7 +35,7 @@ public class Verifier {
     public record CounterExample(Location location, Invariant post, Location cause) { }
     public record Result(boolean verified, Map<Location, Invariant> invariants, Optional<CounterExample> counter) {
         public boolean inferredTrue() {
-            if (verified) {
+            if (counter().isEmpty()) {
                 return invariants.values().stream().anyMatch(Invariant::isTrue);
             }
             return false;
@@ -133,6 +133,11 @@ public class Verifier {
                 inferred.put(location, this.targets.get(location).copy());
             } else {
                 inferred.put(location,new Invariant(this.tbdd));
+            }
+        }
+        for (Location location : targets.keySet()) {
+            if (!inferred.containsKey(location)) {
+                inferred.put(location, this.targets.get(location).copy());
             }
         }
     }

@@ -15,7 +15,7 @@ directory/batfish/verification % python3 -m pip install --upgrade pip
 directory/batfish/verification % python3 -m pip install --upgrade pybatfish
 ```
 
-## Running Batfish on Examples
+## Running Verification with Batfish on Examples
 _**To run Batfish, execute the following commands:**_
 ```
 directory % cd .../batfish
@@ -25,6 +25,8 @@ This command will not terminate, but it will start the Batfish process so that t
 
 
 _**To run the provided examples, look at the jupyter notebook in this directory titled (VerificationExamples.ipynb).**_
+
+The jupyter notebook (`VerificationExamples.ipynb`) contains descriptions for the API and examples of how it should be used.
 
 ## Understanding the Results
 Here is an example response from running the current `verify` `pybatfish` question:
@@ -43,3 +45,7 @@ The "Overall_Verification_Result" is true if all of the assumption verifications
 _**What is the Inferred Invariant?**_
 
 The final column is a readable representation of the invariant that was inferred at that location. **Please note** these invariants are only displayed if the `readable` flag is true. This is because the function which displays the invariants is exponential in the amount of distinct prefixes and communities (and other properties that get added) - so it can be slow. Additionally, it is somewhat hacky in how it works (more so included for exploration and development and not user usage). This column might get replaced with a counterexample column which will get a concrete route that serves to provide insight as to the source of the failure.
+
+## Running Your Own Network Verification
+
+There is a separate jupytper notebook (`VerificationPlayground.ipynb`) so that you can try verification your own networks. You can also use the `VerificationExamples.ipynb`, but this additional notebook is included if you want to keep things separate.

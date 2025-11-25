@@ -36,11 +36,13 @@
             "assumption_locations": {
               "description": "Locations where you make assumption about traffic",
               "type": "string",
+              "optional": true,
               "displayName": "Locations for Assumptions"
             },
             "assumptions": {
                 "description": "Assumptions made about traffic, should be one-to-one with assumption_locations",
                 "type": "string",
+                "optional": true,
                 "displayName": "Assumptions"
             },
           "readable": {

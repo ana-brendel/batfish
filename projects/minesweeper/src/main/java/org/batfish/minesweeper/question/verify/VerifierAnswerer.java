@@ -44,8 +44,10 @@ public final class VerifierAnswerer extends Answerer {
         _targets = question.get_targets();
 
         // this is added because the assumptions are taken as two lists with corresponding inputs
-        List<Invariant.Builder> invAssumptions = question.get_assumptions().get_builders();
-        List<Location.Builder> locAssumptions = question.get_assumption_locations().get_builders();
+        List<Invariant.Builder> invAssumptions = question.get_assumptions().isPresent() ?
+                question.get_assumptions().get().get_builders() : List.of();
+        List<Location.Builder> locAssumptions = question.get_assumption_locations().isPresent() ?
+                question.get_assumption_locations().get().get_builders() : List.of();
         assert invAssumptions.size() == locAssumptions.size() ;
         _assumptions = new HashMap<>();
         for (int i = 0; i < invAssumptions.size(); i++) {

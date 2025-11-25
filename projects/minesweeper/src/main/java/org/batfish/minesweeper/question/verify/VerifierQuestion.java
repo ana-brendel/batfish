@@ -10,6 +10,7 @@ import javax.annotation.Nullable;
 import javax.annotation.ParametersAreNonnullByDefault;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.Optional;
 
 @ParametersAreNonnullByDefault
 public final class VerifierQuestion extends Question {
@@ -54,9 +55,14 @@ public final class VerifierQuestion extends Question {
 
     @Nonnull
     public Map<Location.Builder, Invariant.Builder> get_targets() { return _targets; }
-    public Location.Builders get_assumption_locations() { return _assumption_locations; }
-    public Invariant.Builders get_assumptions() { return _assumptions; }
     public boolean get_readable() { return _readable; }
+
+    public Optional<Location.Builders> get_assumption_locations() {
+        return _assumption_locations == null ? Optional.empty() : Optional.of(_assumption_locations);
+    }
+    public Optional<Invariant.Builders> get_assumptions() {
+       return _assumptions == null ? Optional.empty() : Optional.of(_assumptions);
+   }
 
     @JsonIgnore
     @Override

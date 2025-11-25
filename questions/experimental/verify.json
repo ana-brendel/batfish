@@ -1,0 +1,54 @@
+{
+    "class": "org.batfish.minesweeper.question.verify.VerifierQuestion",
+    "differential": false,
+    "target": "${target}",
+    "location": "${location}",
+    "assumption_locations": "${assumption_locations}",
+    "assumptions": "${assumptions}",
+    "readable": "${readable}",
+    "instance": {
+        "description": "...",
+        "instanceName": "verify",
+        "longDescription": "This question...",
+        "orderedVariableNames": [
+            "target",
+            "location",
+            "assumption_locations",
+            "assumptions",
+            "readable"
+        ],
+        "tags": [
+            "routing"
+        ],
+        "variables": {
+            "target": {
+                "description": "Property to verify",
+                "type": "string",
+                "optional": true,
+                "displayName": "Target Property"
+            },
+            "location": {
+                "description": "Location to verify property at within network",
+                "type": "string",
+                "optional": true,
+                "displayName": "Location"
+            },
+            "assumption_locations": {
+              "description": "Locations where you make assumption about traffic",
+              "type": "string",
+              "displayName": "Locations for Assumptions"
+            },
+            "assumptions": {
+                "description": "Assumptions made about traffic, should be one-to-one with assumption_locations",
+                "type": "string",
+                "displayName": "Assumptions"
+            },
+          "readable": {
+            "description": "Flag indicating if you want to see a readable version of all variables (does not scale well)",
+            "type": "boolean",
+            "optional": true,
+            "displayName": "Weak Print"
+          }
+        }
+    }
+}

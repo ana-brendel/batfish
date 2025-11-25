@@ -1,4 +1,5 @@
 package org.batfish.minesweeper.question.verify;
+
 import org.batfish.datamodel.BgpProcess;
 import org.batfish.datamodel.Configuration;
 import org.batfish.datamodel.Ip;
@@ -7,6 +8,7 @@ import org.batfish.datamodel.bgp.Ipv4UnicastAddressFamily;
 import org.batfish.datamodel.routing_policy.RoutingPolicy;
 import org.batfish.minesweeper.bdd.TransferBDD;
 
+import javax.annotation.Nonnull;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Hashtable;
@@ -28,12 +30,20 @@ public class Verifier {
     private final Map<Edge, RoutingPolicy> exports = new HashMap<>();
 
     private final Map<Location, Invariant> targets = new HashMap<>();
-    private final Set<Location> anchors = new HashSet<>();
+    private final Map<Location, Invariant> assumptions = new HashMap<>();
     private final Queue<Location> working = new LinkedList<>();
     private final Map<Location, Invariant> inferred = new Hashtable<>();
 
-    public record CounterExample(Location location, Invariant post, Location cause) { }
-    public record Result(boolean verified, Map<Location, Invariant> invariants, Optional<CounterExample> counter) {
+    public record CounterExample(
+            Location location,
+            Invariant post,
+            Location cause) { }
+
+    public record Result(
+            boolean verified,
+            Map<Location, Invariant> invariants,
+            Optional<CounterExample> counter,
+            Map<Location,Boolean> checks) {
         public boolean inferredTrue() {
             if (counter().isEmpty()) {
                 return invariants.values().stream().anyMatch(Invariant::isTrue);
@@ -71,19 +81,29 @@ public class Verifier {
             bgpProcesses.stream().flatMap(proc -> proc.getActiveNeighbors().entrySet().stream())
                     .forEach(entry -> locations.add(new Edge(entry.getKey(),nodeIp)));
         }
+
     }
 
     public Verifier(TransferBDD tbdd, Map<String, Configuration> configs) {
         this.tbdd = tbdd;
         processConfigs(configs);
+        // default assumption of True for incoming edges
+        for (Location location : locations) {
+            if (location instanceof Edge edge) {
+                // if the edge's source is not in the set of nodes (i.e. out of network)
+                if (!nodes.containsKey(edge.getSrc())) {
+                    assumptions.put(edge,new Invariant(tbdd));
+                }
+            }
+        }
     }
 
-    ///  Added for pybatfish question development
+    /// Added for pybatfish question development
     public TransferBDD getTBDD() {
         return tbdd;
     }
 
-    ///  Added for pybatfish question development
+    /// Added for pybatfish question development
     public RoutingPolicy getPolicy(Edge location, boolean getImport) {
         if (getImport) {
             return imports.getOrDefault(location,null);
@@ -92,7 +112,16 @@ public class Verifier {
         }
     }
 
-    ///  Added for pybatfish question development
+    /// Added for pybatfish question development
+    public Optional<Ip> ipFromNodeName(String name) {
+        for (Ip ip : nodes.keySet()) {
+            if (nodes.get(ip).getName().equals(name))
+                return Optional.of(ip);
+        }
+        return Optional.empty();
+    }
+
+    /// Added for pybatfish question development
     public Edge getAnyIncomingEdge(Node node) {
         for (Location location : locations) {
             if (location instanceof Edge edge) {
@@ -104,14 +133,42 @@ public class Verifier {
         return null;
     }
 
+    /// Added for pybatfish question development
+    public Map<Location, Invariant> getTargets() { return targets; }
+
+    /// Added for pybatfish question development
+    public Map<Location, Invariant> getAssumptions() { return assumptions; }
+
     /**
      * Add a location which should allow for any route
      * @param anchor location where invariant should be true
      * @return updated Verified object
      */
     public Verifier addAnchor(Location anchor) {
-        anchors.add(anchor);
+        return this.addAssumption(anchor,new Invariant(this.tbdd));
+    }
+
+    public Verifier addAssumption(@Nonnull Location location, @Nonnull Invariant assumption) {
+        assumptions.put(location,assumption);
         return this;
+    }
+
+    public void addAssumption(@Nonnull Location.Builder locationBuilder, @Nonnull Invariant.Builder assumption) {
+        Location location = locationBuilder.instantiate(this);
+        RoutingPolicy policy;
+        if (location instanceof Node node) {
+            Optional<Edge> incoming = imports.keySet().stream().filter(e -> e.isDst(node)).findFirst();
+            if (incoming.isPresent()) {
+                policy = imports.get(incoming.get());
+            } else {
+                Optional<Edge> outgoing = exports.keySet().stream().filter(e -> e.isSrc(node)).findFirst();
+                policy = outgoing.map(imports::get).orElse(null);
+            }
+        } else {
+            assert location instanceof Edge;
+            policy = exports.getOrDefault(location,imports.getOrDefault(location,null));
+        }
+        this.addAssumption(location,assumption.build(tbdd,policy));
     }
 
     /**
@@ -190,8 +247,13 @@ public class Verifier {
     }
 
     /// Checks if verification succeed by checking assumptions (all anchors true)
-    private boolean verificationAnchorCheck() {
-        return anchors.stream().allMatch(anchor -> inferred.getOrDefault(anchor,Invariant.getFalse(tbdd)).isTrue());
+    private Map<Location,Boolean> verificationAssumptionCheck() {
+        Map<Location,Boolean> checks = new HashMap<>();
+        for (Location location : assumptions.keySet()) {
+            Invariant assumption = assumptions.get(location);
+            checks.put(location,assumption.implies(inferred.getOrDefault(location,Invariant.getFalse(tbdd))));
+        }
+        return checks;
     }
 
     /**
@@ -206,7 +268,8 @@ public class Verifier {
         initializeInvariants();
         working.addAll(targets.keySet());
         Optional<CounterExample> counter = inferenceLoop();
-        return new Result(counter.isEmpty() && verificationAnchorCheck(),copyInferred(),counter);
+        Map<Location,Boolean> checks = verificationAssumptionCheck();
+        return new Result(counter.isEmpty() && checks.values().stream().allMatch(b->b),copyInferred(),counter,checks);
     }
 
     /// Deep copies invariants inferred

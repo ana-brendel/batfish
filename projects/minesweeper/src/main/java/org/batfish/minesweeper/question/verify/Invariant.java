@@ -1,5 +1,7 @@
 package org.batfish.minesweeper.question.verify;
 
+import com.fasterxml.jackson.annotation.JsonCreator;
+import com.fasterxml.jackson.annotation.JsonProperty;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableSet;
@@ -8,6 +10,7 @@ import net.sf.javabdd.BDD;
 import net.sf.javabdd.BDDFactory;
 import net.sf.javabdd.BDDPairing;
 import org.batfish.common.BatfishException;
+import org.batfish.datamodel.Ip;
 import org.batfish.datamodel.LineAction;
 import org.batfish.datamodel.Prefix;
 import org.batfish.datamodel.PrefixRange;
@@ -26,6 +29,7 @@ import org.batfish.minesweeper.question.searchroutepolicies.RegexConstraint;
 import org.batfish.minesweeper.question.searchroutepolicies.RegexConstraints;
 
 import javax.annotation.Nonnull;
+import javax.annotation.Nullable;
 import java.util.AbstractMap;
 import java.util.ArrayList;
 import java.util.Collection;
@@ -34,6 +38,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Optional;
 import java.util.Set;
 import java.util.stream.Collectors;
 
@@ -99,6 +104,10 @@ public class Invariant {
             return this;
         }
 
+        public List<ClauseBuilder> getClauses() {
+            return clauses;
+        }
+
         public Invariant build(TransferBDD tbdd) {
             return this.build(tbdd,null);
         }
@@ -106,6 +115,50 @@ public class Invariant {
         public Invariant build(TransferBDD tbdd, RoutingPolicy policy) {
             Collection<BDD> BDDs = clauses.stream().map(clause -> clause.build(tbdd,policy)).collect(Collectors.toSet());
             return new Invariant(tbdd,tbdd.getFactory().orAll(BDDs));
+        }
+
+        @JsonCreator
+        @VisibleForTesting
+        static Builder forValue(@Nonnull String value) {
+            Builder builder = new Builder();
+            String[] splits = value.trim().split("]");
+            for (String clause : splits) {
+                String trimmed = clause.trim();
+                if (!trimmed.startsWith("[") && !trimmed.isEmpty()) {
+                    throw new BatfishException("String parsing into property (Invariant.Builder) failed. " +
+                            "A property should be in DNF form - [clause1][clause2]...[clause_n].");
+                } else if (!trimmed.isEmpty()){
+                    builder.addClause(ClauseBuilder.parseForClauseBuilder(trimmed.substring(1)));
+                }
+            }
+            return builder;
+        }
+    }
+
+    /// Added to help parse a string corresponding to a list of invariants (for pybatfish)
+    public static class Builders {
+        private final String PROP_INVARIANTS = "invariants";
+        public final @Nonnull List<Builder> _builders;
+
+        @JsonCreator
+        public Builders(@JsonProperty(PROP_INVARIANTS) @Nullable java.util.List<Builder> builders) {
+            _builders = builders == null ? List.of() : builders;
+        }
+
+        @JsonCreator
+        @VisibleForTesting
+        static Builders forValue(String value) {
+            String[] splits = value.trim().split(",");
+            ImmutableList.Builder<Builder> builders = ImmutableList.builder();
+            for (String invariant : splits) {
+                builders.add(Builder.forValue(invariant.trim()));
+            }
+            return new Builders(builders.build());
+        }
+
+        @Nonnull
+        public List<Builder> get_builders() {
+            return _builders;
         }
     }
 
@@ -117,19 +170,23 @@ public class Invariant {
         private ClauseBuilder() {}
 
         public ClauseBuilder matchPrefix(PrefixSpace prefix) {
-            if (_positivePrefix == null) {
-                _positivePrefix = prefix;
-            } else {
-                _positivePrefix = _positivePrefix.intersection(prefix);
+            if (!prefix.isEmpty()) {
+                if (_positivePrefix == null) {
+                    _positivePrefix = prefix;
+                } else {
+                    _positivePrefix = _positivePrefix.intersection(prefix);
+                }
             }
             return this;
         }
 
         public ClauseBuilder avoidPrefix(PrefixSpace prefix) {
-            if (_negativePrefix == null) {
-                _negativePrefix = prefix;
-            } else {
-                _negativePrefix.addSpace(prefix);
+            if (!prefix.isEmpty()) {
+                if (_negativePrefix == null) {
+                    _negativePrefix = prefix;
+                } else {
+                    _negativePrefix.addSpace(prefix);
+                }
             }
             return this;
         }
@@ -141,13 +198,21 @@ public class Invariant {
 
         private static BDD communityBDD(RegexConstraint regex, TransferBDD tbdd, BDDRoute route, TransferBDD.Context context) {
             return switch (regex.getRegexType()) {
-                case REGEX ->
-                        tbdd.getFactory().orAll(tbdd.getConfigAtomicPredicates()
-                                .getStandardCommunityAtomicPredicates()
-                                .getRegexAtomicPredicates()
-                                .get(CommunityVar.from(regex.getRegex()))
-                                .stream().map(i -> route.getCommunityAtomicPredicates()[i])
-                                .collect(ImmutableSet.toImmutableSet()));
+                case REGEX -> {
+                    Map<String,Set<Integer>> stringKeys = new HashMap<>();
+                    tbdd.getConfigAtomicPredicates()
+                            .getStandardCommunityAtomicPredicates().getRegexAtomicPredicates()
+                            .forEach((key,value) -> stringKeys.put(key.getRegex(),value));
+                    Set<Integer> cvi = stringKeys.get(regex.getRegex());
+                    if (cvi == null) {
+                        // The comparison on the CV directly doesn't seem to work, so I matched with the regex
+                        throw new BatfishException("Null variable list for regex " + regex.getRegex());
+                    }
+                    Collection<BDD> bdds = cvi.stream()
+                            .map(i -> route.getCommunityAtomicPredicates()[i])
+                            .collect(ImmutableSet.toImmutableSet());
+                    yield tbdd.getFactory().orAll(bdds);
+                }
                 case STRUCTURE_NAME ->{
                     if (context == null) { throw new BatfishException("-- require context (from policy) to get community BDD"); }
                     CommunityMatchExpr matcher = context.config().getCommunityMatchExprs().get(regex.getRegex());
@@ -204,6 +269,64 @@ public class Invariant {
                 clauseBDD.andWith(communitiesToBDD(_communities, tbdd, base, context));
             }
             return clauseBDD;
+        }
+
+        /// Added to help parse a string corresponding to a single clause
+        private static Invariant.ClauseBuilder parseForClauseBuilder(String value) {
+            if (value.trim().isEmpty()) {
+                return createClause(null,null,null);
+            }
+            PrefixSpace positivePrefix = new PrefixSpace();
+            PrefixSpace negativePrefix = new PrefixSpace();
+            ImmutableList.Builder<RegexConstraint> communities = ImmutableList.builder();
+            String[] atoms = value.trim().split(",");
+            for (String atom: atoms) {
+                String trimmed = atom.trim();
+                if (!trimmed.isEmpty()) {
+                    String[] parts = trimmed.trim().split("=");
+                    if (parts.length == 2) {
+                        String category = parts[0].trim();
+                        String input = parts[1].trim();
+                        switch (category) {
+                            case "comm":
+                                communities.add(RegexConstraint.parse(input));
+                                break;
+                            case "prefix":
+                                boolean positive = true;
+                                if (input.startsWith("!")) {
+                                    input = input.substring(1);
+                                    positive = false;
+                                }
+                                Optional<Prefix> prefix = Prefix.tryParse(input);
+                                if (prefix.isEmpty()) {
+                                    throw new BatfishException("Provided positive prefix (" + input + ") is not a valid prefix");
+                                } else if (!positive) {
+                                    negativePrefix.addPrefix(prefix.get());
+                                } else {
+                                    if (positivePrefix.isEmpty()) {
+                                        positivePrefix.addPrefix(prefix.get());
+                                    } else {
+                                        positivePrefix.intersection(new PrefixSpace(PrefixRange.fromPrefix(prefix.get())));
+                                    }
+                                }
+                                break;
+                            default:
+                                throw new BatfishException("Error when parsing string for clause -" +
+                                        " check [" + category + "] which does not match a supported feature (comm or prefix) with ! " +
+                                        "implying the following value is negated (The whole value provided is [" + value + "])");
+                        }
+                    } else {
+                        throw new BatfishException("Error when parsing string for clause -" +
+                                " each clause should have format [field1=value1,...,field_n=value_n]. " +
+                                " Current field supported: comm, prefix.");
+                    }
+                }
+            }
+            return createClause(positivePrefix,negativePrefix,new RegexConstraints(communities.build()));
+        }
+
+        public RegexConstraints getCommunities() {
+            return _communities;
         }
     }
 
@@ -371,9 +494,6 @@ public class Invariant {
         private List<String> read(List<String> prefixesConsidered) {
             Map<String,BDD> atoms = new HashMap<>();
 
-            // Currently fixed -- could be input
-            // List<String> prefixesConsidered = ImmutableList.of("25.13.0.0/16","24.4.0.0/16","36.6.0.0/16","42.7.0.0/16");
-
             for (CommunityVar cv : inv.tbdd.getConfigAtomicPredicates().getStandardCommunityAtomicPredicates().getRegexes()) {
                 String regex = cv.getRegex();
                 atoms.put("has comm " + regex, communityBDD(new RegexConstraint(regex,false)));
@@ -381,7 +501,16 @@ public class Invariant {
             }
 
             for (String prefixString : prefixesConsidered) {
-                PrefixSpace PREFIX = new PrefixSpace(PrefixRange.fromPrefix(Prefix.parse(prefixString)));
+                Optional<Prefix> prefix = Prefix.tryParse(prefixString);
+                Optional<Ip> ip = Ip.tryParse(prefixString);
+                PrefixSpace PREFIX;
+                if (prefix.isPresent()) {
+                    PREFIX = new PrefixSpace(PrefixRange.fromPrefix(prefix.get()));
+                } else if (ip.isPresent()) {
+                    PREFIX = new PrefixSpace(PrefixRange.fromPrefix(ip.get().toPrefix()));
+                } else {
+                    throw new BatfishException("Cannot parse provided ip/prefix string for display.");
+                }
                 atoms.put("has prefix " + prefixString,prefixBDD(PREFIX,true));
                 atoms.put("does not have prefix " + prefixString,prefixBDD(PREFIX,false));
             }
@@ -417,8 +546,13 @@ public class Invariant {
                         }
                     }
                 }
+                // attempt at better pruning for readability (removes redundant clauses)
+                List<Map.Entry<String, BDD>> kept = builder.build();
+                List<Map.Entry<String, BDD>> result = builder.build().stream()
+                        .filter(entry -> kept.stream().allMatch(other ->
+                                !entry.getValue().imp(other.getValue()).isOne() || other.getValue().equals(entry.getValue()))).toList();
                 assert inv.wellFormedBDD().equals(disjunction);
-                return builder.build().stream().map(Map.Entry::getKey).toList();
+                return result.stream().map(Map.Entry::getKey).toList();
             }
         }
     }

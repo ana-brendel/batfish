@@ -35,18 +35,6 @@ public class Node extends Location{
         return edge.getDst().equals(ip);
     }
 
-
-
-    @Override
-    boolean isEdge() {
-        return false;
-    }
-
-    @Override
-    boolean isNode() {
-        return true;
-    }
-
     @Override
     Node copy() {
         return new Node(Ip.create(ip.asLong()), name);

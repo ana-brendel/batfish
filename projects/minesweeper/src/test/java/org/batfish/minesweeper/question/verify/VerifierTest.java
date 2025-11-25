@@ -1034,6 +1034,7 @@ public class VerifierTest {
         Verifier verifier = new Verifier(net.tbdd(),configInput(net.configs()));
         Invariant property = new Invariant(net.tbdd(),Invariant.clauseBuilder().avoidPrefix(PREFIX).build(net.tbdd(),net.imports().get(NODE_C)));
         verifier.addProperty(target,property);
+        verifier.addAssumption(new Edge(exit,NODE_C.getIp()), Invariant.getFalse(net.tbdd()));
         Verifier.Result result = verifier.run();
 
         assertTrue(result.verified());

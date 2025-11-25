@@ -48,16 +48,6 @@ public class Edge extends Location {
     }
 
     @Override
-    boolean isEdge() {
-        return true;
-    }
-
-    @Override
-    boolean isNode() {
-        return false;
-    }
-
-    @Override
     Edge copy() {
         return new Edge(Ip.create(src.asLong()),Ip.create(dst.asLong()));
     }

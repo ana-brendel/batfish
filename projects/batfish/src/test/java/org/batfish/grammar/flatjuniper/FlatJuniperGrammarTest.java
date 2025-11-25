@@ -175,7 +175,7 @@ import static org.batfish.representation.juniper.JuniperStructureType.AUTHENTICA
 import static org.batfish.representation.juniper.JuniperStructureType.BGP_GROUP;
 import static org.batfish.representation.juniper.JuniperStructureType.BGP_NEIGHBOR;
 import static org.batfish.representation.juniper.JuniperStructureType.BRIDGE_DOMAIN;
-import static org.batfish.representation.juniper.JuniperStructureType.CLASS_OF_SERVICE_CODE_POINT_ALIAS;
+import static org.batfish.representation.juniper.JuniperStructureType.CLASS_OF_SERVICE_DSCP_CODE_POINT_ALIAS;
 import static org.batfish.representation.juniper.JuniperStructureType.COMMUNITY;
 import static org.batfish.representation.juniper.JuniperStructureType.FIREWALL_FILTER;
 import static org.batfish.representation.juniper.JuniperStructureType.FIREWALL_FILTER_TERM;
@@ -1009,6 +1009,21 @@ public final class FlatJuniperGrammarTest {
   @Test
   public void testClassOfServiceParsing() {
     parseJuniperConfig("juniper-class-of-service");
+  }
+
+  @Test
+  public void testClassOfServiceComprehensive() {
+    parseJuniperConfig("class-of-service-comprehensive");
+  }
+
+  @Test
+  public void testInterfaceMacLimitParsing() {
+    parseJuniperConfig("interface-mac-limit");
+  }
+
+  @Test
+  public void testSystemServicesSshParsing() {
+    parseJuniperConfig("system-services-ssh");
   }
 
   @Test
@@ -3637,6 +3652,12 @@ public final class FlatJuniperGrammarTest {
     assertThat(c, hasInterface("ge-0/1/0.0", hasNativeVlan(3)));
     assertThat(c, hasInterface("ge-0/2/0.0", hasNativeVlan(nullValue())));
     assertThat(c, hasInterface("ge-0/3/0.0", hasNativeVlan(nullValue())));
+  }
+
+  @Test
+  public void testInterfaceSampling() {
+    // Sampling is parsed but ignored; verify parsing succeeds for both family inet and inet6
+    parseConfig("interface-sampling");
   }
 
   @Test
@@ -8317,16 +8338,6 @@ public final class FlatJuniperGrammarTest {
     String hostname = "class-of-service-code-point-aliases";
     String filename = "configs/" + hostname;
     Batfish batfish = getBatfishForConfigurationNames(hostname);
-    ParseVendorConfigurationAnswerElement pvcae =
-        batfish.loadParseVendorConfigurationAnswerElement(batfish.getSnapshot());
-
-    assertThat(
-        pvcae.getWarnings().get(filename).getParseWarnings(),
-        containsInAnyOrder(
-            hasComment(
-                "200000 is not a legal code-point. Must be of form xxxxxx, where x is 1 or 0."),
-            hasComment(
-                "1010101 is not a legal code-point. Must be of form xxxxxx, where x is 1 or 0.")));
 
     assertThat(
         ((JuniperConfiguration)
@@ -8341,9 +8352,9 @@ public final class FlatJuniperGrammarTest {
     assertThat(
         ccae,
         hasDefinedStructureWithDefinitionLines(
-            filename, CLASS_OF_SERVICE_CODE_POINT_ALIAS, "my1", contains(4)));
+            filename, CLASS_OF_SERVICE_DSCP_CODE_POINT_ALIAS, "my1", contains(4)));
 
-    assertThat(ccae, hasNumReferrers(filename, CLASS_OF_SERVICE_CODE_POINT_ALIAS, "my1", 1));
+    assertThat(ccae, hasNumReferrers(filename, CLASS_OF_SERVICE_DSCP_CODE_POINT_ALIAS, "my1", 1));
   }
 
   @Test

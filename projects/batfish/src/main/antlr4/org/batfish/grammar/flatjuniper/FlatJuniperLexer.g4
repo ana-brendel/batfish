@@ -18,6 +18,8 @@ tokens {
    BANG,
    BGP_RIB_NAME,
    CERTIFICATE_STRING,
+   CODE_POINT_3_BIT,
+   CODE_POINT_6_BIT,
    DOUBLE_QUOTED_NAME,
    DYNAMIC_DB,
    SECRET_STRING,
@@ -53,6 +55,8 @@ ACCEPT_DATA: 'accept-data';
 ACCEPTED_PREFIX_LIMIT: 'accepted-prefix-limit';
 
 ACCESS: 'access';
+
+ACCESS_DISABLE_EXTERNAL: 'access-disable-external';
 
 ACCESS_INTERNAL: 'access-internal';
 
@@ -185,6 +189,8 @@ ALLOW: 'allow';
 ALLOW_DUPLICATES: 'allow-duplicates';
 
 ALLOW_SNOOPED_CLIENTS: 'allow-snooped-clients';
+
+ALLOW_TCP_FORWARDING: 'allow-tcp-forwarding';
 
 ALLOW_V4MAPPED_PACKETS: 'allow-v4mapped-packets';
 
@@ -365,6 +371,8 @@ BRIDGE_DOMAINS: 'bridge-domains' -> pushMode(M_Name);
 
 BROADCAST_CLIENT: 'broadcast-client';
 
+BUFFER_SIZE: 'buffer-size';
+
 BUNDLE: 'bundle';
 
 C: 'c';
@@ -383,7 +391,15 @@ CHASSIS: 'chassis';
 
 CIPHERS: 'ciphers';
 
-CLASS: 'class';
+CLASS
+:
+  'class'
+  {
+    if (lastTokenType() == FORWARDING_CLASSES) {
+      pushMode(M_Name);
+    }
+  }
+;
 
 CLASS_OF_SERVICE: 'class-of-service';
 
@@ -406,9 +422,11 @@ CLIENTS: 'clients';
 CLUSTER: 'cluster';
 
 CMD: 'cmd';
-CODE_POINT: 'code-point' -> pushMode(M_Name);
+CODE_POINT: 'code-point' -> pushMode(M_CodePointOrAlias);
+
 CODE_POINT_ALIASES: 'code-point-aliases';
-CODE_POINTS: 'code-points' -> pushMode(M_Name);
+
+CODE_POINTS: 'code-points' -> pushMode(M_CodePointOrAlias);
 COLOR: 'color';
 
 COLOR2: 'color2';
@@ -601,13 +619,37 @@ DOMAIN_NAME: 'domain-name' -> pushMode(M_Name);
 
 DOMAIN_SEARCH: 'domain-search';
 DOMAIN_TYPE: 'domain-type';
+DROP: 'drop';
+DROP_AND_LOG: 'drop-and-log';
 DROP_PATH_ATTRIBUTES: 'drop-path-attributes';
 
 DROP_PROFILES: 'drop-profiles' -> pushMode(M_Name);
 
 DSA_SIGNATURES: 'dsa-signatures';
 
-DSCP: 'dscp' -> pushMode(M_Name);
+DSCP
+:
+  'dscp'
+  {
+    if (lastTokenType() == CODE_POINT_ALIASES) {
+      pushMode(M_CodePointAlias6Bit);
+    } else {
+      pushMode(M_Name);
+    }
+  }
+;
+
+DSCP_IPV6
+:
+  'dscp-ipv6'
+  {
+    if (lastTokenType() == CODE_POINT_ALIASES) {
+      pushMode(M_CodePointAlias6Bit);
+    } else {
+      pushMode(M_Name);
+    }
+  }
+;
 
 DSLITE: 'dslite';
 
@@ -689,7 +731,17 @@ EXCLUDE_NON_FEASIBLE: 'exclude-non-feasible';
 
 EXEC: 'exec';
 
-EXP: 'exp';
+EXP
+:
+  'exp'
+  {
+    if (lastTokenType() == CODE_POINT_ALIASES) {
+      pushMode(M_CodePointAlias3Bit);
+    } else if (lastTokenType() == CLASSIFIERS || lastTokenType() == REWRITE_RULES) {
+      pushMode(M_Name);
+    }
+  }
+;
 
 EXPEDITED: 'expedited';
 
@@ -967,6 +1019,18 @@ IGMP: 'igmp';
 
 IGMP_SNOOPING: 'igmp-snooping';
 
+IEEE_802_1
+:
+  'ieee-802.1'
+  {
+    if (lastTokenType() == CODE_POINT_ALIASES) {
+      pushMode(M_CodePointAlias3Bit);
+    } else {
+      pushMode(M_Name);
+    }
+  }
+;
+
 IGNORE: 'ignore';
 
 IGNORE_ATTACHED_BIT: 'ignore-attached-bit';
@@ -1042,6 +1106,18 @@ INET_MDT: 'inet-mdt';
 
 INET_MVPN: 'inet-mvpn';
 
+INET_PRECEDENCE
+:
+  'inet-precedence'
+  {
+    if (lastTokenType() == CODE_POINT_ALIASES) {
+      pushMode(M_CodePointAlias3Bit);
+    } else {
+      pushMode(M_Name);
+    }
+  }
+;
+
 INET6_MVPN: 'inet6-mvpn';
 
 INET_VPN: 'inet-vpn';
@@ -1087,6 +1163,7 @@ INTERFACE
    'interface' -> pushMode ( M_Interface )
 ;
 
+INTERFACE_MAC_LIMIT: 'interface-mac-limit';
 INTERFACE_MODE: 'interface-mode';
 
 INTERFACE_RANGE: 'interface-range' -> pushMode(M_Name);
@@ -1103,9 +1180,7 @@ INTERFACES
 :
   'interfaces'
   {
-    if (lastTokenType() == CLASS_OF_SERVICE) {
-      pushMode(M_InterfaceWildcard);
-    } else if (lastTokenType() == FILTER_INTERFACES) {
+    if (lastTokenType() == CLASS_OF_SERVICE || lastTokenType() == FILTER_INTERFACES) {
       pushMode(M_InterfaceIdOrInterfaceWildcard);
     } else {
       pushMode(M_Interface);
@@ -1880,6 +1955,12 @@ MODE: 'mode';
 
 MPLS: 'mpls';
 
+MPLS_ANY: 'mpls-any';
+
+MPLS_INET_BOTH: 'mpls-inet-both';
+
+MPLS_INET_BOTH_NON_VPN: 'mpls-inet-both-non-vpn';
+
 MSDP: 'msdp';
 
 MSTP: 'mstp';
@@ -1991,6 +2072,7 @@ NO_ANTI_REPLAY: 'no-anti-replay';
 
 NO_ARP: 'no-arp';
 NO_AUTO_NEGOTIATION: 'no-auto-negotiation';
+NO_CHALLENGE_RESPONSE: 'no-challenge-response';
 NO_CLIENT_REFLECT: 'no-client-reflect';
 NO_DECREMENT_TTL: 'no-decrement-ttl';
 NO_ECMP_FAST_REROUTE: 'no-ecmp-fast-reroute';
@@ -2010,6 +2092,8 @@ NO_NEXT_HEADER: 'no-next-header';
 
 NO_NEXTHOP_CHANGE: 'no-nexthop-change';
 
+NO_PASSWORD_AUTHENTICATION: 'no-password-authentication';
+
 NO_PASSWORDS: 'no-passwords';
 
 NO_PEER_LOOP_CHECK: 'no-peer-loop-check';
@@ -2021,6 +2105,8 @@ NO_PING_TIME_STAMP: 'no-ping-time-stamp';
 NO_PREEMPT: 'no-preempt';
 
 NO_PREPEND_GLOBAL_AS: 'no-prepend-global-as';
+
+NO_PUBLIC_KEYS: 'no-public-keys';
 
 NO_READVERTISE: 'no-readvertise';
 
@@ -2087,6 +2173,7 @@ OVERRIDES: 'overrides';
 P2MP: 'p2mp';
 P2MP_OVER_LAN: 'p2mp-over-lan';
 P2P: 'p2p';
+PACKET_ACTION: 'packet-action';
 PACKET_LENGTH: 'packet-length' -> pushMode(M_SubRange);
 PACKET_LENGTH_EXCEPT: 'packet-length-except' -> pushMode(M_SubRange);
 
@@ -2128,6 +2215,8 @@ PEER_UNIT: 'peer-unit';
 PER_PACKET: 'per-packet';
 
 PER_UNIT_SCHEDULER: 'per-unit-scheduler';
+
+PERCENT: 'percent';
 
 PERFECT_FORWARD_SECRECY: 'perfect-forward-secrecy';
 
@@ -2325,6 +2414,9 @@ QUALIFIED_NEXT_HOP
 ;
 
 QUEUE: 'queue' -> pushMode(M_Queue);
+
+QUEUE_NUM: 'queue-num';
+
 QUICK_START_OPTION: 'quick-start-option';
 
 R2CP: 'r2cp';
@@ -2394,6 +2486,8 @@ RELAY_AGENT_OPTION: 'relay-agent-option';
 REMOTE: 'remote';
 
 REMOTE_END_POINT: 'remote-end-point';
+
+REMAINDER: 'remainder';
 
 REMOVE: 'remove' -> pushMode(M_Remove);
 
@@ -2550,13 +2644,37 @@ SAVED_CORE_FILES: 'saved-core-files';
 
 SCCP: 'sccp';
 
-SCHEDULER: 'scheduler';
+SCHEDULER
+:
+  'scheduler'
+  {
+    if (secondToLastTokenType() == FORWARDING_CLASS) {
+      pushMode(M_Name);
+    }
+  }
+;
 
 SCHEDULER_MAP: 'scheduler-map' -> pushMode(M_Name);
 
-SCHEDULER_MAPS: 'scheduler-maps';
+SCHEDULER_MAPS
+:
+  'scheduler-maps'
+  {
+    if (lastTokenType() == CLASS_OF_SERVICE) {
+      pushMode(M_Name);
+    }
+  }
+;
 
-SCHEDULERS: 'schedulers';
+SCHEDULERS
+:
+  'schedulers'
+  {
+    if (lastTokenType() == CLASS_OF_SERVICE) {
+      pushMode(M_Name);
+    }
+  }
+;
 
 SCREEN
 :
@@ -2643,7 +2761,7 @@ SHARED_IKE_ID: 'shared-ike-id';
 SHIM6_HEADER: 'shim6-header';
 
 SHORTCUTS: 'shortcuts';
-
+SHUTDOWN: 'shutdown';
 SIGNALING: 'signaling';
 
 SIMPLE: 'simple';
@@ -2723,6 +2841,8 @@ SPEED
 SPF_OPTIONS: 'spf-options';
 
 SPOOFING: 'spoofing';
+
+SPU_PRIORITY: 'spu-priority';
 
 SQLNET_V2: 'sqlnet-v2';
 
@@ -2913,6 +3033,8 @@ TRAFFIC_CONTROL_PROFILES: 'traffic-control-profiles' -> pushMode(M_Name);
 TRAFFIC_ENGINEERING: 'traffic-engineering';
 
 TRANSLATION_TABLE: 'translation-table';
+
+TRANSMIT_RATE: 'transmit-rate';
 
 TRAP_DESTINATIONS: 'trap-destinations';
 
@@ -3286,6 +3408,18 @@ DEC
 UNRECOGNIZED_WORD: F_NonWhitespaceChar+;
 
 // Fragments
+
+fragment
+F_Binary3Bit
+:
+  [01] [01] [01]
+;
+
+fragment
+F_Binary6Bit
+:
+  [01] [01] [01] [01] [01] [01]
+;
 
 fragment
 F_Digit
@@ -4191,6 +4325,14 @@ M_NameOrIp_IP_ADDRESS: F_IpAddress -> type(IP_ADDRESS), popMode;
 M_NameOrIp_IPV6_ADDRESS: F_Ipv6Address -> type(IPV6_ADDRESS), popMode;
 M_NameOrIp_NAME: F_Name -> type(NAME), popMode;
 
+mode M_CodePointOrAlias;
+
+M_CodePointOrAlias_WS: F_WhitespaceChar+ -> skip;
+M_CodePointOrAlias_NEWLINE: F_Newline -> type(NEWLINE), popMode;
+M_CodePointOrAlias_CODE_POINT_6_BIT: F_Binary6Bit -> type(CODE_POINT_6_BIT), popMode;
+M_CodePointOrAlias_CODE_POINT_3_BIT: F_Binary3Bit -> type(CODE_POINT_3_BIT), popMode;
+M_CodePointOrAlias_NAME: F_Name -> type(NAME), popMode;
+
 mode M_Bandwidth;
 
 M_Bandwidth_DEC
@@ -5076,3 +5218,29 @@ M_AdminGroup_WILDCARD: F_Wildcard {setWildcard();} -> popMode;
 M_AdminGroup_NAME: F_Name -> type(NAME), popMode;
 M_AdminGroup_WS: F_WhitespaceChar+ -> skip;
 M_AdminGroup_NEWLINE: F_NewlineChar+ -> type(NEWLINE), popMode;
+
+// Class-of-service code point modes
+
+// Pure code point modes for code-point-aliases definitions
+
+mode M_CodePoint3Bit;
+M_CodePoint3Bit_CODE_POINT: F_Binary3Bit -> type(CODE_POINT_3_BIT), popMode;
+M_CodePoint3Bit_WS: F_WhitespaceChar+ -> skip;
+M_CodePoint3Bit_NEWLINE: F_Newline -> type(NEWLINE), popMode;
+
+mode M_CodePoint6Bit;
+M_CodePoint6Bit_CODE_POINT: F_Binary6Bit -> type(CODE_POINT_6_BIT), popMode;
+M_CodePoint6Bit_WS: F_WhitespaceChar+ -> skip;
+M_CodePoint6Bit_NEWLINE: F_Newline -> type(NEWLINE), popMode;
+
+// Code-point-aliases modes: alias-name then code-point value
+
+mode M_CodePointAlias3Bit;
+M_CodePointAlias3Bit_NAME: F_Name -> type(NAME), mode(M_CodePoint3Bit);
+M_CodePointAlias3Bit_WS: F_WhitespaceChar+ -> skip;
+M_CodePointAlias3Bit_NEWLINE: F_Newline -> type(NEWLINE), popMode;
+
+mode M_CodePointAlias6Bit;
+M_CodePointAlias6Bit_NAME: F_Name -> type(NAME), mode(M_CodePoint6Bit);
+M_CodePointAlias6Bit_WS: F_WhitespaceChar+ -> skip;
+M_CodePointAlias6Bit_NEWLINE: F_Newline -> type(NEWLINE), popMode;

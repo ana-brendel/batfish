@@ -150,6 +150,8 @@ ADDITIVE: 'additive';
 
 ADDRESS: 'address';
 
+ADDRESS_COUNT: 'address-count';
+
 ADDRESS_FAMILY: 'address-family';
 
 ADDRESS_HIDING: 'address-hiding';
@@ -467,6 +469,8 @@ ASYNC_BOOTP: 'async-bootp';
 ASYNCHRONOUS: 'asynchronous';
 
 ATTACHED_HOST: 'attached-host';
+
+ATTACH_POLICY: 'attach-policy';
 
 ATM: 'atm';
 
@@ -1442,6 +1446,8 @@ DEVICE: 'device';
 DEVICE_ID: 'device-id';
 
 DEVICE_SENSOR: 'device-sensor';
+
+DEVICE_TRACKING: 'device-tracking';
 
 DISABLE_CONNECTED_CHECK: 'disable-connected-check';
 
@@ -2763,6 +2769,8 @@ IPV6
 
 IPV6_ADDRESS_POOL: 'ipv6-address-pool';
 IPV6_NEXTHOP: 'ipv6-nexthop';
+
+IPV6_PER_MAC: 'ipv6-per-mac';
 
 IPV6IP: 'ipv6ip';
 
@@ -4209,6 +4217,8 @@ PORT_CHANNEL: 'port-channel';
 
 PORT_CHANNEL_PROTOCOL: 'port-channel-protocol';
 
+PORT_CONTROL: 'port-control';
+
 PORT_NAME: 'port-name';
 
 PORT_OBJECT: 'port-object';
@@ -4920,6 +4930,8 @@ SECURE_MAC_ADDRESS: 'secure-mac-address';
 SECURITY: 'security';
 
 SECURITY_ASSOCIATION: 'security-association';
+
+SECURITY_LEVEL: 'security-level';
 
 SELECT: 'select';
 
@@ -5800,6 +5812,8 @@ TRACEROUTE: 'traceroute';
 TRACK: 'track';
 
 TRACKED: 'tracked';
+
+TRACKING: 'tracking';
 
 TRACKING_PRIORITY_INCREMENT: 'tracking-priority-increment';
 

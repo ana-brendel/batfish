@@ -60393,7 +60393,7 @@
             "switchport" : false,
             "switchportMode" : "NONE",
             "switchportTrunkEncapsulation" : "DOT1Q",
-            "type" : "UNKNOWN",
+            "type" : "PHYSICAL",
             "vrf" : "default"
           }
         },

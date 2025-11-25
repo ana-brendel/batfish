@@ -31,4 +31,4 @@ The jupyter notebook (`VerificationExamples.ipynb`) contains descriptions for th
 
 ## Running Your Own Network Verification
 
-There is a separate jupytper notebook (`VerificationPlayground.ipynb`) so that you can try verification your own networks once you've worked through the examples and have an understanding of the API. You can also use the `VerificationExamples.ipynb`, but this additional notebook is included if you want to keep things separate.
+There is a separate jupyter notebook (`VerificationPlayground.ipynb`) so that you can try verification your own networks once you've worked through the examples and have an understanding of the API. You can also use the `VerificationExamples.ipynb`, but this additional notebook is included if you want to keep things separate.

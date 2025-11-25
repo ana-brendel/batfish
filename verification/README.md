@@ -25,3 +25,21 @@ This command will not terminate, but it will start the Batfish process so that t
 
 
 _**To run the provided examples, look at the jupyter notebook in this directory titled (VerificationExamples.ipynb).**_
+
+## Understanding the Results
+Here is an example response from running the current `verify` `pybatfish` question:
+![alt text](snapshots/image.png)
+
+_**What are the Assumption Location and Assumption Columns?**_
+
+The locations in this column (each with their own row) correspond to the edges coming into the network from outside the network. Explicitly, they are edges where the destination is within the network and the source is not. The corresponding assumption is what our verification algorithm assumes is true at that location (the default is that any incoming edge's invariant is true - allowing all incoming traffic). The verification succeeds for that assumption if the inferred invariant is implied by the assumption. 
+
+We automatically check all incoming edges (with default invariant of true); you can also provide assumptions which are not located at the incoming edges. The added invariants will be checked in additional to all incoming edges.
+
+_**What is the Difference Between Overall and Assumption Verification Result?**_
+
+The "Overall_Verification_Result" is true if all of the assumption verifications pass _and_ false is not inferred as any invariant. The "Assumption_Verification_Result" is true if that assumption implies the inferred invariant at that location.
+
+_**What is the Inferred Invariant?**_
+
+The final column is a readable representation of the invariant that was inferred at that location. **Please note** these invariants are only displayed if the `readable` flag is true. This is because the function which displays the invariants is exponential in the amount of distinct prefixes and communities (and other properties that get added) - so it can be slow. Additionally, it is somewhat hacky in how it works (more so included for exploration and development and not user usage). This column might get replaced with a counterexample column which will get a concrete route that serves to provide insight as to the source of the failure.

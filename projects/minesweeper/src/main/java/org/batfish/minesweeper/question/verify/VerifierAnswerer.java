@@ -6,7 +6,13 @@ import org.batfish.common.Answerer;
 import org.batfish.common.BatfishException;
 import org.batfish.common.NetworkSnapshot;
 import org.batfish.common.plugin.IBatfish;
+import org.batfish.datamodel.BgpRoute;
+import org.batfish.datamodel.Bgpv4Route;
 import org.batfish.datamodel.Configuration;
+import org.batfish.datamodel.Ip;
+import org.batfish.datamodel.OriginMechanism;
+import org.batfish.datamodel.ReceivedFromSelf;
+import org.batfish.datamodel.RoutingProtocol;
 import org.batfish.datamodel.answers.AnswerElement;
 import org.batfish.datamodel.routing_policy.RoutingPolicy;
 import org.batfish.datamodel.table.ColumnMetadata;
@@ -111,19 +117,58 @@ public final class VerifierAnswerer extends Answerer {
                         new ColumnMetadata("Assumption", STRING, "InDev", true, false),
                         new ColumnMetadata("Overall_Verification_Result", STRING, "InDev", true, false),
                         new ColumnMetadata("Assumption_Verification_Result", STRING, "InDev", true, false),
-                        new ColumnMetadata("Inferred_Property", STRING, "InDev", true, false));
+                        new ColumnMetadata("Assumption_Violation", STRING, "InDev", true, false));
         return new TableMetadata(
                 columnMetadata, String.format("Results for route ${%s}", "Network_Locations"));
+    }
+
+    private static String nonDefaultRoute(Bgpv4Route route) {
+        ImmutableList.Builder<String> features = ImmutableList.builder();
+        // Always include the IP address
+        features.add("network=" + route.getNetwork());
+        if (route.getAdministrativeCost() != 0)
+            features.add("admin=" + route.getAdministrativeCost());
+        if (route.getTag() != 0)
+            features.add("tag=" + route.getTag());
+        if (route.getAsPath().length() != 0)
+            features.add("asPath=" + route.getAsPath());
+        if (!route.getClusterList().isEmpty())
+            features.add("clusterList=" + route.getClusterList());
+        if (!route.getCommunities().getCommunities().isEmpty())
+            features.add("communities=" + route.getCommunities());
+        if (route.getLocalPreference() != BgpRoute.DEFAULT_LOCAL_PREFERENCE)
+            features.add("localPreference=" + route.getLocalPreference());
+        if (route.getMetric() != 0)
+            features.add("med=" + route.getMetric());
+        //if (route.getNextHop() != ...)
+            //features.add("nextHop=" + route.getNextHop());
+        if (!route.getOriginatorIp().equals(Ip.ZERO))
+             features.add("originatorIp=" + route.getOriginatorIp());
+        if (route.getOriginMechanism() != OriginMechanism.LEARNED)
+            features.add("originMechanism=" + route.getOriginMechanism().name());
+        //if (route.getOriginType() != OriginType.INCOMPLETE)
+            //features.add("originType=" + route.getOriginType().name());
+        if (route.getProtocol() != RoutingProtocol.BGP)
+            features.add("srcProtocol=" + route.getProtocol().name());
+        if (route.getReceivedFrom() != ReceivedFromSelf.instance())
+            features.add("receivedFrom=" + route.getReceivedFrom());
+        if (route.getReceivedFromRouteReflectorClient())
+            features.add("receivedFromRouteReflectorClient=" + true);
+        //features.add("srcProtocol=" + route.getSrcProtocol().name());
+        if (route.getWeight() != 0)
+            features.add("weight=" + route.getWeight());
+        return "Bgpv4Route{" + String.join(", ", features.build()) + "}";
     }
 
     private TableAnswerElement getAnswerElement(List<String> prefixesForDisplay, Verifier.Result result, Verifier verifier) {
         TableAnswerElement tae = new TableAnswerElement(metadata());
         verifier.getAssumptions().forEach((loc,prop) -> tae.addRow(Row.builder()
                 .put("Assumption_Location", loc.toString())
-                .put("Assumption", _readable ? prop.weakDisplay(prefixesForDisplay) : "...")
+                .put("Assumption", _readable ? prop.weakDisplay(prefixesForDisplay) : prop.str)
                 .put("Overall_Verification_Result", result.verified())
-                .put("Assumption_Verification_Result", result.checks().get(loc))
-                .put("Inferred_Property", _readable ? result.invariants().get(loc).weakDisplay(prefixesForDisplay) : "...").build()));
+                .put("Assumption_Verification_Result", result.checks().get(loc).isEmpty())
+                .put("Assumption_Violation", _readable ? result.invariants().get(loc).weakDisplay(prefixesForDisplay) :
+                        result.checks().get(loc).isPresent() ?  nonDefaultRoute(result.checks().get(loc).get()) : "").build()));
         return tae;
     }
 

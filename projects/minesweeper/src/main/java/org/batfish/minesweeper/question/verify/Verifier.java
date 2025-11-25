@@ -1,11 +1,14 @@
 package org.batfish.minesweeper.question.verify;
 
+import net.sf.javabdd.BDD;
 import org.batfish.datamodel.BgpProcess;
+import org.batfish.datamodel.Bgpv4Route;
 import org.batfish.datamodel.Configuration;
 import org.batfish.datamodel.Ip;
 import org.batfish.datamodel.Vrf;
 import org.batfish.datamodel.bgp.Ipv4UnicastAddressFamily;
 import org.batfish.datamodel.routing_policy.RoutingPolicy;
+import org.batfish.minesweeper.bdd.ModelGeneration;
 import org.batfish.minesweeper.bdd.TransferBDD;
 
 import javax.annotation.Nonnull;
@@ -43,7 +46,7 @@ public class Verifier {
             boolean verified,
             Map<Location, Invariant> invariants,
             Optional<CounterExample> counter,
-            Map<Location,Boolean> checks) {
+            Map<Location,Optional<Bgpv4Route>> checks) {
         public boolean inferredTrue() {
             if (counter().isEmpty()) {
                 return invariants.values().stream().anyMatch(Invariant::isTrue);
@@ -246,12 +249,22 @@ public class Verifier {
         return Optional.empty(); // success - no counterexample
     }
 
-    /// Checks if verification succeed by checking assumptions (all anchors true)
-    private Map<Location,Boolean> verificationAssumptionCheck() {
-        Map<Location,Boolean> checks = new HashMap<>();
+    /// Checks if verification succeed by checking assumptions (all anchors true).
+    /// If it fails, we find a route example which (in dev)
+    private Map<Location,Optional<Bgpv4Route>> verificationAssumptionCheck() {
+        Map<Location,Optional<Bgpv4Route>> checks = new HashMap<>();
         for (Location location : assumptions.keySet()) {
             Invariant assumption = assumptions.get(location);
-            checks.put(location,assumption.implies(inferred.getOrDefault(location,Invariant.getFalse(tbdd))));
+            Invariant infer = inferred.getOrDefault(location,Invariant.getFalse(tbdd));
+            if (assumption.implies(infer)) {
+                checks.put(location,Optional.empty());
+            } else {
+                BDD constraint = assumption.wellFormedBDD().and(infer.negate().wellFormedBDD());
+                assert !constraint.isZero();
+                BDD model = ModelGeneration.constraintsToModel(constraint, tbdd.getConfigAtomicPredicates());
+                Bgpv4Route counter = ModelGeneration.satAssignmentToBgpInputRoute(model, tbdd.getConfigAtomicPredicates());
+                checks.put(location,Optional.of(counter));
+            }
         }
         return checks;
     }
@@ -268,8 +281,8 @@ public class Verifier {
         initializeInvariants();
         working.addAll(targets.keySet());
         Optional<CounterExample> counter = inferenceLoop();
-        Map<Location,Boolean> checks = verificationAssumptionCheck();
-        return new Result(counter.isEmpty() && checks.values().stream().allMatch(b->b),copyInferred(),counter,checks);
+        Map<Location,Optional<Bgpv4Route>> checks = verificationAssumptionCheck();
+        return new Result(counter.isEmpty() && checks.values().stream().allMatch(Optional::isEmpty),copyInferred(),counter,checks);
     }
 
     /// Deep copies invariants inferred

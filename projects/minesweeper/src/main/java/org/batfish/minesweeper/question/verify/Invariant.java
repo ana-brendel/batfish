@@ -47,12 +47,12 @@ import static org.apache.commons.lang3.ObjectUtils.firstNonNull;
 import static org.batfish.minesweeper.bdd.TransferBDD.isRelevantForDestination;
 import static org.batfish.minesweeper.bdd.TransferBDDUtils.makeRoutePairing;
 import static org.batfish.minesweeper.question.searchroutepolicies.SearchRoutePoliciesAnswerer.routeConstraintsToBDD;
-//import static org.batfish.minesweeper.question.verify.TransferBDDUtils.makeRoutePairing;
 
 public class Invariant {
     private final TransferBDD tbdd;
     private final BDD bdd; // the bdd stored here is not assumed to be well-formed
     private final BDDRoute base;
+    public final String str;
 
     /**
      * Provided BDD is not assumed to represent a well-formed BDDRoute
@@ -63,6 +63,7 @@ public class Invariant {
         this.tbdd = tbdd;
         this.bdd = bdd;
         this.base = new BDDRoute(tbdd.getFactory(),tbdd.getConfigAtomicPredicates());
+        this.str = "";
     }
 
     /**
@@ -73,10 +74,22 @@ public class Invariant {
         this.tbdd = tbdd;
         this.bdd = tbdd.getFactory().one();
         this.base = new BDDRoute(tbdd.getFactory(),tbdd.getConfigAtomicPredicates());
+        this.str = "True";
+    }
+
+    public Invariant(TransferBDD tbdd, BDD bdd, String str) {
+        this.tbdd = tbdd;
+        this.bdd = bdd;
+        this.base = new BDDRoute(tbdd.getFactory(),tbdd.getConfigAtomicPredicates());
+        this.str = str;
     }
 
     public static Invariant getFalse(TransferBDD tbdd) {
         return new Invariant(tbdd,tbdd.getFactory().zero());
+    }
+
+    public Invariant negate() {
+        return new Invariant(tbdd,bdd.not(),"False");
     }
 
     /**
@@ -97,9 +110,11 @@ public class Invariant {
     }
 
     public static final class Builder {
+        private final String str;
         private final List<ClauseBuilder> clauses = new ArrayList<>();
 
-        private Builder () {}
+        private Builder () { this.str = null; }
+        private Builder (String str) { this.str = str; }
 
         public Builder addClause(ClauseBuilder clause) {
             clauses.add(clause);
@@ -116,13 +131,17 @@ public class Invariant {
 
         public Invariant build(TransferBDD tbdd, RoutingPolicy policy) {
             Collection<BDD> BDDs = clauses.stream().map(clause -> clause.build(tbdd,policy)).collect(Collectors.toSet());
-            return new Invariant(tbdd,tbdd.getFactory().orAll(BDDs));
+            if (this.str == null) {
+                return new Invariant(tbdd,tbdd.getFactory().orAll(BDDs));
+            } else {
+                return new Invariant(tbdd,tbdd.getFactory().orAll(BDDs),this.str);
+            }
         }
 
         @JsonCreator
         @VisibleForTesting
         static Builder forValue(@Nonnull String value) {
-            Builder builder = new Builder();
+            Builder builder = new Builder(value);
             String[] splits = value.trim().split("]");
             for (String clause : splits) {
                 String trimmed = clause.trim();

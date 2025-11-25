@@ -23,6 +23,7 @@ import org.batfish.minesweeper.bdd.BDDRoute;
 import org.batfish.minesweeper.bdd.CommunityMatchExprToBDD;
 import org.batfish.minesweeper.bdd.CommunitySetMatchExprToBDD;
 import org.batfish.minesweeper.bdd.TransferBDD;
+import org.batfish.minesweeper.bdd.TransferBDDUtils;
 import org.batfish.minesweeper.bdd.TransferReturn;
 import org.batfish.minesweeper.question.searchroutepolicies.BgpRouteConstraints;
 import org.batfish.minesweeper.question.searchroutepolicies.RegexConstraint;
@@ -44,8 +45,9 @@ import java.util.stream.Collectors;
 
 import static org.apache.commons.lang3.ObjectUtils.firstNonNull;
 import static org.batfish.minesweeper.bdd.TransferBDD.isRelevantForDestination;
+import static org.batfish.minesweeper.bdd.TransferBDDUtils.makeRoutePairing;
 import static org.batfish.minesweeper.question.searchroutepolicies.SearchRoutePoliciesAnswerer.routeConstraintsToBDD;
-import static org.batfish.minesweeper.question.verify.TransferBDDUtils.makeRoutePairing;
+//import static org.batfish.minesweeper.question.verify.TransferBDDUtils.makeRoutePairing;
 
 public class Invariant {
     private final TransferBDD tbdd;

@@ -128,7 +128,8 @@ public class Invariant {
                 String trimmed = clause.trim();
                 if (!trimmed.startsWith("[") && !trimmed.isEmpty()) {
                     throw new BatfishException("String parsing into property (Invariant.Builder) failed. " +
-                            "A property should be in DNF form - [clause1][clause2]...[clause_n].");
+                            "A property should be in DNF form - [clause1][clause2]...[clause_n]. " +
+                            "The trimmed clause is: " + trimmed);
                 } else if (!trimmed.isEmpty()){
                     builder.addClause(ClauseBuilder.parseForClauseBuilder(trimmed.substring(1)));
                 }
@@ -281,7 +282,7 @@ public class Invariant {
             PrefixSpace positivePrefix = new PrefixSpace();
             PrefixSpace negativePrefix = new PrefixSpace();
             ImmutableList.Builder<RegexConstraint> communities = ImmutableList.builder();
-            String[] atoms = value.trim().split(",");
+            String[] atoms = value.trim().split("&");
             for (String atom: atoms) {
                 String trimmed = atom.trim();
                 if (!trimmed.isEmpty()) {

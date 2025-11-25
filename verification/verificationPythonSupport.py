@@ -7,7 +7,7 @@ class Clause:
     def format(self) -> str:
         communityStrings = list(map(lambda c: f"comm = {c}",self.communities))
         prefixStrings = list(map(lambda p: f"prefix = {p}",self.prefixes))
-        joined = ",".join(communityStrings+prefixStrings)
+        joined = " & ".join(communityStrings+prefixStrings)
         return f"[{joined}]"
 
 class LocationPropertyPair:

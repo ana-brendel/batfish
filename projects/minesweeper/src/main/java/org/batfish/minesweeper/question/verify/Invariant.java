@@ -321,7 +321,7 @@ public class Invariant {
                                 }
                                 Optional<Prefix> prefix = Prefix.tryParse(input);
                                 if (prefix.isEmpty()) {
-                                    throw new BatfishException("Provided positive prefix (" + input + ") is not a valid prefix");
+                                    throw new BatfishException("Provided prefix (" + input + ") is not a valid prefix");
                                 } else if (!positive) {
                                     negativePrefix.addPrefix(prefix.get());
                                 } else {

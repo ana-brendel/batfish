@@ -193,38 +193,38 @@ public class VerifierTest {
         Node DELTANODE = new Node("10.0.0.4","deltaNode");
         TestConfigConstructionUtils.Network net = originalExample(ALPHANODE,BETANODE,GAMMANODE,DELTANODE);
 
-        Verifier verifier_1 = new Verifier(net.tbdd(),configInput(net.configs()));
+        Infer verifier_1 = new Infer(net.tbdd(),configInput(net.configs()));
         Invariant property_1 = new Invariant(net.tbdd(),
                 Invariant.clauseBuilder().avoidPrefix(PREFIX).build(net.tbdd(), net.imports().get(DELTANODE)));
         verifier_1.addProperty(DELTANODE,property_1).addAnchor(ALPHANODE);
-        Verifier.Result result_1 = verifier_1.run();
+        Infer.Result result_1 = verifier_1.run();
         assertTrue(result_1.verified());
 
-        Verifier verifier_2 = new Verifier(net.tbdd(),configInput(net.configs()));
+        Infer verifier_2 = new Infer(net.tbdd(),configInput(net.configs()));
         Invariant property_2 = new Invariant(net.tbdd(),Invariant.clauseBuilder().avoidPrefix(PREFIX).build(net.tbdd(),net.imports().get(DELTANODE)));
         verifier_2.addProperty(DELTANODE,property_2).addAnchor(new Edge(ALPHANODE,BETANODE));
-        Verifier.Result result_2 = verifier_2.run();
+        Infer.Result result_2 = verifier_2.run();
         assertFalse(result_2.verified());
 
-        Verifier verifier_3 = new Verifier(net.tbdd(),configInput(net.configs()));
+        Infer verifier_3 = new Infer(net.tbdd(),configInput(net.configs()));
         RegexConstraints comm = new RegexConstraints(List.of(RegexConstraint.parse("100:2")));
         Invariant property_3 = new Invariant(net.tbdd(),Invariant.clauseBuilder().setCommunities(comm).build(net.tbdd(),net.imports().get(DELTANODE)));
         verifier_3.addProperty(DELTANODE,property_3).addAnchor(ALPHANODE);
-        Verifier.Result result_3 = verifier_3.run();
+        Infer.Result result_3 = verifier_3.run();
         assertFalse(result_3.verified());
 
-        Verifier verifier_4 = new Verifier(net.tbdd(),configInput(net.configs()));
+        Infer verifier_4 = new Infer(net.tbdd(),configInput(net.configs()));
         RegexConstraints comm_ = new RegexConstraints(List.of(RegexConstraint.parse("100:1"),RegexConstraint.parse("!100:2")));
         Invariant property_4 = new Invariant(net.tbdd(),Invariant.clauseBuilder().setCommunities(comm_).build(net.tbdd(),net.imports().get(DELTANODE)));
         verifier_4.addProperty(DELTANODE,property_4).addAnchor(ALPHANODE);
-        Verifier.Result result_4 = verifier_4.run();
+        Infer.Result result_4 = verifier_4.run();
         assertFalse(result_4.verified());
 
-        Verifier verifier_5 = new Verifier(net.tbdd(),configInput(net.configs()));
+        Infer verifier_5 = new Infer(net.tbdd(),configInput(net.configs()));
         RegexConstraints comm__ = new RegexConstraints(List.of(RegexConstraint.parse("100:1"),RegexConstraint.parse("!100:2")));
         Invariant property_5 = new Invariant(net.tbdd(),Invariant.clauseBuilder().setCommunities(comm__).build(net.tbdd(),net.imports().get(GAMMANODE)));
         verifier_5.addProperty(GAMMANODE,property_5).addAnchor(ALPHANODE);
-        Verifier.Result result_5 = verifier_5.run();
+        Infer.Result result_5 = verifier_5.run();
         assertFalse(result_5.verified());
     }
 
@@ -236,11 +236,11 @@ public class VerifierTest {
         Node DELTANODE = new Node("10.0.0.40","deltaNode");
         TestConfigConstructionUtils.Network net = originalExample(ALPHANODE,BETANODE,GAMMANODE,DELTANODE);
 
-        Verifier verifier = new Verifier(net.tbdd(),configInput(net.configs()));
+        Infer verifier = new Infer(net.tbdd(),configInput(net.configs()));
         Invariant property = new Invariant(net.tbdd(),
                 Invariant.clauseBuilder().avoidPrefix(PREFIX).build(net.tbdd(), net.imports().get(DELTANODE)));
         verifier.addProperty(DELTANODE,property).addAnchor(ALPHANODE);
-        Verifier.Result result = verifier.run();
+        Infer.Result result = verifier.run();
         Map<Location, Invariant> inferred = result.invariants();
 
         Invariant.ClauseBuilder avoidPrefix = Invariant.clauseBuilder().avoidPrefix(PREFIX);
@@ -380,9 +380,9 @@ public class VerifierTest {
             TestConfigConstructionUtils.Network net = faultyOriginalExample(ALPHANODE, BETANODE, GAMMANODE, DELTANODE,i);
             Invariant property = new Invariant(net.tbdd(), Invariant.clauseBuilder().avoidPrefix(PREFIX).build(net.tbdd(), net.imports().get(DELTANODE)));
             Invariant not_prefix = Invariant.builder().addClause(avoidPrefix).build(net.tbdd(), net.imports().get(ALPHANODE));
-            Verifier verifier = new Verifier(net.tbdd(), configInput(net.configs()));
+            Infer verifier = new Infer(net.tbdd(), configInput(net.configs()));
             verifier.addProperty(DELTANODE, property).addAnchor(ALPHANODE);
-            Verifier.Result result = verifier.run();
+            Infer.Result result = verifier.run();
             assertFalse(result.verified());
             assertEquals(result.invariants().get(DELTANODE), not_prefix);
             //Map<Location,String> pp = result.weakDisplay(ImmutableList.of(prefixStr));
@@ -535,26 +535,26 @@ public class VerifierTest {
 
         TestConfigConstructionUtils.Network net_0 = meshNetworkExample(A1,B1,G1,D1,A2,B2,G2,D2,0);
         Invariant property_0 = new Invariant(net_0.tbdd(), Invariant.clauseBuilder().avoidPrefix(PREFIX).build(net_0.tbdd(), net_0.imports().get(D1)));
-        Verifier verifier_0 = new Verifier(net_0.tbdd(), configInput(net_0.configs()));
+        Infer verifier_0 = new Infer(net_0.tbdd(), configInput(net_0.configs()));
         verifier_0.addProperty(D1, property_0).addProperty(D2, property_0).addAnchor(A1).addAnchor(A2);
-        Verifier.Result result_0 = verifier_0.run();
+        Infer.Result result_0 = verifier_0.run();
         assertTrue(result_0.verified());
         //Map<Location,String> pp = result.weakDisplay(ImmutableList.of(prefixStr));
 
         TestConfigConstructionUtils.Network net_1 = meshNetworkExample(A1,B1,G1,D1,A2,B2,G2,D2,1);
         Invariant property_1 = new Invariant(net_1.tbdd(), Invariant.clauseBuilder().avoidPrefix(PREFIX).build(net_1.tbdd(), net_1.imports().get(D1)));
-        Verifier verifier_1 = new Verifier(net_1.tbdd(), configInput(net_1.configs()));
+        Infer verifier_1 = new Infer(net_1.tbdd(), configInput(net_1.configs()));
         verifier_1.addProperty(D1, property_1).addAnchor(A1).addAnchor(A2);
-        Verifier.Result result_1 = verifier_1.run();
+        Infer.Result result_1 = verifier_1.run();
         assertTrue(result_1.verified());
         //Map<Location,String> pp = result.weakDisplay(ImmutableList.of(prefixStr));
 
         TestConfigConstructionUtils.Network net_2 = meshNetworkExample(A1,B1,G1,D1,A2,B2,G2,D2,2);
         Invariant property_2 = new Invariant(net_2.tbdd(), Invariant.clauseBuilder().avoidPrefix(PREFIX).build(net_2.tbdd(), net_2.imports().get(D1)));
         Invariant not_prefix_2 = Invariant.builder().addClause(avoidPrefix).build(net_2.tbdd(), net_2.imports().get(A1));
-        Verifier verifier_2 = new Verifier(net_2.tbdd(), configInput(net_2.configs()));
+        Infer verifier_2 = new Infer(net_2.tbdd(), configInput(net_2.configs()));
         verifier_2.addProperty(D1, property_2).addProperty(D2, property_2).addAnchor(A1).addAnchor(A2);
-        Verifier.Result result_2 = verifier_2.run();
+        Infer.Result result_2 = verifier_2.run();
         assertFalse(result_2.verified());
         assertEquals(result_2.invariants().get(A1), not_prefix_2);
         assertEquals(result_2.invariants().get(A2), not_prefix_2);
@@ -563,9 +563,9 @@ public class VerifierTest {
         TestConfigConstructionUtils.Network net_3 = meshNetworkExample(A1,B1,G1,D1,A2,B2,G2,D2,3);
         Invariant property_3 = new Invariant(net_3.tbdd(), Invariant.clauseBuilder().avoidPrefix(PREFIX).build(net_3.tbdd(), net_3.imports().get(D1)));
         Invariant not_prefix_3 = Invariant.builder().addClause(avoidPrefix).build(net_3.tbdd(), net_3.imports().get(A1));
-        Verifier verifier_3 = new Verifier(net_3.tbdd(), configInput(net_3.configs()));
+        Infer verifier_3 = new Infer(net_3.tbdd(), configInput(net_3.configs()));
         verifier_3.addProperty(D1, property_3).addProperty(D2, property_3).addAnchor(A1).addAnchor(A2);
-        Verifier.Result result_3 = verifier_3.run();
+        Infer.Result result_3 = verifier_3.run();
         assertFalse(result_3.verified());
         assertEquals(result_3.invariants().get(A1), not_prefix_3);
         assertEquals(result_3.invariants().get(A2), not_prefix_3);
@@ -575,9 +575,9 @@ public class VerifierTest {
         Invariant property_4 = new Invariant(net_4.tbdd(), Invariant.clauseBuilder().avoidPrefix(PREFIX).build(net_4.tbdd(), net_4.imports().get(D1)));
         Invariant property_alt = new Invariant(net_4.tbdd(), Invariant.clauseBuilder().matchPrefix(PREFIX).build(net_4.tbdd(), net_4.imports().get(D1)));
         Invariant expected = Invariant.builder().addClause(Invariant.clauseBuilder().matchPrefix(PREFIX)).addClause(match_100_1).addClause(match_100_2).build(net_4.tbdd(), net_4.imports().get(A1));
-        Verifier verifier_4 = new Verifier(net_4.tbdd(), configInput(net_4.configs()));
+        Infer verifier_4 = new Infer(net_4.tbdd(), configInput(net_4.configs()));
         verifier_4.addProperty(D1, property_4).addProperty(D2, property_alt).addAnchor(A1).addAnchor(A2);
-        Verifier.Result result_4 = verifier_4.run();
+        Infer.Result result_4 = verifier_4.run();
         assertFalse(result_4.verified());
         Map<Location,String> pp = result_4.weakDisplay(ImmutableList.of(prefixStr));
         assertEquals(result_4.invariants().get(A1), expected);
@@ -738,25 +738,25 @@ public class VerifierTest {
 
         TestConfigConstructionUtils.Network net_0 = threeProngedNetwork(A0,B0,C0,NODE1,NODE2,NODE3,NODE4,0);
         Invariant property_0 = Invariant.builder().addClause(avoidBoth).build(net_0.tbdd(), net_0.imports().get(NODE4));
-        Verifier verifier_0 = new Verifier(net_0.tbdd(), configInput(net_0.configs()));
+        Infer verifier_0 = new Infer(net_0.tbdd(), configInput(net_0.configs()));
         verifier_0.addProperty(NODE4, property_0);
-        Verifier.Result result_0 = verifier_0.run();
+        Infer.Result result_0 = verifier_0.run();
         assertTrue(result_0.verified());
 
         TestConfigConstructionUtils.Network net_1 = threeProngedNetwork(A0,B0,C0,NODE1,NODE2,NODE3,NODE4,1);
         Invariant property_1 = Invariant.builder().addClause(avoidBoth).build(net_1.tbdd(), net_1.imports().get(NODE4));
-        Verifier verifier_1 = new Verifier(net_1.tbdd(), configInput(net_1.configs()));
+        Infer verifier_1 = new Infer(net_1.tbdd(), configInput(net_1.configs()));
         verifier_1.addProperty(NODE4, property_1).addAnchor(A0).addAnchor(B0).addAnchor(C0);
-        Verifier.Result result_1 = verifier_1.run();
+        Infer.Result result_1 = verifier_1.run();
         assertFalse(result_1.verified());
         assertTrue(result_1.invariants().get(C0).isFalse());
         assertTrue(result_1.counter().isPresent());
 
         TestConfigConstructionUtils.Network net_2 = threeProngedNetwork(A0,B0,C0,NODE1,NODE2,NODE3,NODE4,2);
         Invariant property_2 = Invariant.builder().addClause(avoidBoth).build(net_2.tbdd(), net_2.imports().get(NODE4));
-        Verifier verifier_2 = new Verifier(net_2.tbdd(), configInput(net_2.configs()));
+        Infer verifier_2 = new Infer(net_2.tbdd(), configInput(net_2.configs()));
         verifier_2.addProperty(NODE4, property_2).addAnchor(A0).addAnchor(B0).addAnchor(C0);
-        Verifier.Result result_2 = verifier_2.run();
+        Infer.Result result_2 = verifier_2.run();
         assertFalse(result_2.verified());
         assertTrue(result_2.invariants().get(C0).isFalse());
         assertTrue(result_2.counter().isPresent());
@@ -895,28 +895,28 @@ public class VerifierTest {
         Node NODE_4 = new Node("10.0.4.0","node_4_");
 
         TestConfigConstructionUtils.Network net = twoPathNetwork(NODE_1A,NODE_1B,NODE_2A,NODE_2B,NODE_3,NODE_4,0);
-        Verifier verifier = new Verifier(net.tbdd(),configInput(net.configs()));
+        Infer verifier = new Infer(net.tbdd(),configInput(net.configs()));
         Invariant property = new Invariant(net.tbdd(),Invariant.clauseBuilder().avoidPrefix(PREFIX).build(net.tbdd(),net.imports().get(NODE_4)));
         verifier.addProperty(NODE_4,property).addAnchor(NODE_1A).addAnchor(NODE_1B);
-        Verifier.Result result = verifier.run();
+        Infer.Result result = verifier.run();
         assertTrue(result.verified());
         assertTrue(result.inferredTrue());
         assertTrue(result.counter().isEmpty());
 
         TestConfigConstructionUtils.Network net_1 = twoPathNetwork(NODE_1A,NODE_1B,NODE_2A,NODE_2B,NODE_3,NODE_4,1);
-        Verifier verifier_1 = new Verifier(net_1.tbdd(),configInput(net_1.configs()));
+        Infer verifier_1 = new Infer(net_1.tbdd(),configInput(net_1.configs()));
         Invariant property_1 = new Invariant(net_1.tbdd(),Invariant.clauseBuilder().avoidPrefix(PREFIX).build(net_1.tbdd(),net_1.imports().get(NODE_4)));
         verifier_1.addProperty(NODE_4,property_1).addAnchor(NODE_1A).addAnchor(NODE_1B);
-        Verifier.Result result_1 = verifier_1.run();
+        Infer.Result result_1 = verifier_1.run();
         assertFalse(result_1.verified());
         assertTrue(result_1.inferredTrue());
         assertTrue(result_1.counter().isEmpty());
 
         TestConfigConstructionUtils.Network net_2 = twoPathNetwork(NODE_1A,NODE_1B,NODE_2A,NODE_2B,NODE_3,NODE_4,2);
-        Verifier verifier_2 = new Verifier(net_2.tbdd(),configInput(net_2.configs()));
+        Infer verifier_2 = new Infer(net_2.tbdd(),configInput(net_2.configs()));
         Invariant property_2 = new Invariant(net_2.tbdd(),Invariant.clauseBuilder().avoidPrefix(PREFIX).build(net_2.tbdd(),net_2.imports().get(NODE_4)));
         verifier_2.addProperty(NODE_4,property_2).addAnchor(NODE_1A).addAnchor(NODE_1B);
-        Verifier.Result result_2 = verifier_2.run();
+        Infer.Result result_2 = verifier_2.run();
         assertTrue(result_2.verified());
         assertTrue(result_2.inferredTrue());
         assertTrue(result_2.counter().isEmpty());
@@ -1031,11 +1031,11 @@ public class VerifierTest {
         Edge target = new Edge(NODE_C.getIp(),exit);
 
         TestConfigConstructionUtils.Network net = simpleNetwork(entry,exit,NODE_A,NODE_B,NODE_C,0);
-        Verifier verifier = new Verifier(net.tbdd(),configInput(net.configs()));
+        Infer verifier = new Infer(net.tbdd(),configInput(net.configs()));
         Invariant property = new Invariant(net.tbdd(),Invariant.clauseBuilder().avoidPrefix(PREFIX).build(net.tbdd(),net.imports().get(NODE_C)));
         verifier.addProperty(target,property);
         verifier.addAssumption(new Edge(exit,NODE_C.getIp()), Invariant.getFalse(net.tbdd()));
-        Verifier.Result result = verifier.run();
+        Infer.Result result = verifier.run();
 
         assertTrue(result.verified());
         assertTrue(result.inferredTrue());

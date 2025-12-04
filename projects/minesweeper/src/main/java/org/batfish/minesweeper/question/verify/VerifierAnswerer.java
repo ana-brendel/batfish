@@ -97,7 +97,7 @@ public final class VerifierAnswerer extends Answerer {
                 _asPathRegexes.stream().map(RegexConstraint::getRegex).collect(ImmutableSet.toImmutableSet()));
     }
 
-    private Map.Entry<Location, Invariant> buildInvariant(Verifier verifier, boolean wpQuery, Map.Entry<Location.Builder, Invariant.Builder> entry) {
+    private Map.Entry<Location, Invariant> buildInvariant(Infer verifier, boolean wpQuery, Map.Entry<Location.Builder, Invariant.Builder> entry) {
         RoutingPolicy policy;
         Location location = entry.getKey().instantiate(verifier);
         if (location instanceof Edge edge) {
@@ -160,7 +160,7 @@ public final class VerifierAnswerer extends Answerer {
         return "Bgpv4Route{" + String.join(", ", features.build()) + "}";
     }
 
-    private TableAnswerElement getAnswerElement(List<String> prefixesForDisplay, Verifier.Result result, Verifier verifier) {
+    private TableAnswerElement getAnswerElement(List<String> prefixesForDisplay, Infer.Result result, Infer verifier) {
         TableAnswerElement tae = new TableAnswerElement(metadata());
         verifier.getAssumptions().forEach((loc,prop) -> tae.addRow(Row.builder()
                 .put("Assumption_Location", loc.toString())
@@ -188,12 +188,12 @@ public final class VerifierAnswerer extends Answerer {
         List<String> prefixesForDisplay = _readable ? getPrefixesConsideredForDisplay(configs.values()) : List.of();
         ConfigAtomicPredicates configAPs = getConfigAtomicPredicates(configs.values());
         TransferBDD tbdd = new TransferBDD(configAPs);
-        Verifier verifier = new Verifier(tbdd,configs);
+        Infer verifier = new Infer(tbdd,configs);
         _targets.entrySet().stream()
                 .map(e -> buildInvariant(verifier,true,e))
                 .forEach(e -> verifier.addProperty(e.getKey(),e.getValue()));
         _assumptions.forEach(verifier::addAssumption);
-        Verifier.Result result = verifier.run();
+        Infer.Result result = verifier.run();
         return getAnswerElement(prefixesForDisplay,result,verifier);
     }
 }

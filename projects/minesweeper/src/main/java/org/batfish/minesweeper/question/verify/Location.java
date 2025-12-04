@@ -54,7 +54,7 @@ public abstract class Location {
 
         /// Gets the Location based on the Verifier (which is based on Network Snapshot)
         /// -- maybe change to only succeed if provided with IPs
-        public Location instantiate(Verifier v) {
+        public Location instantiate(Infer v) {
             if (_head != null && _tail != null) {
                 Ip head = Ip.tryParse(_head).orElseGet(() -> v.ipFromNodeName(_head).orElse(null));
                 Ip tail = Ip.tryParse(_tail).orElseGet(() -> v.ipFromNodeName(_tail).orElse(null));
@@ -90,7 +90,7 @@ public abstract class Location {
             return new Builders(builders.build());
         }
 
-        public List<Location> instantiate(Verifier v) {
+        public List<Location> instantiate(Infer v) {
             ImmutableList.Builder<Location> builder = ImmutableList.builder();
             _builders.forEach(loc -> builder.add(loc.instantiate(v)));
             return builder.build();

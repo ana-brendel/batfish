@@ -25,7 +25,7 @@ import java.util.Set;
 import static java.util.Objects.isNull;
 import static org.batfish.minesweeper.question.verify.Invariant.strongestCommonImplicant;
 
-public class Verifier {
+public class Infer {
     private final TransferBDD tbdd;
     private final Map<Ip,Node> nodes = new HashMap<>();
     private final Set<Location> locations = new HashSet<>();
@@ -87,7 +87,7 @@ public class Verifier {
 
     }
 
-    public Verifier(TransferBDD tbdd, Map<String, Configuration> configs) {
+    public Infer(TransferBDD tbdd, Map<String, Configuration> configs) {
         this.tbdd = tbdd;
         processConfigs(configs);
         // default assumption of True for incoming edges
@@ -147,11 +147,11 @@ public class Verifier {
      * @param anchor location where invariant should be true
      * @return updated Verified object
      */
-    public Verifier addAnchor(Location anchor) {
+    public Infer addAnchor(Location anchor) {
         return this.addAssumption(anchor,new Invariant(this.tbdd));
     }
 
-    public Verifier addAssumption(@Nonnull Location location, @Nonnull Invariant assumption) {
+    public Infer addAssumption(@Nonnull Location location, @Nonnull Invariant assumption) {
         assumptions.put(location,assumption);
         return this;
     }
@@ -180,7 +180,7 @@ public class Verifier {
      * @param inv invariant to hold
      * @return updated Verified object
      */
-    public Verifier addProperty(Location loc, Invariant inv) {
+    public Infer addProperty(Location loc, Invariant inv) {
         targets.put(loc,inv);
         return this;
     }

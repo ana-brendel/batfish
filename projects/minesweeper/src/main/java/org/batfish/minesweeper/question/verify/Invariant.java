@@ -5,20 +5,16 @@ import com.fasterxml.jackson.annotation.JsonProperty;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableSet;
-import com.google.common.collect.Sets;
 import net.sf.javabdd.BDD;
 import net.sf.javabdd.BDDFactory;
 import net.sf.javabdd.BDDPairing;
 import org.batfish.common.BatfishException;
-import org.batfish.datamodel.Ip;
 import org.batfish.datamodel.LineAction;
-import org.batfish.datamodel.Prefix;
 import org.batfish.datamodel.PrefixRange;
 import org.batfish.datamodel.PrefixSpace;
 import org.batfish.datamodel.routing_policy.Environment;
 import org.batfish.datamodel.routing_policy.RoutingPolicy;
 import org.batfish.datamodel.routing_policy.communities.CommunityMatchExpr;
-import org.batfish.minesweeper.CommunityVar;
 import org.batfish.minesweeper.bdd.BDDRoute;
 import org.batfish.minesweeper.bdd.CommunityMatchExprToBDD;
 import org.batfish.minesweeper.bdd.CommunitySetMatchExprToBDD;
@@ -31,16 +27,15 @@ import org.batfish.minesweeper.question.searchroutepolicies.RegexConstraints;
 
 import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
-import java.util.AbstractMap;
 import java.util.ArrayList;
 import java.util.Collection;
-import java.util.Comparator;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
+import java.util.function.Function;
 import java.util.stream.Collectors;
 
 import static org.apache.commons.lang3.ObjectUtils.firstNonNull;
@@ -63,7 +58,7 @@ public class Invariant {
         this.tbdd = tbdd;
         this.bdd = bdd;
         this.base = new BDDRoute(tbdd.getFactory(),tbdd.getConfigAtomicPredicates());
-        this.str = "";
+        this.str = null;
     }
 
     /**
@@ -74,14 +69,14 @@ public class Invariant {
         this.tbdd = tbdd;
         this.bdd = tbdd.getFactory().one();
         this.base = new BDDRoute(tbdd.getFactory(),tbdd.getConfigAtomicPredicates());
-        this.str = "True";
+        this.str = "true";
     }
 
     public Invariant(TransferBDD tbdd, BDD bdd, String str) {
         this.tbdd = tbdd;
         this.bdd = bdd;
         this.base = new BDDRoute(tbdd.getFactory(),tbdd.getConfigAtomicPredicates());
-        this.str = str;
+        this.str = str == null || str.isEmpty()? null : str;
     }
 
     public static Invariant getFalse(TransferBDD tbdd) {
@@ -89,7 +84,23 @@ public class Invariant {
     }
 
     public Invariant negate() {
-        return new Invariant(tbdd,bdd.not(),"False");
+        return new Invariant(tbdd,bdd.not(),"false");
+    }
+
+    public String toString(boolean refinementOccurred, BDDString.Shortcuts shortcuts) {
+        if (this.isFalse()) return refinementOccurred ? "no traffic" : "false";
+        if (this.isTrue()) return "true";
+        String returned = Objects.requireNonNullElseGet(this.str, () -> BDDString.get(this.tbdd, this.bdd,shortcuts));
+        assert !returned.trim().isEmpty();
+        return returned;
+    }
+
+    public String toString(boolean refinementOccurred, BDDString.Shortcuts shortcuts, Map<BDD,String> cache) {
+        if (cache != null && cache.containsKey(this.bdd)) {
+            return cache.get(this.bdd);
+        } else {
+            return this.toString(refinementOccurred, shortcuts);
+        }
     }
 
     /**
@@ -130,11 +141,15 @@ public class Invariant {
         }
 
         public Invariant build(TransferBDD tbdd, RoutingPolicy policy) {
-            Collection<BDD> BDDs = clauses.stream().map(clause -> clause.build(tbdd,policy)).collect(Collectors.toSet());
-            if (this.str == null) {
-                return new Invariant(tbdd,tbdd.getFactory().orAll(BDDs));
+            if (clauses.isEmpty()) {
+                return new Invariant(tbdd);
             } else {
-                return new Invariant(tbdd,tbdd.getFactory().orAll(BDDs),this.str);
+                Collection<BDD> BDDs = clauses.stream().map(clause -> clause.build(tbdd,policy)).collect(Collectors.toSet());
+                if (this.str == null) {
+                    return new Invariant(tbdd,tbdd.getFactory().orAll(BDDs));
+                } else {
+                    return new Invariant(tbdd,tbdd.getFactory().orAll(BDDs),this.str);
+                }
             }
         }
 
@@ -319,16 +334,20 @@ public class Invariant {
                                     input = input.substring(1);
                                     positive = false;
                                 }
-                                Optional<Prefix> prefix = Prefix.tryParse(input);
+                                //Optional<Prefix> prefix = Prefix.tryParse(input);
+                                Optional<PrefixSpace> prefix = Optional.empty();
+                                try {
+                                    prefix = Optional.of(new PrefixSpace(PrefixRange.fromString(input)));
+                                } catch (Exception ignore) {}
                                 if (prefix.isEmpty()) {
                                     throw new BatfishException("Provided prefix (" + input + ") is not a valid prefix");
                                 } else if (!positive) {
-                                    negativePrefix.addPrefix(prefix.get());
+                                    negativePrefix.addSpace(prefix.get());
                                 } else {
                                     if (positivePrefix.isEmpty()) {
-                                        positivePrefix.addPrefix(prefix.get());
+                                        positivePrefix.addSpace(prefix.get());
                                     } else {
-                                        positivePrefix.intersection(new PrefixSpace(PrefixRange.fromPrefix(prefix.get())));
+                                        positivePrefix.intersection(prefix.get());
                                     }
                                 }
                                 break;
@@ -340,7 +359,8 @@ public class Invariant {
                     } else {
                         throw new BatfishException("Error when parsing string for clause -" +
                                 " each clause should have format [field1=value1,...,field_n=value_n]. " +
-                                " Current field supported: comm, prefix.");
+                                " Current field supported: comm, prefix." +
+                                " Provided string: " + trimmed.trim());
                     }
                 }
             }
@@ -394,6 +414,7 @@ public class Invariant {
      * @return bdd constraining input in order to satisfy invariant on output
      */
     public static BDD conditionsForConstraint(TransferBDD tbdd, BDD inv, @Nonnull BDDRoute r) {
+        // TODO needs to be updated to include accurate reflect of the AS path (maybe other characteristics)
         if (inv.isOne()) { // if the invariant is always true... should I do one for always false too?
             return tbdd.getFactory().one();
         } else {
@@ -443,6 +464,19 @@ public class Invariant {
         return new Invariant(left.tbdd, left.bdd.and(right.bdd));
     }
 
+    public static BDD combineInterpolants(Set<BDD> interpolants) {
+        BDD result = interpolants.stream().findFirst().orElse(null);
+        for (BDD interpolant : interpolants) {
+            BDD conjoined = interpolant.id().and(result.id());
+            if (conjoined.equals(interpolant)) {
+                result = interpolant.id();
+            } else if (!conjoined.equals(result)) {
+                result = result.or(interpolant.id());
+            }
+        }
+        return result;
+    }
+
     /**
      * Indicates if this invariant implies the provided invariant
      * @param post postcondition for implication
@@ -461,6 +495,34 @@ public class Invariant {
         return (pre.wellFormedBDD().imp(this.wellFormedBDD())).isOne();
     }
 
+    /**
+     * Synthesizes the strongest postcondition which will hold after any route satisfying this invariant is
+     *      passed through the provided policy. If no routes satisfying this invariant are permitted passed this
+     *      policy, then the postcondition returned is false.
+     * @param policy gets the strongest postcondition for this policy
+     * @return invariant corresponding to the strongest postcondition
+     */
+    public Invariant strongestPostcondition(@Nonnull RoutingPolicy policy) {
+        if (policy.getStatements().isEmpty()) {
+            if (policy.getOwner() == null || policy.getOwner().getDefaultInboundAction() == LineAction.PERMIT) {
+                return this.copy(); // default is permit, so invariant itself is the strongest postcondition
+            } else {
+                return Invariant.getFalse(tbdd); // default is deny so the strongest postcondition is false
+            }
+        } else {
+            TransferBDD.Context context = TransferBDD.Context.forPolicy(policy);
+            List<TransferReturn> paths;
+            try {
+                paths = tbdd.computePaths(policy.getStatements(),context,true);
+            } catch (Exception e) {
+                String name = policy.getOwner() != null ? policy.getOwner().getHostname() : "policy owner null";
+                throw new BatfishException("Unexpected error analyzing policy " + policy.getName() + " in node " + name, e);
+            }
+            BDD strongest = TransferBDDUtils.strongestPostcondition(paths,this.wellFormedBDD(),tbdd, Function.identity());
+            return new Invariant(tbdd,strongest);
+        }
+    }
+
     @Override
     public boolean equals(Object obj) {
         if (obj != null && obj.getClass() == this.getClass()) {
@@ -475,109 +537,114 @@ public class Invariant {
         return Objects.hash(tbdd, bdd);
     }
 
-    /// Returns invariant as string, but is not robust ("quick and dirty")
-    public String weakDisplay(List<String> prefixesConsidered) {
-        WeakReader reader = new WeakReader(this);
-        return String.join(" OR ",reader.read(prefixesConsidered));
-    }
+//    public String weakDisplay(List<String> prefixesConsidered) {
+//        WeakReader reader = new WeakReader(this);
+//        return String.join(" OR ",reader.read(prefixesConsidered));
+//    }
 
     /// Class for displaying the invariant (easily separated)
-    private class WeakReader {
-        private final Invariant inv;
-
-        private WeakReader(Invariant inv) { this.inv = inv;}
-
-        private BDD communityBDD(RegexConstraint comm) {
-            return Invariant.createClause(null,null,new RegexConstraints(List.of(comm))).build(inv.tbdd,null);
-        }
-
-        private BDD prefixBDD(PrefixSpace space, boolean positive) {
-            return Invariant.createClause(positive ? space : null,positive ? null : space,null).build(inv.tbdd,null);
-        }
-
-        private boolean filterRedundant(Set<Map.Entry<String,BDD>> set) {
-            List<String> positives = set.stream().map(Map.Entry::getKey).filter(key -> key.startsWith("has"))
-                    .map(key -> key.replaceFirst("has ","")).toList();
-            List<String> negatives = set.stream().map(Map.Entry::getKey).filter(key -> key.startsWith("does not have"))
-                    .map(key -> key.replaceFirst("does not have ","")).toList();
-            return positives.stream().noneMatch(negatives::contains);
-        }
-
-        private Map.Entry<String,BDD> makeOneEntry(Set<Map.Entry<String,BDD>> set) {
-            ImmutableList.Builder<String> builder = ImmutableList.builder();
-            BDD clause = inv.base.wellFormednessConstraints(true);
-            for (Map.Entry<String,BDD> entry : set) {
-                clause = clause.and(entry.getValue());
-                builder.add(entry.getKey());
-            }
-            return new AbstractMap.SimpleEntry<>(String.join(" and ",builder.build()),clause);
-        }
-
-        private List<String> read(List<String> prefixesConsidered) {
-            Map<String,BDD> atoms = new HashMap<>();
-
-            for (CommunityVar cv : inv.tbdd.getConfigAtomicPredicates().getStandardCommunityAtomicPredicates().getRegexes()) {
-                String regex = cv.getRegex();
-                atoms.put("has comm " + regex, communityBDD(new RegexConstraint(regex,false)));
-                atoms.put("does not have comm " + regex, communityBDD(new RegexConstraint(regex,true)));
-            }
-
-            for (String prefixString : prefixesConsidered) {
-                Optional<Prefix> prefix = Prefix.tryParse(prefixString);
-                Optional<Ip> ip = Ip.tryParse(prefixString);
-                PrefixSpace PREFIX;
-                if (prefix.isPresent()) {
-                    PREFIX = new PrefixSpace(PrefixRange.fromPrefix(prefix.get()));
-                } else if (ip.isPresent()) {
-                    PREFIX = new PrefixSpace(PrefixRange.fromPrefix(ip.get().toPrefix()));
-                } else {
-                    throw new BatfishException("Cannot parse provided ip/prefix string for display.");
-                }
-                atoms.put("has prefix " + prefixString,prefixBDD(PREFIX,true));
-                atoms.put("does not have prefix " + prefixString,prefixBDD(PREFIX,false));
-            }
-
-            Set<Set<Map.Entry<String,BDD>>> combos = Sets.powerSet(atoms.entrySet());
-
-            Set<Map.Entry<String,BDD>> clauses = combos.stream().filter(this::filterRedundant).map(this::makeOneEntry).collect(Collectors.toSet());
-
-            if (inv.isFalse()) {
-                return ImmutableList.of("false");
-            } else if (inv.isTrue()) {
-                return ImmutableList.of("true");
-            } else {
-                ImmutableList.Builder<Map.Entry<String, BDD>> builder = ImmutableList.builder();
-                List<Map.Entry<String, BDD>> sorted = clauses.stream()
-                        .sorted(Comparator.comparingInt(entry -> entry.getKey().length())).toList();
-                BDD disjunction = tbdd.getFactory().zero();
-                for (Map.Entry<String, BDD> entry : sorted) {
-                    BDD clause = base.wellFormednessConstraints(true).and(entry.getValue());
-                    if (clause.imp(inv.wellFormedBDD()).isOne()) {
-                        boolean keep = true;
-                        for (Map.Entry<String, BDD> added : builder.build()) {
-                            if (keep) {
-                                BDD in = added.getValue().and(base.wellFormednessConstraints(true));
-                                if (clause.imp(in).isOne()) { // if this clause implies any that are kept, we don't need to add
-                                    keep = false;
-                                }
-                            }
-                        }
-                        if (keep) {
-                            builder.add(entry);
-                            disjunction = disjunction.or(entry.getValue());
-                        }
-                    }
-                }
-                // attempt at better pruning for readability (removes redundant clauses)
-                List<Map.Entry<String, BDD>> kept = builder.build();
-                List<Map.Entry<String, BDD>> result = builder.build().stream()
-                        .filter(entry -> kept.stream().allMatch(other ->
-                                !entry.getValue().imp(other.getValue()).isOne() || other.getValue().equals(entry.getValue()))).toList();
-                assert inv.wellFormedBDD().equals(disjunction);
-                return result.stream().map(Map.Entry::getKey).toList();
-            }
-        }
-    }
+//    private static class WeakReader {
+//        private final Invariant inv;
+//
+//        private WeakReader(Invariant inv) { this.inv = inv;}
+//
+//        private BDD communityBDD(RegexConstraint comm) {
+//            return Invariant.createClause(null,null,new RegexConstraints(List.of(comm))).build(inv.tbdd,null);
+//        }
+//
+//        private BDD prefixBDD(PrefixSpace space, boolean positive) {
+//            return Invariant.createClause(positive ? space : null,positive ? null : space,null).build(inv.tbdd,null);
+//        }
+//
+//        private boolean filterRedundant(Set<Map.Entry<String,BDD>> set) {
+//            List<String> positives = set.stream().map(Map.Entry::getKey).filter(key -> key.startsWith("has"))
+//                    .map(key -> key.replaceFirst("has ","")).toList();
+//            List<String> negatives = set.stream().map(Map.Entry::getKey).filter(key -> key.startsWith("does not have"))
+//                    .map(key -> key.replaceFirst("does not have ","")).toList();
+//            return positives.stream().noneMatch(negatives::contains);
+//        }
+//
+//        private Map.Entry<String,BDD> makeOneEntry(Set<Map.Entry<String,BDD>> set) {
+//            ImmutableList.Builder<String> builder = ImmutableList.builder();
+//            BDD clause = inv.base.wellFormednessConstraints(true);
+//            for (Map.Entry<String,BDD> entry : set) {
+//                clause = clause.and(entry.getValue());
+//                builder.add(entry.getKey());
+//            }
+//            return new AbstractMap.SimpleEntry<>(String.join(" and ",builder.build()),clause);
+//        }
+//
+//        /// BUGGY - will likely throw assertion error
+//        private List<String> read(List<String> prefixesConsidered) {
+//            Map<String,BDD> atoms = new HashMap<>();
+//
+//            Map<CommunityVar, Set<Integer>> communityVars = inv.tbdd.getCommunityAtomicPredicates();
+//
+//            for (CommunityVar cv: communityVars.keySet()) {
+//                String regex = cv.getRegex();
+//                BDD hasComm = inv.tbdd.getFactory()
+//                        .orAll(communityVars.get(cv).stream().map(inv.tbdd.getFactory()::ithVar).collect(Collectors.toSet()));
+//                atoms.put("has comm " + regex, hasComm);
+//                atoms.put("does not have comm " + regex, hasComm.id().not());
+//            }
+//
+//            for (String prefixString : prefixesConsidered) {
+//                Optional<Prefix> prefix = Prefix.tryParse(prefixString);
+//                Optional<Ip> ip = Ip.tryParse(prefixString);
+//                PrefixSpace PREFIX;
+//                if (prefix.isPresent()) {
+//                    PREFIX = new PrefixSpace(PrefixRange.fromPrefix(prefix.get()));
+//                } else if (ip.isPresent()) {
+//                    PREFIX = new PrefixSpace(PrefixRange.fromPrefix(ip.get().toPrefix()));
+//                } else {
+//                    throw new BatfishException("Cannot parse provided ip/prefix string for display.");
+//                }
+//                atoms.put("has prefix " + prefixString,prefixBDD(PREFIX,true));
+//                atoms.put("does not have prefix " + prefixString,prefixBDD(PREFIX,false));
+//            }
+//
+//            Set<Set<Map.Entry<String,BDD>>> combos = Sets.powerSet(atoms.entrySet());
+//
+//            Set<Map.Entry<String,BDD>> clauses = combos.stream().filter(this::filterRedundant).map(this::makeOneEntry)
+//                    .filter(entry -> !entry.getValue().isZero() && !entry.getValue().isOne()).collect(Collectors.toSet());
+//
+//            if (inv.isFalse()) {
+//                return ImmutableList.of("false");
+//            } else if (inv.isTrue()) {
+//                return ImmutableList.of("true");
+//            } else {
+//                ImmutableList.Builder<Map.Entry<String, BDD>> builder = ImmutableList.builder();
+//                List<Map.Entry<String, BDD>> sorted = clauses.stream()
+//                        .sorted(Comparator.comparingInt(entry -> entry.getKey().length())).toList();
+//                BDD disjunction = inv.tbdd.getFactory().zero();
+//                for (Map.Entry<String, BDD> entry : sorted) {
+//                    BDD clause = inv.base.wellFormednessConstraints(true).and(entry.getValue());
+//                    if (clause.imp(inv.wellFormedBDD()).isOne()) {
+//                        boolean keep = true;
+//                        for (Map.Entry<String, BDD> added : builder.build()) {
+//                            if (keep) {
+//                                BDD in = added.getValue().and(inv.base.wellFormednessConstraints(true));
+//                                if (clause.imp(in).isOne()) { // if this clause implies any that are kept, we don't need to add
+//                                    keep = false;
+//                                }
+//                            }
+//                        }
+//                        if (keep) {
+//                            builder.add(entry);
+//                            disjunction = disjunction.or(entry.getValue());
+//                        }
+//                    }
+//                }
+//                // attempt at better pruning for readability (removes redundant clauses)
+//                List<Map.Entry<String, BDD>> kept = builder.build();
+//                List<Map.Entry<String, BDD>> result = builder.build().stream()
+//                        .filter(entry -> kept.stream().allMatch(other ->
+//                                !entry.getValue().imp(other.getValue()).isOne() || other.getValue().equals(entry.getValue()))).toList();
+//                assert inv.wellFormedBDD().equals(disjunction);
+//                return result.stream().map(Map.Entry::getKey).toList();
+//            }
+//        }
+//    }
 
     /**
      * Intended for testing, checks if the provided precondition ensures this invariant holds on

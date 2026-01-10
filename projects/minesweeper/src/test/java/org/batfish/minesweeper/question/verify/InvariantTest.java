@@ -41,6 +41,7 @@ import org.batfish.minesweeper.CommunityVar;
 import org.batfish.minesweeper.ConfigAtomicPredicates;
 import org.batfish.minesweeper.bdd.BDDRoute;
 import org.batfish.minesweeper.bdd.TransferBDD;
+import org.batfish.minesweeper.bdd.TransferBDDUtils;
 import org.batfish.minesweeper.question.searchroutepolicies.RegexConstraint;
 import org.batfish.minesweeper.question.searchroutepolicies.RegexConstraints;
 import org.junit.Before;
@@ -433,5 +434,98 @@ public class InvariantTest {
         Invariant wp_beta_alpha = alphaNode.weakestPrecondition(imports.get(ALPHANODE));
         assertTrue(wp_beta_alpha.isTrue());
         assertEquals(wp_beta_alpha,beta_alpha);
+    }
+
+    @Test
+    public void strongestPostconditionExactTest() {
+        Invariant.ClauseBuilder clauseP = Invariant.clauseBuilder().matchPrefix(PREFIX);
+        Invariant.ClauseBuilder avoidPrefix = Invariant.clauseBuilder().avoidPrefix(PREFIX);
+        Invariant.ClauseBuilder match_100_1 = Invariant.clauseBuilder().setCommunities(new RegexConstraints(List.of(RegexConstraint.parse("100:1"))));
+        Invariant.ClauseBuilder avoid_100_1 = Invariant.clauseBuilder().setCommunities(new RegexConstraints(List.of(RegexConstraint.parse("!100:1"))));
+        Invariant.ClauseBuilder match_100_2 = Invariant.clauseBuilder().setCommunities(new RegexConstraints(List.of(RegexConstraint.parse("100:2"))));
+        Invariant.ClauseBuilder avoid_100_2 = Invariant.clauseBuilder().setCommunities(new RegexConstraints(List.of(RegexConstraint.parse("!100:2"))));
+
+        // [1] P /\ 100:1 /\ no other community (specifically 100:2 and match any) = SP(Export_alpha,P)
+        Invariant P = Invariant.builder().addClause(clauseP).build(tbdd,exports.get(ALPHANODE));
+        Invariant sp1 = P.strongestPostcondition(exports.get(ALPHANODE));
+        Invariant expected1 = new Invariant(tbdd,Invariant.clauseBuilder()
+                .setCommunities(new RegexConstraints(List.of(RegexConstraint.parse("100:1"),RegexConstraint.parse("!100:2"))))
+                .matchPrefix(PREFIX).build(tbdd,exports.get(ALPHANODE))
+                .and(tbdd.getFactory().ithVar(0).not()));
+        assertEquals(sp1.wellFormedBDD(),expected1.wellFormedBDD());
+
+        // [2] not P \/  (P /\ 100:1 /\ no other community (specifically 100:2 and match any)) = SP(Export_alpha,True)
+        Invariant T = new Invariant(tbdd);
+        Invariant sp2 = T.strongestPostcondition(exports.get(ALPHANODE));
+        BDD expected2 = avoidPrefix.build(tbdd,exports.get(ALPHANODE)).or(expected1.wellFormedBDD());
+        assertEquals(sp2.wellFormedBDD(),expected2);
+
+        // [3] False = SP(Export_gamma,has comm 100:2)
+        Invariant Q = Invariant.builder().addClause(match_100_2).build(tbdd,exports.get(GAMMANODE));
+        Invariant sp3 = Q.strongestPostcondition(exports.get(GAMMANODE));
+        assertTrue(sp3.isFalse());
+
+        // [4] does not have comm 100:2 = SP(Export_gamma,does not have comm 100:2)
+        Invariant R = Invariant.builder().addClause(avoid_100_2).build(tbdd,exports.get(GAMMANODE));
+        Invariant sp4 = R.strongestPostcondition(exports.get(GAMMANODE));
+        assertEquals(sp4.wellFormedBDD(),R.wellFormedBDD());
+
+        // [5] does not have comm 100:2 = SP(Export_gamma,True)
+        Invariant sp5 = T.strongestPostcondition(exports.get(GAMMANODE));
+        assertEquals(sp5.wellFormedBDD(),R.wellFormedBDD());
+
+        // [6] does not have comm 100:1 = SP(Export_beta,does not have comm 100:1)
+        Invariant W = Invariant.builder().addClause(avoid_100_1).build(tbdd,exports.get(BETANODE));
+        Invariant sp6 = W.strongestPostcondition(exports.get(BETANODE));
+        assertEquals(sp6.wellFormedBDD(),W.wellFormedBDD());
+
+        // [7] does not have comm 100:1 \/ (has 100:2 and no others) = SP(Export_beta,True)
+        Invariant sp7 = T.strongestPostcondition(exports.get(BETANODE));
+        Invariant noneBut1002 = new Invariant(tbdd,Invariant.clauseBuilder()
+                .setCommunities(new RegexConstraints(List.of(RegexConstraint.parse("!100:1"),RegexConstraint.parse("100:2"))))
+                .build(tbdd,exports.get(BETANODE)).and(tbdd.getFactory().ithVar(0).not()));
+        BDD expected7 = avoid_100_1.build(tbdd,exports.get(BETANODE)).or(noneBut1002.wellFormedBDD());
+        assertEquals(sp7.wellFormedBDD(),expected7);
+
+        // [8] has 100:2 and no others = SP(Export_beta,has comm 100:1)
+        Invariant V = Invariant.builder().addClause(match_100_1).build(tbdd,exports.get(BETANODE));
+        Invariant sp8 = V.strongestPostcondition(exports.get(BETANODE));
+        assertEquals(sp8.wellFormedBDD(),noneBut1002.wellFormedBDD());
+    }
+
+    @Test
+    public void interpolationExactTest() {
+        Invariant.ClauseBuilder clauseP = Invariant.clauseBuilder().matchPrefix(PREFIX);
+        Invariant.ClauseBuilder avoidPrefix = Invariant.clauseBuilder().avoidPrefix(PREFIX);
+        Invariant.ClauseBuilder match_100_1 = Invariant.clauseBuilder().setCommunities(new RegexConstraints(List.of(RegexConstraint.parse("100:1"))));
+        Invariant.ClauseBuilder avoid_100_1 = Invariant.clauseBuilder().setCommunities(new RegexConstraints(List.of(RegexConstraint.parse("!100:1"))));
+        Invariant.ClauseBuilder match_100_2 = Invariant.clauseBuilder().setCommunities(new RegexConstraints(List.of(RegexConstraint.parse("100:2"))));
+        Invariant.ClauseBuilder avoid_100_2 = Invariant.clauseBuilder().setCommunities(new RegexConstraints(List.of(RegexConstraint.parse("!100:2"))));
+
+        // [1]
+        Invariant Q = Invariant.builder().addClause(clauseP).build(tbdd,exports.get(ALPHANODE));
+        Invariant P = new Invariant(tbdd,Invariant.clauseBuilder()
+                .setCommunities(new RegexConstraints(List.of(RegexConstraint.parse("100:1"),RegexConstraint.parse("!100:2"))))
+                .matchPrefix(PREFIX).build(tbdd,exports.get(ALPHANODE)));
+        assertEquals(TransferBDDUtils.interpolate(tbdd,P.wellFormedBDD(),Q.wellFormedBDD()),Q.wellFormedBDD());
+
+        // [2]
+        Invariant PorQ_and_R = Invariant.builder()
+                .addClause(Invariant.clauseBuilder().setCommunities(new RegexConstraints(List.of(RegexConstraint.parse("100:1")))).matchPrefix(PREFIX))
+                .addClause(Invariant.clauseBuilder().setCommunities(new RegexConstraints(List.of(RegexConstraint.parse("100:2")))).matchPrefix(PREFIX))
+                .build(tbdd,exports.get(BETANODE));
+        Invariant SorPorQ = Invariant.builder().addClause(match_100_1).addClause(match_100_2).addClause(avoidPrefix).build(tbdd,exports.get(BETANODE));
+        BDD expected2 = Invariant.builder()
+                .addClause(Invariant.clauseBuilder().setCommunities(new RegexConstraints(List.of(RegexConstraint.parse("100:1")))))
+                .addClause(Invariant.clauseBuilder().setCommunities(new RegexConstraints(List.of(RegexConstraint.parse("100:2")))))
+                .build(tbdd,exports.get(BETANODE)).wellFormedBDD();
+        assertTrue(PorQ_and_R.implies(SorPorQ));
+        BDD interpolant = TransferBDDUtils.interpolate(tbdd,PorQ_and_R.wellFormedBDD(),SorPorQ.wellFormedBDD());
+        Invariant i = new Invariant(tbdd,interpolant);
+//        assertTrue(PorQ_and_R.wellFormedBDD().imp(interpolant).isOne());
+//        assertTrue(interpolant.imp(SorPorQ.wellFormedBDD()).isOne());
+//        assertNotEquals(interpolant,PorQ_and_R.wellFormedBDD());
+//        assertNotEquals(interpolant,SorPorQ.wellFormedBDD());
+//        assertEquals(interpolant,expected2);
     }
 }

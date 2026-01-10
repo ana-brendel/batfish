@@ -1,17 +1,18 @@
 package org.batfish.minesweeper.question.verify;
 
 import com.google.common.collect.ImmutableList;
-import org.batfish.common.BatfishException;
 import org.batfish.datamodel.BgpActivePeerConfig;
 import org.batfish.datamodel.Configuration;
 import org.batfish.datamodel.bgp.Ipv4UnicastAddressFamily;
 import org.batfish.datamodel.bgp.community.StandardCommunity;
 import org.batfish.datamodel.routing_policy.RoutingPolicy;
+import org.batfish.datamodel.routing_policy.communities.AllStandardCommunities;
 import org.batfish.datamodel.routing_policy.communities.ColonSeparatedRendering;
 import org.batfish.datamodel.routing_policy.communities.CommunityIs;
 import org.batfish.datamodel.routing_policy.communities.CommunityMatchExpr;
 import org.batfish.datamodel.routing_policy.communities.CommunityMatchRegex;
 import org.batfish.datamodel.routing_policy.communities.CommunitySet;
+import org.batfish.datamodel.routing_policy.communities.CommunitySetDifference;
 import org.batfish.datamodel.routing_policy.communities.CommunitySetMatchExpr;
 import org.batfish.datamodel.routing_policy.communities.CommunitySetUnion;
 import org.batfish.datamodel.routing_policy.communities.HasCommunity;
@@ -21,6 +22,9 @@ import org.batfish.datamodel.routing_policy.communities.MatchCommunities;
 import org.batfish.datamodel.routing_policy.communities.SetCommunities;
 import org.batfish.datamodel.routing_policy.expr.BooleanExpr;
 import org.batfish.datamodel.routing_policy.expr.DestinationNetwork;
+import org.batfish.datamodel.routing_policy.expr.IntComparator;
+import org.batfish.datamodel.routing_policy.expr.LiteralLong;
+import org.batfish.datamodel.routing_policy.expr.MatchMetric;
 import org.batfish.datamodel.routing_policy.expr.MatchPrefixSet;
 import org.batfish.datamodel.routing_policy.expr.NamedPrefixSet;
 import org.batfish.datamodel.routing_policy.statement.If;
@@ -34,6 +38,16 @@ import java.util.Map;
 
 public class TestConfigConstructionUtils {
     public record Network(TransferBDD tbdd, Map<Node, Configuration> configs, Map<Node, RoutingPolicy> imports, Map<Node, RoutingPolicy> exports) {
+        private Map<String,Configuration> configInput() {
+            Map<String,Configuration> result = new HashMap<>();
+            for (Node node: configs.keySet()) {
+                result.put(node.getName(),configs.get(node));
+            }
+            return result;
+        }
+    }
+
+    public record Networkv2(TransferBDD tbdd, Map<Node, Configuration> configs, RoutingPolicy template, List<String> prefixes) {
         private Map<String,Configuration> configInput() {
             Map<String,Configuration> result = new HashMap<>();
             for (Node node: configs.keySet()) {
@@ -57,10 +71,10 @@ public class TestConfigConstructionUtils {
 
     ///  Intended to return statements which clear all communities on a route
     public static List<Statement> clearCommunities() {
-        throw new BatfishException("INCORRECTLY IMPLEMENTED");
-//        return ImmutableList.of(
-//                new SetCommunities(new CommunitySetDifference(InputCommunities.instance(), AllStandardCommunities.instance())),
-//                new Statements.StaticStatement(Statements.ReturnTrue));
+        //throw new BatfishException("INCORRECTLY IMPLEMENTED");
+        return ImmutableList.of(
+                new SetCommunities(new CommunitySetDifference(InputCommunities.instance(), AllStandardCommunities.instance())),
+                new Statements.StaticStatement(Statements.ReturnTrue));
     }
 
     /**
@@ -90,6 +104,14 @@ public class TestConfigConstructionUtils {
      */
     public static BooleanExpr checkForPrefixListMatch(String prefixListLabel) {
         return new MatchPrefixSet(DestinationNetwork.instance(), new NamedPrefixSet(prefixListLabel));
+    }
+
+    public static BooleanExpr metricGreaterThan(Long met) {
+        return new MatchMetric(IntComparator.GT,new LiteralLong(met));
+    }
+
+    public static BooleanExpr metricLessThan(Long met) {
+        return new MatchMetric(IntComparator.LT,new LiteralLong(met));
     }
 
     /**

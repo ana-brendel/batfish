@@ -2,7 +2,7 @@
 This directory contains some documentation and instructions for running the verification tool for networks that we are developing using Batfish. Additionally, there a few examples documenting the current state of the tool.
 
 ## Getting Started
-1. Clone the verification branch of the repo... if you are reading this README, then you are looking at the correct branch. The url for the correct branch is linked [here](https://github.com/ana-brendel/batfish/tree/verification#).
+1. Clone the **refinement** branch of the repo... if you are reading this README, then you are looking at the correct branch. The url for the correct branch is linked [here](https://github.com/ana-brendel/batfish/tree/refinement#).
 2. Follow these [instructions](https://github.com/ana-brendel/batfish/blob/master/docs/building_and_running/README.md) (the Windows instructions not listed, _I think_ you'll just need the prerequistes provided) to download support for building with Bazel. Specifically, the prerequistes are: Java 17 JDK, Python 3.10 or later, git, and [bazelisk](https://github.com/bazelbuild/bazelisk#installation).
 3. You should create a virtual python environment. You will have to install any dependencies including `pybatfish`. The `pybatfish` instructions might be helpful if you get stuff; they're located [here](https://github.com/batfish/pybatfish/blob/master/README.md). To do this and install dependencies, run the following commands:
 ```

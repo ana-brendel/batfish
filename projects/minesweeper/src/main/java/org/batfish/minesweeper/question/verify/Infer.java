@@ -1,6 +1,7 @@
 package org.batfish.minesweeper.question.verify;
 
 import net.sf.javabdd.BDD;
+import org.batfish.common.BatfishException;
 import org.batfish.datamodel.BgpProcess;
 import org.batfish.datamodel.Bgpv4Route;
 import org.batfish.datamodel.Configuration;
@@ -12,6 +13,7 @@ import org.batfish.minesweeper.bdd.ModelGeneration;
 import org.batfish.minesweeper.bdd.TransferBDD;
 
 import javax.annotation.Nonnull;
+import java.util.Collection;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Hashtable;
@@ -21,12 +23,15 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.Queue;
 import java.util.Set;
+import java.util.stream.Collectors;
 
 import static java.util.Objects.isNull;
 import static org.batfish.minesweeper.question.verify.Invariant.strongestCommonImplicant;
 
 public class Infer {
+    public final BDDString.Shortcuts shortcuts;
     private final TransferBDD tbdd;
+
     private final Map<Ip,Node> nodes = new HashMap<>();
     private final Set<Location> locations = new HashSet<>();
     private final Map<Edge, RoutingPolicy> imports = new HashMap<>();
@@ -53,9 +58,14 @@ public class Infer {
             }
             return false;
         }
-        public Map<Location,String> weakDisplay(List<String> prefixes) {
+//        public Map<Location,String> weakDisplay(List<String> prefixes) {
+//            Map<Location,String> strings = new HashMap<>();
+//            invariants.forEach((loc,inv) -> strings.put(loc,inv.weakDisplay(prefixes)));
+//            return strings;
+//        }
+        public Map<Location,String> strings(Infer infer) {
             Map<Location,String> strings = new HashMap<>();
-            invariants.forEach((loc,inv) -> strings.put(loc,inv.weakDisplay(prefixes)));
+            invariants.forEach((loc,inv) -> strings.put(loc,inv.toString(false,infer.shortcuts)));
             return strings;
         }
     }
@@ -64,12 +74,17 @@ public class Infer {
         for (String nodeName : configs.keySet()) {
             Configuration config = configs.get(nodeName);
             List<BgpProcess> bgpProcesses = config.getVrfs().values().stream().map(Vrf::getBgpProcess).toList();
-            Ip nodeIp = bgpProcesses.stream().findFirst().orElseThrow().getRouterId();
-            locations.add(new Node(nodeIp,nodeName)); // add node
-            nodes.put(nodeIp,new Node(nodeIp,nodeName));
+            Set<Ip> nodeIps = bgpProcesses.stream().map(BgpProcess::getRouterId).collect(Collectors.toSet());
             // gather the policies
             bgpProcesses.stream().flatMap(proc -> proc.getActiveNeighbors().entrySet().stream())
                     .forEach(entry -> {
+                        Ip nodeIp = entry.getValue().getLocalIp();
+                        if (nodeIp == null) {
+                            nodeIp = nodeIps.stream().findFirst().orElse(null);
+                            if (nodeIp == null)
+                                throw new BatfishException("Infer.processConfigs() - Cannot find IP address for node.");
+                        }
+                        nodeIps.add(nodeIp);
                         Edge incoming = new Edge(entry.getKey(),nodeIp);
                         Edge outgoing = new Edge(nodeIp,entry.getKey());
                         Ipv4UnicastAddressFamily unicast = (entry.getValue().getIpv4UnicastAddressFamily());
@@ -79,17 +94,19 @@ public class Infer {
                         exports.put(outgoing,isNull(unicast) || isNull(unicast.getExportPolicy())
                                 ? new RoutingPolicy("from null",config)
                                 : config.getRoutingPolicies().get(unicast.getExportPolicy()));
+                        // add any where edge is going into this node (i.e. the incoming edge above)
+                        locations.add(new Edge(entry.getKey(),nodeIp));
                     });
-            // add the edges, specifically, all the edges which go into the given node
-            bgpProcesses.stream().flatMap(proc -> proc.getActiveNeighbors().entrySet().stream())
-                    .forEach(entry -> locations.add(new Edge(entry.getKey(),nodeIp)));
+            Node node = new Node(nodeIps,nodeName);
+            locations.add(node); // add node
+            nodeIps.forEach(nodeIp -> nodes.put(nodeIp,node));
         }
-
     }
 
     public Infer(TransferBDD tbdd, Map<String, Configuration> configs) {
         this.tbdd = tbdd;
         processConfigs(configs);
+        shortcuts = BDDString.Shortcuts.ofConfigs(configs.values());
         // default assumption of True for incoming edges
         for (Location location : locations) {
             if (location instanceof Edge edge) {
@@ -99,6 +116,10 @@ public class Infer {
                 }
             }
         }
+    }
+
+    public Lightyear checker() {
+        return new Lightyear(this.tbdd,this.nodes,this.imports,this.exports);
     }
 
     /// Added for pybatfish question development
@@ -116,12 +137,17 @@ public class Infer {
     }
 
     /// Added for pybatfish question development
-    public Optional<Ip> ipFromNodeName(String name) {
-        for (Ip ip : nodes.keySet()) {
-            if (nodes.get(ip).getName().equals(name))
-                return Optional.of(ip);
+    public Optional<Collection<Ip>> ipsFromNodeName(String name) {
+        for (Location location : locations) {
+            if (location instanceof Node node && node.getName().equals(name))
+                return Optional.of(node.getIps());
         }
         return Optional.empty();
+    }
+
+    /// Added for pybatfish question development
+    public boolean containsPolicy(Edge edge) {
+        return imports.containsKey(edge) || exports.containsKey(edge);
     }
 
     /// Added for pybatfish question development
@@ -175,13 +201,30 @@ public class Infer {
     }
 
     /**
-     * Add a property to be verified at provided location
+     * Add a property to be verified at provided location. If provided a node, this will add the node
+     * that we've created which includes all IP addresses that may be associated with it.
      * @param loc location for invariant to hold at
      * @param inv invariant to hold
      * @return updated Verified object
      */
     public Infer addProperty(Location loc, Invariant inv) {
-        targets.put(loc,inv);
+        if (loc instanceof Edge edge) {
+            // we only need to check source because if the source is outside the network we cannot verify anything
+            if (!nodes.containsKey(edge.getSrc())) {
+                throw new BatfishException("Infer.addProperty() - Edge's source node is not within network.");
+            } else {
+                targets.put(loc,inv);
+            }
+        } else if (loc instanceof Node node) {
+            Optional<Ip> ipWithNode = node.getIps().stream().filter(nodes::containsKey).findFirst();
+            if (ipWithNode.isEmpty()) {
+                throw new BatfishException("Infer.addProperty() - Node provided not within network.");
+            } else {
+                targets.put(nodes.get(ipWithNode.get()),inv);
+            }
+        } else {
+            throw new BatfishException("Infer.addProperty() - Location neither edge nor node, should not be reachable.");
+        }
         return this;
     }
 
@@ -202,22 +245,17 @@ public class Infer {
         }
     }
 
-    /// Checks if the source of the edge is within our network
-    private boolean sourceInNetwork(Edge edge) {
-        Ip srcIp = edge.getSrc();
-        return nodes.containsKey(srcIp);
-    }
-
     /// Performs iterative invariant inference using the weakest preconditions
     private Optional<CounterExample> inferenceLoop() {
         while (!working.isEmpty()) {
             Location location = working.remove();
             Invariant property = inferred.get(location);
             assert !property.isFalse();
-            if (location instanceof Edge && sourceInNetwork(((Edge) location))) {
-                RoutingPolicy exportPolicy = exports.getOrDefault(location, null);
-                assert exportPolicy != null;
-                Node src = nodes.get(((Edge) location).getSrc());
+            if (location instanceof Edge edge && nodes.containsKey(edge.getSrc())) {
+                RoutingPolicy exportPolicy = exports.getOrDefault(edge, null);
+                if (exportPolicy == null)
+                    throw new BatfishException("Infer.inferenceLoop() - No export policy for: " + edge);
+                Node src = nodes.get(edge.getSrc());
                 Invariant existing = inferred.get(src);
                 Invariant wp = property.weakestPrecondition(exportPolicy);
                 Invariant updated = strongestCommonImplicant(existing,wp);
@@ -227,12 +265,12 @@ public class Infer {
                 } else if (!existing.equals(updated) && !working.contains(src)) {
                     working.add(src);
                 }
-            } else if (location instanceof Node) {
-                Ip dst = ((Node) location).getIp();
-                for (Location edge : locations) {
-                    if (edge instanceof Edge && ((Edge) edge).getDst().equals(dst)) {
+            } else if (location instanceof Node node) {
+                for (Location l : locations) {
+                    if (l instanceof Edge edge && edge.isDst(node)) {
                         RoutingPolicy importPolicy = imports.getOrDefault(edge, null);
-                        assert importPolicy != null;
+                        if (importPolicy == null)
+                            throw new BatfishException("Infer.inferenceLoop() - No import policy for: " + edge);
                         Invariant existing = inferred.get(edge);
                         Invariant wp = property.weakestPrecondition(importPolicy);
                         Invariant updated = strongestCommonImplicant(existing,wp);
@@ -249,7 +287,7 @@ public class Infer {
         return Optional.empty(); // success - no counterexample
     }
 
-    /// Checks if verification succeed by checking assumptions (all anchors true).
+    /// Checks if verification succeed by checking assumptions.
     /// If it fails, we find a route example which (in dev)
     private Map<Location,Optional<Bgpv4Route>> verificationAssumptionCheck() {
         Map<Location,Optional<Bgpv4Route>> checks = new HashMap<>();
@@ -282,15 +320,46 @@ public class Infer {
         working.addAll(targets.keySet());
         Optional<CounterExample> counter = inferenceLoop();
         Map<Location,Optional<Bgpv4Route>> checks = verificationAssumptionCheck();
-        return new Result(counter.isEmpty() && checks.values().stream().allMatch(Optional::isEmpty),copyInferred(),counter,checks);
+        return new Result(counter.isEmpty() && checks.values().stream().allMatch(Optional::isEmpty),copyInferred(inferred),counter,checks);
+    }
+
+    /// Returns a refiner object which is used to refine invariants in order to tease out key properties
+    public Refine refiner() {
+        return Refine.builder(this.tbdd)
+                .setNodes(this.nodes)
+                .setLocations(this.locations)
+                .setImports(this.imports)
+                .setExports(this.exports)
+                .setTargets(copyInferred(this.targets))
+                .setAssumptions(copyInferred(this.assumptions))
+                .setIncoming(inferred.keySet().stream()
+                        .filter(x -> x instanceof Edge e && !nodes.containsKey(e.getSrc())).collect(Collectors.toSet()))
+                .setInferred(copyInferred(this.inferred)).build();
     }
 
     /// Deep copies invariants inferred
-    private Map<Location, Invariant> copyInferred() {
+    private Map<Location, Invariant> copyInferred(Map<Location, Invariant> base) {
         Map<Location, Invariant> result = new HashMap<>();
-        for (Location location : inferred.keySet()) {
-            result.put(location.copy(),inferred.get(location).copy());
+        for (Location location : base.keySet()) {
+            result.put(location.copy(),base.get(location).copy());
         }
         return result;
+    }
+
+    public String displayNodes() {
+        StringBuilder builder = new StringBuilder();
+        Set<Node> done = new HashSet<>();
+        for (Node n : nodes.values().stream().sorted().toList()) {
+            if (!done.contains(n)) {
+                done.add(n);
+                builder.append("\n + ").append(n);
+                for (Location l : locations) {
+                    if (l instanceof Edge e && e.isSrc(n)) {
+                        builder.append("\n    - ").append(e.getDst());
+                    }
+                }
+            }
+        }
+        return builder.toString();
     }
 }

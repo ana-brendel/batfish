@@ -255,7 +255,7 @@ public final class SearchRoutePoliciesAnswerer extends Answerer {
     };
   }
 
-  private static BDD prefixSpaceToBDD(PrefixSpace space, BDDRoute r, boolean complementPrefixes) {
+  public static BDD prefixSpaceToBDD(PrefixSpace space, BDDRoute r, boolean complementPrefixes) {
     BDDFactory factory = r.getPrefix().getFactory();
     if (space.isEmpty()) {
       return factory.one();
@@ -287,7 +287,7 @@ public final class SearchRoutePoliciesAnswerer extends Answerer {
         BoundType.CLOSED);
   }
 
-  private static BDD longSpaceToBDD(LongSpace space, BDDInteger bddInt) {
+  public static BDD longSpaceToBDD(LongSpace space, BDDInteger bddInt) {
     if (space.isEmpty()) {
       return bddInt.getFactory().one();
     } else {

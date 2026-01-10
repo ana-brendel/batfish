@@ -1,5 +1,6 @@
 package org.batfish.minesweeper.question.verify;
 
+import org.batfish.common.BatfishException;
 import org.batfish.datamodel.Ip;
 
 import javax.annotation.Nonnull;
@@ -23,8 +24,8 @@ public class Edge extends Location {
 
     public Edge(@Nonnull Node src, @Nonnull Node dst) {
         assert !src.equals(dst);
-        this.src = Ip.create(src.getIp().asLong());
-        this.dst = Ip.create(dst.getIp().asLong());
+        this.src = Ip.create(src.getSingleIp().asLong());
+        this.dst = Ip.create(dst.getSingleIp().asLong());
     }
 
     public Ip getSrc() {
@@ -40,11 +41,11 @@ public class Edge extends Location {
     }
 
     public boolean isSrc(Node node) {
-        return src.equals(node.getIp());
+        return node.getIps().stream().anyMatch(ip -> ip.equals(src));
     }
 
-    public boolean isDst(Node node) {
-        return dst.equals(node.getIp());
+    public boolean isDst(Node node){
+        return node.getIps().stream().anyMatch(ip -> ip.equals(dst));
     }
 
     @Override
@@ -70,5 +71,23 @@ public class Edge extends Location {
     @Override
     public String toString() {
         return src + " -> " + dst;
+    }
+
+    @Override
+    public int compareTo(@Nonnull Location location) {
+        if (location instanceof Edge edge) {
+            if (edge.src.equals(this.src))
+                return this.dst.compareTo(edge.dst);
+            else
+                return this.src.compareTo(edge.src);
+        } else if (location instanceof Node node) {
+            if (node.getIps().contains(this.src))
+                return 1; // this is an edge coming out of provided node, so edges should follow
+            else
+                // use the single ip, so that comparisons can remain consistent
+                return this.src.compareTo(node.getSingleIp());
+        } else {
+            throw new BatfishException("Edge.compareTo() - Only two implementations of Location, should never reach here.");
+        }
     }
 }

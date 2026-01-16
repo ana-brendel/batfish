@@ -1,4 +1,4 @@
-package org.batfish.minesweeper.question.verify;
+package org.batfish.minesweeper.question.safety;
 
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
@@ -36,14 +36,14 @@ import java.util.Set;
 import java.util.stream.Stream;
 
 import static org.batfish.datamodel.LineAction.PERMIT;
-import static org.batfish.minesweeper.question.verify.TestConfigConstructionUtils.addToCommunities;
-import static org.batfish.minesweeper.question.verify.TestConfigConstructionUtils.checkForCommunity;
-import static org.batfish.minesweeper.question.verify.TestConfigConstructionUtils.checkForPrefixListMatch;
-import static org.batfish.minesweeper.question.verify.TestConfigConstructionUtils.getBgpActivePeerConfig;
-import static org.batfish.minesweeper.question.verify.TestConfigConstructionUtils.ifStatement;
-import static org.batfish.minesweeper.question.verify.TestConfigConstructionUtils.includeCommunities;
-import static org.batfish.minesweeper.question.verify.TestConfigConstructionUtils.permitRoute;
-import static org.batfish.minesweeper.question.verify.TestConfigConstructionUtils.replaceCommunities;
+import static org.batfish.minesweeper.question.safety.TestConfigConstructionUtils.addToCommunities;
+import static org.batfish.minesweeper.question.safety.TestConfigConstructionUtils.checkForCommunity;
+import static org.batfish.minesweeper.question.safety.TestConfigConstructionUtils.checkForPrefixListMatch;
+import static org.batfish.minesweeper.question.safety.TestConfigConstructionUtils.getBgpActivePeerConfig;
+import static org.batfish.minesweeper.question.safety.TestConfigConstructionUtils.ifStatement;
+import static org.batfish.minesweeper.question.safety.TestConfigConstructionUtils.includeCommunities;
+import static org.batfish.minesweeper.question.safety.TestConfigConstructionUtils.permitRoute;
+import static org.batfish.minesweeper.question.safety.TestConfigConstructionUtils.replaceCommunities;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
@@ -77,7 +77,7 @@ public class InferTest {
 
     private BgpProcess getBgpProcess (Configuration config, Node node) {
         Vrf vrf = nf.vrfBuilder().setOwner(config).setName(Configuration.DEFAULT_VRF_NAME).build();
-        return nf.bgpProcessBuilder().setRouterId(node.getIp())
+        return nf.bgpProcessBuilder().setRouterId(node.getSingleIp())
                 .setEbgpAdminCost(0).setIbgpAdminCost(0).setLocalAdminCost(0)
                 .setLocalOriginationTypeTieBreaker(LocalOriginationTypeTieBreaker.NO_PREFERENCE)
                 .setNetworkNextHopIpTieBreaker(NextHopIpTieBreaker.HIGHEST_NEXT_HOP_IP)
@@ -138,15 +138,15 @@ public class InferTest {
         Map<Node,BgpProcess> processes = getBgpProcesses(configs,ALPHANODE,BETANODE,GAMMANODE,DELTANODE);
 
         processes.get(ALPHANODE).setNeighbors(ImmutableSortedMap.of(
-                BETANODE.getIp(),getBgpActivePeerConfig(NEXT_DOOR,IMPORT_POLICY_NAME,EXPORT_POLICY_NAME)));
+                BETANODE.getSingleIp(),getBgpActivePeerConfig(NEXT_DOOR,IMPORT_POLICY_NAME,EXPORT_POLICY_NAME)));
         processes.get(BETANODE).setNeighbors(ImmutableSortedMap.of(
-                ALPHANODE.getIp(),getBgpActivePeerConfig(NEXT_DOOR,IMPORT_POLICY_NAME,EXPORT_POLICY_NAME),
-                GAMMANODE.getIp(),getBgpActivePeerConfig(NEXT_DOOR,IMPORT_POLICY_NAME,EXPORT_POLICY_NAME)));
+                ALPHANODE.getSingleIp(),getBgpActivePeerConfig(NEXT_DOOR,IMPORT_POLICY_NAME,EXPORT_POLICY_NAME),
+                GAMMANODE.getSingleIp(),getBgpActivePeerConfig(NEXT_DOOR,IMPORT_POLICY_NAME,EXPORT_POLICY_NAME)));
         processes.get(GAMMANODE).setNeighbors(ImmutableSortedMap.of(
-                BETANODE.getIp(),getBgpActivePeerConfig(NEXT_DOOR,IMPORT_POLICY_NAME,EXPORT_POLICY_NAME),
-                DELTANODE.getIp(),getBgpActivePeerConfig(NEXT_DOOR,IMPORT_POLICY_NAME,EXPORT_POLICY_NAME)));
+                BETANODE.getSingleIp(),getBgpActivePeerConfig(NEXT_DOOR,IMPORT_POLICY_NAME,EXPORT_POLICY_NAME),
+                DELTANODE.getSingleIp(),getBgpActivePeerConfig(NEXT_DOOR,IMPORT_POLICY_NAME,EXPORT_POLICY_NAME)));
         processes.get(DELTANODE).setNeighbors(ImmutableSortedMap.of(
-                GAMMANODE.getIp(),getBgpActivePeerConfig(NEXT_DOOR,IMPORT_POLICY_NAME,EXPORT_POLICY_NAME)));
+                GAMMANODE.getSingleIp(),getBgpActivePeerConfig(NEXT_DOOR,IMPORT_POLICY_NAME,EXPORT_POLICY_NAME)));
 
         // Create the policies
         RoutingPolicy alphaImport = makePolicy(configs.get(ALPHANODE), IMPORT_POLICY_NAME, permitRoute(true));
@@ -308,15 +308,15 @@ public class InferTest {
         Map<Node,BgpProcess> processes = getBgpProcesses(configs,ALPHANODE,BETANODE,GAMMANODE,DELTANODE);
 
         processes.get(ALPHANODE).setNeighbors(ImmutableSortedMap.of(
-                BETANODE.getIp(),getBgpActivePeerConfig(NEXT_DOOR,IMPORT_POLICY_NAME,EXPORT_POLICY_NAME)));
+                BETANODE.getSingleIp(),getBgpActivePeerConfig(NEXT_DOOR,IMPORT_POLICY_NAME,EXPORT_POLICY_NAME)));
         processes.get(BETANODE).setNeighbors(ImmutableSortedMap.of(
-                ALPHANODE.getIp(),getBgpActivePeerConfig(NEXT_DOOR,IMPORT_POLICY_NAME,EXPORT_POLICY_NAME),
-                GAMMANODE.getIp(),getBgpActivePeerConfig(NEXT_DOOR,IMPORT_POLICY_NAME,EXPORT_POLICY_NAME)));
+                ALPHANODE.getSingleIp(),getBgpActivePeerConfig(NEXT_DOOR,IMPORT_POLICY_NAME,EXPORT_POLICY_NAME),
+                GAMMANODE.getSingleIp(),getBgpActivePeerConfig(NEXT_DOOR,IMPORT_POLICY_NAME,EXPORT_POLICY_NAME)));
         processes.get(GAMMANODE).setNeighbors(ImmutableSortedMap.of(
-                BETANODE.getIp(),getBgpActivePeerConfig(NEXT_DOOR,IMPORT_POLICY_NAME,EXPORT_POLICY_NAME),
-                DELTANODE.getIp(),getBgpActivePeerConfig(NEXT_DOOR,IMPORT_POLICY_NAME,EXPORT_POLICY_NAME)));
+                BETANODE.getSingleIp(),getBgpActivePeerConfig(NEXT_DOOR,IMPORT_POLICY_NAME,EXPORT_POLICY_NAME),
+                DELTANODE.getSingleIp(),getBgpActivePeerConfig(NEXT_DOOR,IMPORT_POLICY_NAME,EXPORT_POLICY_NAME)));
         processes.get(DELTANODE).setNeighbors(ImmutableSortedMap.of(
-                GAMMANODE.getIp(),getBgpActivePeerConfig(NEXT_DOOR,IMPORT_POLICY_NAME,EXPORT_POLICY_NAME)));
+                GAMMANODE.getSingleIp(),getBgpActivePeerConfig(NEXT_DOOR,IMPORT_POLICY_NAME,EXPORT_POLICY_NAME)));
 
         // Create the policies
         RoutingPolicy alphaImport = makePolicy(configs.get(ALPHANODE), IMPORT_POLICY_NAME, permitRoute(true));
@@ -422,40 +422,40 @@ public class InferTest {
         Map<Node,BgpProcess> processes = getBgpProcesses(configs,A1,B1,G1,D1,A2,B2,G2,D2);
 
         processes.get(A1).setNeighbors(ImmutableSortedMap.of(
-                B1.getIp(),getBgpActivePeerConfig(NEXT_DOOR,IMPORT_POLICY_NAME,EXPORT_POLICY_NAME),
-                B2.getIp(),getBgpActivePeerConfig(NEXT_DOOR,IMPORT_POLICY_NAME,EXPORT_POLICY_NAME)));
+                B1.getSingleIp(),getBgpActivePeerConfig(NEXT_DOOR,IMPORT_POLICY_NAME,EXPORT_POLICY_NAME),
+                B2.getSingleIp(),getBgpActivePeerConfig(NEXT_DOOR,IMPORT_POLICY_NAME,EXPORT_POLICY_NAME)));
         processes.get(A2).setNeighbors(ImmutableSortedMap.of(
-                B1.getIp(),getBgpActivePeerConfig(NEXT_DOOR,IMPORT_POLICY_NAME,EXPORT_POLICY_NAME),
-                B2.getIp(),getBgpActivePeerConfig(NEXT_DOOR,IMPORT_POLICY_NAME,EXPORT_POLICY_NAME)));
+                B1.getSingleIp(),getBgpActivePeerConfig(NEXT_DOOR,IMPORT_POLICY_NAME,EXPORT_POLICY_NAME),
+                B2.getSingleIp(),getBgpActivePeerConfig(NEXT_DOOR,IMPORT_POLICY_NAME,EXPORT_POLICY_NAME)));
 
         processes.get(B1).setNeighbors(ImmutableSortedMap.of(
-                A1.getIp(),getBgpActivePeerConfig(NEXT_DOOR,IMPORT_POLICY_NAME,EXPORT_POLICY_NAME),
-                A2.getIp(),getBgpActivePeerConfig(NEXT_DOOR,IMPORT_POLICY_NAME,EXPORT_POLICY_NAME),
-                G1.getIp(),getBgpActivePeerConfig(NEXT_DOOR,IMPORT_POLICY_NAME,EXPORT_POLICY_NAME),
-                G2.getIp(),getBgpActivePeerConfig(NEXT_DOOR,IMPORT_POLICY_NAME,EXPORT_POLICY_NAME)));
+                A1.getSingleIp(),getBgpActivePeerConfig(NEXT_DOOR,IMPORT_POLICY_NAME,EXPORT_POLICY_NAME),
+                A2.getSingleIp(),getBgpActivePeerConfig(NEXT_DOOR,IMPORT_POLICY_NAME,EXPORT_POLICY_NAME),
+                G1.getSingleIp(),getBgpActivePeerConfig(NEXT_DOOR,IMPORT_POLICY_NAME,EXPORT_POLICY_NAME),
+                G2.getSingleIp(),getBgpActivePeerConfig(NEXT_DOOR,IMPORT_POLICY_NAME,EXPORT_POLICY_NAME)));
         processes.get(B2).setNeighbors(ImmutableSortedMap.of(
-                A1.getIp(),getBgpActivePeerConfig(NEXT_DOOR,IMPORT_POLICY_NAME,EXPORT_POLICY_NAME),
-                A2.getIp(),getBgpActivePeerConfig(NEXT_DOOR,IMPORT_POLICY_NAME,EXPORT_POLICY_NAME),
-                G1.getIp(),getBgpActivePeerConfig(NEXT_DOOR,IMPORT_POLICY_NAME,EXPORT_POLICY_NAME),
-                G2.getIp(),getBgpActivePeerConfig(NEXT_DOOR,IMPORT_POLICY_NAME,EXPORT_POLICY_NAME)));
+                A1.getSingleIp(),getBgpActivePeerConfig(NEXT_DOOR,IMPORT_POLICY_NAME,EXPORT_POLICY_NAME),
+                A2.getSingleIp(),getBgpActivePeerConfig(NEXT_DOOR,IMPORT_POLICY_NAME,EXPORT_POLICY_NAME),
+                G1.getSingleIp(),getBgpActivePeerConfig(NEXT_DOOR,IMPORT_POLICY_NAME,EXPORT_POLICY_NAME),
+                G2.getSingleIp(),getBgpActivePeerConfig(NEXT_DOOR,IMPORT_POLICY_NAME,EXPORT_POLICY_NAME)));
 
         processes.get(G1).setNeighbors(ImmutableSortedMap.of(
-                B1.getIp(),getBgpActivePeerConfig(NEXT_DOOR,IMPORT_POLICY_NAME,EXPORT_POLICY_NAME),
-                B2.getIp(),getBgpActivePeerConfig(NEXT_DOOR,IMPORT_POLICY_NAME,EXPORT_POLICY_NAME),
-                D1.getIp(),getBgpActivePeerConfig(NEXT_DOOR,IMPORT_POLICY_NAME,EXPORT_POLICY_NAME),
-                D2.getIp(),getBgpActivePeerConfig(NEXT_DOOR,IMPORT_POLICY_NAME,EXPORT_POLICY_NAME)));
+                B1.getSingleIp(),getBgpActivePeerConfig(NEXT_DOOR,IMPORT_POLICY_NAME,EXPORT_POLICY_NAME),
+                B2.getSingleIp(),getBgpActivePeerConfig(NEXT_DOOR,IMPORT_POLICY_NAME,EXPORT_POLICY_NAME),
+                D1.getSingleIp(),getBgpActivePeerConfig(NEXT_DOOR,IMPORT_POLICY_NAME,EXPORT_POLICY_NAME),
+                D2.getSingleIp(),getBgpActivePeerConfig(NEXT_DOOR,IMPORT_POLICY_NAME,EXPORT_POLICY_NAME)));
         processes.get(G2).setNeighbors(ImmutableSortedMap.of(
-                B1.getIp(),getBgpActivePeerConfig(NEXT_DOOR,IMPORT_POLICY_NAME,EXPORT_POLICY_NAME),
-                B2.getIp(),getBgpActivePeerConfig(NEXT_DOOR,IMPORT_POLICY_NAME,EXPORT_POLICY_NAME),
-                D1.getIp(),getBgpActivePeerConfig(NEXT_DOOR,IMPORT_POLICY_NAME,EXPORT_POLICY_NAME),
-                D2.getIp(),getBgpActivePeerConfig(NEXT_DOOR,IMPORT_POLICY_NAME,EXPORT_POLICY_NAME)));
+                B1.getSingleIp(),getBgpActivePeerConfig(NEXT_DOOR,IMPORT_POLICY_NAME,EXPORT_POLICY_NAME),
+                B2.getSingleIp(),getBgpActivePeerConfig(NEXT_DOOR,IMPORT_POLICY_NAME,EXPORT_POLICY_NAME),
+                D1.getSingleIp(),getBgpActivePeerConfig(NEXT_DOOR,IMPORT_POLICY_NAME,EXPORT_POLICY_NAME),
+                D2.getSingleIp(),getBgpActivePeerConfig(NEXT_DOOR,IMPORT_POLICY_NAME,EXPORT_POLICY_NAME)));
 
         processes.get(D1).setNeighbors(ImmutableSortedMap.of(
-                G1.getIp(),getBgpActivePeerConfig(NEXT_DOOR,IMPORT_POLICY_NAME,EXPORT_POLICY_NAME),
-                G2.getIp(),getBgpActivePeerConfig(NEXT_DOOR,IMPORT_POLICY_NAME,EXPORT_POLICY_NAME)));
+                G1.getSingleIp(),getBgpActivePeerConfig(NEXT_DOOR,IMPORT_POLICY_NAME,EXPORT_POLICY_NAME),
+                G2.getSingleIp(),getBgpActivePeerConfig(NEXT_DOOR,IMPORT_POLICY_NAME,EXPORT_POLICY_NAME)));
         processes.get(D2).setNeighbors(ImmutableSortedMap.of(
-                G1.getIp(),getBgpActivePeerConfig(NEXT_DOOR,IMPORT_POLICY_NAME,EXPORT_POLICY_NAME),
-                G2.getIp(),getBgpActivePeerConfig(NEXT_DOOR,IMPORT_POLICY_NAME,EXPORT_POLICY_NAME)));
+                G1.getSingleIp(),getBgpActivePeerConfig(NEXT_DOOR,IMPORT_POLICY_NAME,EXPORT_POLICY_NAME),
+                G2.getSingleIp(),getBgpActivePeerConfig(NEXT_DOOR,IMPORT_POLICY_NAME,EXPORT_POLICY_NAME)));
 
         // Create the policies
         RoutingPolicy a1_Import = makePolicy(configs.get(A1), IMPORT_POLICY_NAME, permitRoute(true));
@@ -626,33 +626,33 @@ public class InferTest {
         Map<Node,BgpProcess> processes = getBgpProcesses(configs,a0,b0,c0,node1,node2,node3,node4);
 
         processes.get(a0).setNeighbors(ImmutableSortedMap.of(
-                node1.getIp(),getBgpActivePeerConfig(NEXT_DOOR,IMPORT_POLICY_NAME,EXPORT_POLICY_NAME),
-                node2.getIp(),getBgpActivePeerConfig(NEXT_DOOR,IMPORT_POLICY_NAME,EXPORT_POLICY_NAME)));
+                node1.getSingleIp(),getBgpActivePeerConfig(NEXT_DOOR,IMPORT_POLICY_NAME,EXPORT_POLICY_NAME),
+                node2.getSingleIp(),getBgpActivePeerConfig(NEXT_DOOR,IMPORT_POLICY_NAME,EXPORT_POLICY_NAME)));
         processes.get(b0).setNeighbors(ImmutableSortedMap.of(
-                node1.getIp(),getBgpActivePeerConfig(NEXT_DOOR,IMPORT_POLICY_NAME,EXPORT_POLICY_NAME),
-                node2.getIp(),getBgpActivePeerConfig(NEXT_DOOR,IMPORT_POLICY_NAME,EXPORT_POLICY_NAME)));
+                node1.getSingleIp(),getBgpActivePeerConfig(NEXT_DOOR,IMPORT_POLICY_NAME,EXPORT_POLICY_NAME),
+                node2.getSingleIp(),getBgpActivePeerConfig(NEXT_DOOR,IMPORT_POLICY_NAME,EXPORT_POLICY_NAME)));
         processes.get(c0).setNeighbors(ImmutableSortedMap.of(
-                node1.getIp(),getBgpActivePeerConfig(NEXT_DOOR,IMPORT_POLICY_NAME,EXPORT_POLICY_NAME),
-                node2.getIp(),getBgpActivePeerConfig(NEXT_DOOR,IMPORT_POLICY_NAME,EXPORT_POLICY_NAME)));
+                node1.getSingleIp(),getBgpActivePeerConfig(NEXT_DOOR,IMPORT_POLICY_NAME,EXPORT_POLICY_NAME),
+                node2.getSingleIp(),getBgpActivePeerConfig(NEXT_DOOR,IMPORT_POLICY_NAME,EXPORT_POLICY_NAME)));
 
         processes.get(node1).setNeighbors(ImmutableSortedMap.of(
-                a0.getIp(),getBgpActivePeerConfig(NEXT_DOOR,IMPORT_POLICY_NAME,EXPORT_POLICY_NAME),
-                b0.getIp(),getBgpActivePeerConfig(NEXT_DOOR,IMPORT_POLICY_NAME,EXPORT_POLICY_NAME),
-                c0.getIp(),getBgpActivePeerConfig(NEXT_DOOR,IMPORT_POLICY_NAME,EXPORT_POLICY_NAME),
-                node3.getIp(),getBgpActivePeerConfig(NEXT_DOOR,IMPORT_POLICY_NAME,EXPORT_POLICY_NAME)));
+                a0.getSingleIp(),getBgpActivePeerConfig(NEXT_DOOR,IMPORT_POLICY_NAME,EXPORT_POLICY_NAME),
+                b0.getSingleIp(),getBgpActivePeerConfig(NEXT_DOOR,IMPORT_POLICY_NAME,EXPORT_POLICY_NAME),
+                c0.getSingleIp(),getBgpActivePeerConfig(NEXT_DOOR,IMPORT_POLICY_NAME,EXPORT_POLICY_NAME),
+                node3.getSingleIp(),getBgpActivePeerConfig(NEXT_DOOR,IMPORT_POLICY_NAME,EXPORT_POLICY_NAME)));
         processes.get(node2).setNeighbors(ImmutableSortedMap.of(
-                a0.getIp(),getBgpActivePeerConfig(NEXT_DOOR,IMPORT_POLICY_NAME,EXPORT_POLICY_NAME),
-                b0.getIp(),getBgpActivePeerConfig(NEXT_DOOR,IMPORT_POLICY_NAME,EXPORT_POLICY_NAME),
-                c0.getIp(),getBgpActivePeerConfig(NEXT_DOOR,IMPORT_POLICY_NAME,EXPORT_POLICY_NAME),
-                node3.getIp(),getBgpActivePeerConfig(NEXT_DOOR,IMPORT_POLICY_NAME,EXPORT_POLICY_NAME)));
+                a0.getSingleIp(),getBgpActivePeerConfig(NEXT_DOOR,IMPORT_POLICY_NAME,EXPORT_POLICY_NAME),
+                b0.getSingleIp(),getBgpActivePeerConfig(NEXT_DOOR,IMPORT_POLICY_NAME,EXPORT_POLICY_NAME),
+                c0.getSingleIp(),getBgpActivePeerConfig(NEXT_DOOR,IMPORT_POLICY_NAME,EXPORT_POLICY_NAME),
+                node3.getSingleIp(),getBgpActivePeerConfig(NEXT_DOOR,IMPORT_POLICY_NAME,EXPORT_POLICY_NAME)));
 
         processes.get(node3).setNeighbors(ImmutableSortedMap.of(
-                node1.getIp(),getBgpActivePeerConfig(NEXT_DOOR,IMPORT_POLICY_NAME,EXPORT_POLICY_NAME),
-                node2.getIp(),getBgpActivePeerConfig(NEXT_DOOR,IMPORT_POLICY_NAME,EXPORT_POLICY_NAME),
-                node4.getIp(),getBgpActivePeerConfig(NEXT_DOOR,IMPORT_POLICY_NAME,EXPORT_POLICY_NAME)));
+                node1.getSingleIp(),getBgpActivePeerConfig(NEXT_DOOR,IMPORT_POLICY_NAME,EXPORT_POLICY_NAME),
+                node2.getSingleIp(),getBgpActivePeerConfig(NEXT_DOOR,IMPORT_POLICY_NAME,EXPORT_POLICY_NAME),
+                node4.getSingleIp(),getBgpActivePeerConfig(NEXT_DOOR,IMPORT_POLICY_NAME,EXPORT_POLICY_NAME)));
 
         processes.get(node4).setNeighbors(ImmutableSortedMap.of(
-                node3.getIp(),getBgpActivePeerConfig(NEXT_DOOR,IMPORT_POLICY_NAME,EXPORT_POLICY_NAME)));
+                node3.getSingleIp(),getBgpActivePeerConfig(NEXT_DOOR,IMPORT_POLICY_NAME,EXPORT_POLICY_NAME)));
 
         RoutingPolicy a0_Import = makePolicy(configs.get(a0), IMPORT_POLICY_NAME, permitRoute(true));
         RoutingPolicy a0_Export = makePolicy(configs.get(a0), EXPORT_POLICY_NAME,replaceCommunities(plain_comm_1_10));
@@ -808,24 +808,24 @@ public class InferTest {
         Map<Node,BgpProcess> processes = getBgpProcesses(configs,NODE_1A,NODE_1B,NODE_2A,NODE_2B,NODE_3,NODE_4);
 
         processes.get(NODE_1A).setNeighbors(ImmutableSortedMap.of(
-                NODE_2A.getIp(),getBgpActivePeerConfig(NEXT_DOOR,IMPORT_POLICY_NAME,EXPORT_POLICY_NAME)));
+                NODE_2A.getSingleIp(),getBgpActivePeerConfig(NEXT_DOOR,IMPORT_POLICY_NAME,EXPORT_POLICY_NAME)));
         processes.get(NODE_2A).setNeighbors(ImmutableSortedMap.of(
-                NODE_1A.getIp(),getBgpActivePeerConfig(NEXT_DOOR,IMPORT_POLICY_NAME,EXPORT_POLICY_NAME),
-                NODE_3.getIp(),getBgpActivePeerConfig(NEXT_DOOR,IMPORT_POLICY_NAME,EXPORT_POLICY_NAME)));
+                NODE_1A.getSingleIp(),getBgpActivePeerConfig(NEXT_DOOR,IMPORT_POLICY_NAME,EXPORT_POLICY_NAME),
+                NODE_3.getSingleIp(),getBgpActivePeerConfig(NEXT_DOOR,IMPORT_POLICY_NAME,EXPORT_POLICY_NAME)));
 
         processes.get(NODE_1B).setNeighbors(ImmutableSortedMap.of(
-                NODE_2B.getIp(),getBgpActivePeerConfig(NEXT_DOOR,IMPORT_POLICY_NAME,EXPORT_POLICY_NAME)));
+                NODE_2B.getSingleIp(),getBgpActivePeerConfig(NEXT_DOOR,IMPORT_POLICY_NAME,EXPORT_POLICY_NAME)));
         processes.get(NODE_2B).setNeighbors(ImmutableSortedMap.of(
-                NODE_1B.getIp(),getBgpActivePeerConfig(NEXT_DOOR,IMPORT_POLICY_NAME,EXPORT_POLICY_NAME),
-                NODE_3.getIp(),getBgpActivePeerConfig(NEXT_DOOR,IMPORT_POLICY_NAME,EXPORT_POLICY_NAME)));
+                NODE_1B.getSingleIp(),getBgpActivePeerConfig(NEXT_DOOR,IMPORT_POLICY_NAME,EXPORT_POLICY_NAME),
+                NODE_3.getSingleIp(),getBgpActivePeerConfig(NEXT_DOOR,IMPORT_POLICY_NAME,EXPORT_POLICY_NAME)));
 
         processes.get(NODE_3).setNeighbors(ImmutableSortedMap.of(
-                NODE_4.getIp(),getBgpActivePeerConfig(NEXT_DOOR,IMPORT_POLICY_NAME,EXPORT_POLICY_NAME),
-                NODE_2A.getIp(),getBgpActivePeerConfig(NEXT_DOOR,IMPORT_POLICY_NAME,EXPORT_POLICY_NAME),
-                NODE_2B.getIp(),getBgpActivePeerConfig(NEXT_DOOR,IMPORT_POLICY_NAME,EXPORT_POLICY_NAME)));
+                NODE_4.getSingleIp(),getBgpActivePeerConfig(NEXT_DOOR,IMPORT_POLICY_NAME,EXPORT_POLICY_NAME),
+                NODE_2A.getSingleIp(),getBgpActivePeerConfig(NEXT_DOOR,IMPORT_POLICY_NAME,EXPORT_POLICY_NAME),
+                NODE_2B.getSingleIp(),getBgpActivePeerConfig(NEXT_DOOR,IMPORT_POLICY_NAME,EXPORT_POLICY_NAME)));
 
         processes.get(NODE_4).setNeighbors(ImmutableSortedMap.of(
-                NODE_3.getIp(),getBgpActivePeerConfig(NEXT_DOOR,IMPORT_POLICY_NAME,EXPORT_POLICY_NAME)));
+                NODE_3.getSingleIp(),getBgpActivePeerConfig(NEXT_DOOR,IMPORT_POLICY_NAME,EXPORT_POLICY_NAME)));
 
         // Create policies
         RoutingPolicy node_1A_import = makePolicy(configs.get(NODE_1A), IMPORT_POLICY_NAME, permitRoute(true));
@@ -952,14 +952,14 @@ public class InferTest {
 
         processes.get(NODE_A).setNeighbors(ImmutableSortedMap.of(
                 entry,getBgpActivePeerConfig(NEXT_DOOR,IMPORT_POLICY_NAME,EXPORT_POLICY_NAME),
-                NODE_B.getIp(),getBgpActivePeerConfig(NEXT_DOOR,IMPORT_POLICY_NAME,EXPORT_POLICY_NAME)));
+                NODE_B.getSingleIp(),getBgpActivePeerConfig(NEXT_DOOR,IMPORT_POLICY_NAME,EXPORT_POLICY_NAME)));
 
         processes.get(NODE_B).setNeighbors(ImmutableSortedMap.of(
-                NODE_A.getIp(),getBgpActivePeerConfig(NEXT_DOOR,IMPORT_POLICY_NAME,EXPORT_POLICY_NAME),
-                NODE_C.getIp(),getBgpActivePeerConfig(NEXT_DOOR,IMPORT_POLICY_NAME,EXPORT_POLICY_NAME)));
+                NODE_A.getSingleIp(),getBgpActivePeerConfig(NEXT_DOOR,IMPORT_POLICY_NAME,EXPORT_POLICY_NAME),
+                NODE_C.getSingleIp(),getBgpActivePeerConfig(NEXT_DOOR,IMPORT_POLICY_NAME,EXPORT_POLICY_NAME)));
 
         processes.get(NODE_C).setNeighbors(ImmutableSortedMap.of(
-                NODE_B.getIp(),getBgpActivePeerConfig(NEXT_DOOR,IMPORT_POLICY_NAME,EXPORT_POLICY_NAME),
+                NODE_B.getSingleIp(),getBgpActivePeerConfig(NEXT_DOOR,IMPORT_POLICY_NAME,EXPORT_POLICY_NAME),
                 exit,getBgpActivePeerConfig(NEXT_DOOR,IMPORT_POLICY_NAME,EXPORT_POLICY_NAME)));
 
         // Creating routing policy
@@ -1028,13 +1028,13 @@ public class InferTest {
         Node NODE_A = new Node("10.10.0.1","node_A");
         Node NODE_B = new Node("10.10.0.2","node_B");
         Node NODE_C = new Node("10.10.0.3","node_C");
-        Edge target = new Edge(NODE_C.getIp(),exit);
+        Edge target = new Edge(NODE_C.getSingleIp(),exit);
 
         TestConfigConstructionUtils.Network net = simpleNetwork(entry,exit,NODE_A,NODE_B,NODE_C,0);
         Infer verifier = new Infer(net.tbdd(),configInput(net.configs()));
         Invariant property = new Invariant(net.tbdd(),Invariant.clauseBuilder().avoidPrefix(PREFIX).build(net.tbdd(),net.imports().get(NODE_C)));
         verifier.addProperty(target,property);
-        verifier.addAssumption(new Edge(exit,NODE_C.getIp()), Invariant.getFalse(net.tbdd()));
+        verifier.addAssumption(new Edge(exit,NODE_C.getSingleIp()), Invariant.getFalse(net.tbdd()));
         Infer.Result result = verifier.run();
 
         Map<Location,String> strings = result.strings(verifier);

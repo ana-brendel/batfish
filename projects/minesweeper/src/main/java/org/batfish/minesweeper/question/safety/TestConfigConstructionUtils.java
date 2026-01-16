@@ -1,4 +1,4 @@
-package org.batfish.minesweeper.question.verify;
+package org.batfish.minesweeper.question.safety;
 
 import com.google.common.collect.ImmutableList;
 import org.batfish.datamodel.BgpActivePeerConfig;

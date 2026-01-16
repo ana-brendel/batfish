@@ -1,4 +1,4 @@
-package org.batfish.minesweeper.question.verify;
+package org.batfish.minesweeper.question.safety;
 
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableSet;
@@ -42,8 +42,8 @@ import java.util.Set;
 import static org.batfish.datamodel.answers.Schema.STRING;
 
 // Currently the question takes in a single target location-invariant pair whereas the assumptions might be a list
-public final class VerifierAnswerer extends Answerer {
-    private static final Logger LOGGER = LogManager.getLogger(VerifierAnswerer.class);
+public final class SafetyAnswerer extends Answerer {
+    private static final Logger LOGGER = LogManager.getLogger(SafetyAnswerer.class);
 
     private final @Nonnull Map<Location.Builder, Invariant.Builder> _targets;
     private final @Nonnull Map<Location.Builder, Invariant.Builder> _assumptions;
@@ -51,7 +51,7 @@ public final class VerifierAnswerer extends Answerer {
     private final @Nonnull Set<RegexConstraint> _asPathRegexes;
     private final boolean _readable;
 
-    public VerifierAnswerer(VerifierQuestion question, IBatfish batfish) {
+    public SafetyAnswerer(SafetyQuestion question, IBatfish batfish) {
         super(question, batfish);
         _readable = question.get_readable();
         _targets = question.get_targets();

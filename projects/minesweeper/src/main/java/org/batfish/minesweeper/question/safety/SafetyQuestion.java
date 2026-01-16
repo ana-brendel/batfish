@@ -1,4 +1,4 @@
-package org.batfish.minesweeper.question.verify;
+package org.batfish.minesweeper.question.safety;
 
 import com.fasterxml.jackson.annotation.JsonCreator;
 import com.fasterxml.jackson.annotation.JsonIgnore;
@@ -13,7 +13,7 @@ import java.util.Map;
 import java.util.Optional;
 
 @ParametersAreNonnullByDefault
-public final class VerifierQuestion extends Question {
+public final class SafetyQuestion extends Question {
     private static final String PROP_PROPERTY = "target";
     private static final String PROP_LOCATION = "location";
     private static final String PROP_ASSUMPTION_LOCATIONS = "assumption_locations";
@@ -25,9 +25,9 @@ public final class VerifierQuestion extends Question {
     private final Invariant.Builders _assumptions;
     private final boolean _readable;
 
-   public VerifierQuestion() { this(null,null,null,null,false); }
+   public SafetyQuestion() { this(null,null,null,null,false); }
 
-    private VerifierQuestion(
+    private SafetyQuestion(
             @Nullable Invariant.Builder target,
             @Nullable Location.Builder location,
             @Nullable Location.Builders assumptions_locations,
@@ -42,7 +42,7 @@ public final class VerifierQuestion extends Question {
     }
 
     @JsonCreator
-    private static VerifierQuestion jsonCreator(
+    private static SafetyQuestion jsonCreator(
             @JsonProperty(PROP_PROPERTY) Invariant.Builder target,
             @JsonProperty(PROP_LOCATION) Location.Builder location,
             @JsonProperty(PROP_ASSUMPTION_LOCATIONS) @Nullable Location.Builders assumption_locations,
@@ -50,7 +50,7 @@ public final class VerifierQuestion extends Question {
             @JsonProperty(PROP_READABLE) @Nullable Boolean readable
     ) {
        // default for display is false (as it is not efficient)
-       return new VerifierQuestion(target,location,assumption_locations,assumptions, readable != null && readable);
+       return new SafetyQuestion(target,location,assumption_locations,assumptions, readable != null && readable);
     }
 
     @Nonnull

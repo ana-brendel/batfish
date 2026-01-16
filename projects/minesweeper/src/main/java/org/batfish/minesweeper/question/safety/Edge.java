@@ -1,4 +1,4 @@
-package org.batfish.minesweeper.question.verify;
+package org.batfish.minesweeper.question.safety;
 
 import org.batfish.common.BatfishException;
 import org.batfish.datamodel.Ip;

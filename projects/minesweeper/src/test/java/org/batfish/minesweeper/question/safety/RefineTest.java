@@ -1,4 +1,4 @@
-package org.batfish.minesweeper.question.verify;
+package org.batfish.minesweeper.question.safety;
 
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
@@ -35,16 +35,16 @@ import java.util.Set;
 import java.util.stream.Stream;
 
 import static org.batfish.datamodel.LineAction.PERMIT;
-import static org.batfish.minesweeper.question.verify.TestConfigConstructionUtils.addToCommunities;
-import static org.batfish.minesweeper.question.verify.TestConfigConstructionUtils.checkForCommunity;
-import static org.batfish.minesweeper.question.verify.TestConfigConstructionUtils.checkForPrefixListMatch;
-import static org.batfish.minesweeper.question.verify.TestConfigConstructionUtils.clearCommunities;
-import static org.batfish.minesweeper.question.verify.TestConfigConstructionUtils.getBgpActivePeerConfig;
-import static org.batfish.minesweeper.question.verify.TestConfigConstructionUtils.ifStatement;
-import static org.batfish.minesweeper.question.verify.TestConfigConstructionUtils.includeCommunities;
-import static org.batfish.minesweeper.question.verify.TestConfigConstructionUtils.metricGreaterThan;
-import static org.batfish.minesweeper.question.verify.TestConfigConstructionUtils.permitRoute;
-import static org.batfish.minesweeper.question.verify.TestConfigConstructionUtils.replaceCommunities;
+import static org.batfish.minesweeper.question.safety.TestConfigConstructionUtils.addToCommunities;
+import static org.batfish.minesweeper.question.safety.TestConfigConstructionUtils.checkForCommunity;
+import static org.batfish.minesweeper.question.safety.TestConfigConstructionUtils.checkForPrefixListMatch;
+import static org.batfish.minesweeper.question.safety.TestConfigConstructionUtils.clearCommunities;
+import static org.batfish.minesweeper.question.safety.TestConfigConstructionUtils.getBgpActivePeerConfig;
+import static org.batfish.minesweeper.question.safety.TestConfigConstructionUtils.ifStatement;
+import static org.batfish.minesweeper.question.safety.TestConfigConstructionUtils.includeCommunities;
+import static org.batfish.minesweeper.question.safety.TestConfigConstructionUtils.metricGreaterThan;
+import static org.batfish.minesweeper.question.safety.TestConfigConstructionUtils.permitRoute;
+import static org.batfish.minesweeper.question.safety.TestConfigConstructionUtils.replaceCommunities;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 
@@ -69,7 +69,7 @@ public class RefineTest {
 
     private BgpProcess getBgpProcess (Configuration config, Node node) {
         Vrf vrf = nf.vrfBuilder().setOwner(config).setName(Configuration.DEFAULT_VRF_NAME).build();
-        return nf.bgpProcessBuilder().setRouterId(node.getIp())
+        return nf.bgpProcessBuilder().setRouterId(node.getSingleIp())
                 .setEbgpAdminCost(0).setIbgpAdminCost(0).setLocalAdminCost(0)
                 .setLocalOriginationTypeTieBreaker(LocalOriginationTypeTieBreaker.NO_PREFERENCE)
                 .setNetworkNextHopIpTieBreaker(NextHopIpTieBreaker.HIGHEST_NEXT_HOP_IP)
@@ -128,14 +128,14 @@ public class RefineTest {
 
         processes.get(NODE_A).setNeighbors(ImmutableSortedMap.of(
                 entry,getBgpActivePeerConfig("outside","outsideImport",null),
-                NODE_B.getIp(),getBgpActivePeerConfig("internalNeighbor",null,null)));
+                NODE_B.getSingleIp(),getBgpActivePeerConfig("internalNeighbor",null,null)));
 
         processes.get(NODE_B).setNeighbors(ImmutableSortedMap.of(
-                NODE_A.getIp(),getBgpActivePeerConfig("internalNeighbor",null,null),
-                NODE_C.getIp(),getBgpActivePeerConfig("internalNeighbor",null,null)));
+                NODE_A.getSingleIp(),getBgpActivePeerConfig("internalNeighbor",null,null),
+                NODE_C.getSingleIp(),getBgpActivePeerConfig("internalNeighbor",null,null)));
 
         processes.get(NODE_C).setNeighbors(ImmutableSortedMap.of(
-                NODE_B.getIp(),getBgpActivePeerConfig("internalNeighbor",null,null),
+                NODE_B.getSingleIp(),getBgpActivePeerConfig("internalNeighbor",null,null),
                 exit,getBgpActivePeerConfig("outside",null,"outsideExport")));
 
         // Creating routing policy
@@ -178,14 +178,14 @@ public class RefineTest {
 
         processes.get(NODE_A).setNeighbors(ImmutableSortedMap.of(
                 entry,getBgpActivePeerConfig("outside","outsideImport",null),
-                NODE_B.getIp(),getBgpActivePeerConfig("internalNeighbor",null,null)));
+                NODE_B.getSingleIp(),getBgpActivePeerConfig("internalNeighbor",null,null)));
 
         processes.get(NODE_B).setNeighbors(ImmutableSortedMap.of(
-                NODE_A.getIp(),getBgpActivePeerConfig("internalNeighbor",null,null),
-                NODE_C.getIp(),getBgpActivePeerConfig("internalNeighbor",null,null)));
+                NODE_A.getSingleIp(),getBgpActivePeerConfig("internalNeighbor",null,null),
+                NODE_C.getSingleIp(),getBgpActivePeerConfig("internalNeighbor",null,null)));
 
         processes.get(NODE_C).setNeighbors(ImmutableSortedMap.of(
-                NODE_B.getIp(),getBgpActivePeerConfig("internalNeighbor",null,null),
+                NODE_B.getSingleIp(),getBgpActivePeerConfig("internalNeighbor",null,null),
                 exit,getBgpActivePeerConfig("outside","outsideImport","outsideExport")));
 
         // Creating routing policy
@@ -232,14 +232,14 @@ public class RefineTest {
 
         processes.get(NODE_A).setNeighbors(ImmutableSortedMap.of(
                 entry,getBgpActivePeerConfig("outside","outsideImport",null),
-                NODE_B.getIp(),getBgpActivePeerConfig("internalNeighbor",null,null)));
+                NODE_B.getSingleIp(),getBgpActivePeerConfig("internalNeighbor",null,null)));
 
         processes.get(NODE_B).setNeighbors(ImmutableSortedMap.of(
-                NODE_A.getIp(),getBgpActivePeerConfig("internalNeighbor",null,null),
-                NODE_C.getIp(),getBgpActivePeerConfig("internalNeighbor","rightImport","rightExport")));
+                NODE_A.getSingleIp(),getBgpActivePeerConfig("internalNeighbor",null,null),
+                NODE_C.getSingleIp(),getBgpActivePeerConfig("internalNeighbor","rightImport","rightExport")));
 
         processes.get(NODE_C).setNeighbors(ImmutableSortedMap.of(
-                NODE_B.getIp(),getBgpActivePeerConfig("internalNeighbor",null,null),
+                NODE_B.getSingleIp(),getBgpActivePeerConfig("internalNeighbor",null,null),
                 exit,getBgpActivePeerConfig("outside",null,"outsideExport")));
 
         // Creating routing policy
@@ -289,14 +289,14 @@ public class RefineTest {
 
         processes.get(NODE_A).setNeighbors(ImmutableSortedMap.of(
                 entry,getBgpActivePeerConfig("outside","outsideImport",null),
-                NODE_B.getIp(),getBgpActivePeerConfig("internalNeighbor",null,null)));
+                NODE_B.getSingleIp(),getBgpActivePeerConfig("internalNeighbor",null,null)));
 
         processes.get(NODE_B).setNeighbors(ImmutableSortedMap.of(
-                NODE_A.getIp(),getBgpActivePeerConfig("internalNeighbor",null,null),
-                NODE_C.getIp(),getBgpActivePeerConfig("internalNeighbor","rightImport","rightExport")));
+                NODE_A.getSingleIp(),getBgpActivePeerConfig("internalNeighbor",null,null),
+                NODE_C.getSingleIp(),getBgpActivePeerConfig("internalNeighbor","rightImport","rightExport")));
 
         processes.get(NODE_C).setNeighbors(ImmutableSortedMap.of(
-                NODE_B.getIp(),getBgpActivePeerConfig("internalNeighbor",null,null),
+                NODE_B.getSingleIp(),getBgpActivePeerConfig("internalNeighbor",null,null),
                 exit,getBgpActivePeerConfig("outside",null,"outsideExport")));
 
         // Creating routing policy
@@ -347,14 +347,14 @@ public class RefineTest {
 
         processes.get(NODE_A).setNeighbors(ImmutableSortedMap.of(
                 entry,getBgpActivePeerConfig("outside","outsideImport",null),
-                NODE_B.getIp(),getBgpActivePeerConfig("internalNeighbor",null,null)));
+                NODE_B.getSingleIp(),getBgpActivePeerConfig("internalNeighbor",null,null)));
 
         processes.get(NODE_B).setNeighbors(ImmutableSortedMap.of(
-                NODE_A.getIp(),getBgpActivePeerConfig("internalNeighbor",null,null),
-                NODE_C.getIp(),getBgpActivePeerConfig("internalNeighbor",null,null)));
+                NODE_A.getSingleIp(),getBgpActivePeerConfig("internalNeighbor",null,null),
+                NODE_C.getSingleIp(),getBgpActivePeerConfig("internalNeighbor",null,null)));
 
         processes.get(NODE_C).setNeighbors(ImmutableSortedMap.of(
-                NODE_B.getIp(),getBgpActivePeerConfig("internalNeighbor",null,null),
+                NODE_B.getSingleIp(),getBgpActivePeerConfig("internalNeighbor",null,null),
                 exit,getBgpActivePeerConfig("outside","outsideImport",null)));
 
         // Creating routing policy
@@ -402,14 +402,14 @@ public class RefineTest {
 
         processes.get(NODE_A).setNeighbors(ImmutableSortedMap.of(
                 entry,getBgpActivePeerConfig("outside","outsideImport",null),
-                NODE_B.getIp(),getBgpActivePeerConfig("internalNeighbor",null,null)));
+                NODE_B.getSingleIp(),getBgpActivePeerConfig("internalNeighbor",null,null)));
 
         processes.get(NODE_B).setNeighbors(ImmutableSortedMap.of(
-                NODE_A.getIp(),getBgpActivePeerConfig("internalNeighbor","neighborImport",null),
-                NODE_C.getIp(),getBgpActivePeerConfig("internalNeighbor","neighborImport",null)));
+                NODE_A.getSingleIp(),getBgpActivePeerConfig("internalNeighbor","neighborImport",null),
+                NODE_C.getSingleIp(),getBgpActivePeerConfig("internalNeighbor","neighborImport",null)));
 
         processes.get(NODE_C).setNeighbors(ImmutableSortedMap.of(
-                NODE_B.getIp(),getBgpActivePeerConfig("internalNeighbor",null,null),
+                NODE_B.getSingleIp(),getBgpActivePeerConfig("internalNeighbor",null,null),
                 exit,getBgpActivePeerConfig("outside","outsideImport",null)));
 
         // Creating routing policy
@@ -455,14 +455,14 @@ public class RefineTest {
 
         processes.get(NODE_A).setNeighbors(ImmutableSortedMap.of(
                 entry,getBgpActivePeerConfig("outside","outsideImport",null),
-                NODE_B.getIp(),getBgpActivePeerConfig("internalNeighbor",null,null)));
+                NODE_B.getSingleIp(),getBgpActivePeerConfig("internalNeighbor",null,null)));
 
         processes.get(NODE_B).setNeighbors(ImmutableSortedMap.of(
-                NODE_A.getIp(),getBgpActivePeerConfig("internalNeighbor",null,null),
-                NODE_C.getIp(),getBgpActivePeerConfig("internalNeighbor",null,null)));
+                NODE_A.getSingleIp(),getBgpActivePeerConfig("internalNeighbor",null,null),
+                NODE_C.getSingleIp(),getBgpActivePeerConfig("internalNeighbor",null,null)));
 
         processes.get(NODE_C).setNeighbors(ImmutableSortedMap.of(
-                NODE_B.getIp(),getBgpActivePeerConfig("internalNeighbor",null,null),
+                NODE_B.getSingleIp(),getBgpActivePeerConfig("internalNeighbor",null,null),
                 exit,getBgpActivePeerConfig("outside","outsideImport",null)));
 
         // Creating routing policy
@@ -516,14 +516,14 @@ public class RefineTest {
 
         processes.get(NODE_A).setNeighbors(ImmutableSortedMap.of(
                 entry,getBgpActivePeerConfig("outside","outsideImport",null),
-                NODE_B.getIp(),getBgpActivePeerConfig("internalNeighbor",preventBackwards ? "rightImport" : null,null)));
+                NODE_B.getSingleIp(),getBgpActivePeerConfig("internalNeighbor",preventBackwards ? "rightImport" : null,null)));
 
         processes.get(NODE_B).setNeighbors(ImmutableSortedMap.of(
-                NODE_A.getIp(),getBgpActivePeerConfig("internalNeighbor","leftImport",null),
-                NODE_C.getIp(),getBgpActivePeerConfig("internalNeighbor",preventBackwards ? "rightImport" : null,null)));
+                NODE_A.getSingleIp(),getBgpActivePeerConfig("internalNeighbor","leftImport",null),
+                NODE_C.getSingleIp(),getBgpActivePeerConfig("internalNeighbor",preventBackwards ? "rightImport" : null,null)));
 
         processes.get(NODE_C).setNeighbors(ImmutableSortedMap.of(
-                NODE_B.getIp(),getBgpActivePeerConfig("internalNeighbor",null,null),
+                NODE_B.getSingleIp(),getBgpActivePeerConfig("internalNeighbor",null,null),
                 exit,getBgpActivePeerConfig("outside",null,"outsideExport")));
 
         // Creating routing policy
@@ -578,14 +578,14 @@ public class RefineTest {
 
         processes.get(NODE_A).setNeighbors(ImmutableSortedMap.of(
                 entry,getBgpActivePeerConfig("outside","outsideImport",null),
-                NODE_B.getIp(),getBgpActivePeerConfig("internalNeighbor",null,null)));
+                NODE_B.getSingleIp(),getBgpActivePeerConfig("internalNeighbor",null,null)));
 
         processes.get(NODE_B).setNeighbors(ImmutableSortedMap.of(
-                NODE_A.getIp(),getBgpActivePeerConfig("internalNeighbor","leftImport",null),
-                NODE_C.getIp(),getBgpActivePeerConfig("internalNeighbor",null,null)));
+                NODE_A.getSingleIp(),getBgpActivePeerConfig("internalNeighbor","leftImport",null),
+                NODE_C.getSingleIp(),getBgpActivePeerConfig("internalNeighbor",null,null)));
 
         processes.get(NODE_C).setNeighbors(ImmutableSortedMap.of(
-                NODE_B.getIp(),getBgpActivePeerConfig("internalNeighbor",null,null),
+                NODE_B.getSingleIp(),getBgpActivePeerConfig("internalNeighbor",null,null),
                 exit,getBgpActivePeerConfig("outside",null,"outsideExport")));
 
         // Creating routing policy
@@ -620,7 +620,7 @@ public class RefineTest {
         Infer verifier = new Infer(net.tbdd(),configInput(net.configs()));
         Lightyear lightyear = verifier.checker();
 
-        Edge target = new Edge(NODE_C.getIp(),exit);
+        Edge target = new Edge(NODE_C.getSingleIp(),exit);
         PrefixSpace PREFIX = new PrefixSpace(PrefixRange.fromPrefix(Prefix.parse(p_str)));
         Invariant property = new Invariant(net.tbdd(),Invariant.clauseBuilder().avoidPrefix(PREFIX).build(net.tbdd(),net.template()));
         verifier.addProperty(target,property);
@@ -650,7 +650,7 @@ public class RefineTest {
         Infer verifier = new Infer(net.tbdd(),configInput(net.configs()));
         Lightyear lightyear = verifier.checker();
 
-        Edge target = new Edge(NODE_C.getIp(),exit);
+        Edge target = new Edge(NODE_C.getSingleIp(),exit);
         PrefixSpace PREFIX = new PrefixSpace(PrefixRange.fromPrefix(Prefix.parse(p_str)));
         Invariant property = new Invariant(net.tbdd(),Invariant.clauseBuilder().avoidPrefix(PREFIX).build(net.tbdd(),net.template()));
         verifier.addProperty(target,property);
@@ -680,7 +680,7 @@ public class RefineTest {
         Infer verifier = new Infer(net.tbdd(),configInput(net.configs()));
         Lightyear lightyear = verifier.checker();
 
-        Edge target = new Edge(NODE_C.getIp(),exit);
+        Edge target = new Edge(NODE_C.getSingleIp(),exit);
         PrefixSpace PREFIX = new PrefixSpace(PrefixRange.fromPrefix(Prefix.parse(p_str)));
         Invariant property = new Invariant(net.tbdd(),Invariant.clauseBuilder().avoidPrefix(PREFIX).build(net.tbdd(),net.template()));
         verifier.addProperty(target,property);
@@ -710,7 +710,7 @@ public class RefineTest {
         Infer verifier = new Infer(net.tbdd(),configInput(net.configs()));
         Lightyear lightyear = verifier.checker();
 
-        Edge target = new Edge(NODE_C.getIp(),exit);
+        Edge target = new Edge(NODE_C.getSingleIp(),exit);
         PrefixSpace PREFIX = new PrefixSpace(PrefixRange.fromPrefix(Prefix.parse(p_str)));
         Invariant property = new Invariant(net.tbdd(),Invariant.clauseBuilder().avoidPrefix(PREFIX).build(net.tbdd(),net.template()));
         verifier.addProperty(target,property);
@@ -832,7 +832,7 @@ public class RefineTest {
         Invariant.ClauseBuilder PREFIX_P = Invariant.clauseBuilder().matchPrefix(new PrefixSpace(PrefixRange.fromPrefix(Prefix.parse(p_str))));
         Invariant.ClauseBuilder PREFIX_Q = Invariant.clauseBuilder().matchPrefix(new PrefixSpace(PrefixRange.fromPrefix(Prefix.parse(q_str))));
         Invariant property = Invariant.builder().addClause(PREFIX_P).addClause(PREFIX_Q).build(net.tbdd(),net.template());
-        verifier.addProperty(new Edge(NODE_C.getIp(),exit),property);
+        verifier.addProperty(new Edge(NODE_C.getSingleIp(),exit),property);
 
         Infer.Result result = verifier.run();
 
@@ -863,7 +863,7 @@ public class RefineTest {
         Invariant.ClauseBuilder PREFIX_P = Invariant.clauseBuilder().matchPrefix(new PrefixSpace(PrefixRange.fromPrefix(Prefix.parse(p_str))));
         Invariant.ClauseBuilder PREFIX_Q = Invariant.clauseBuilder().matchPrefix(new PrefixSpace(PrefixRange.fromPrefix(Prefix.parse(q_str))));
         Invariant property = Invariant.builder().addClause(PREFIX_P).addClause(PREFIX_Q).build(net.tbdd(),net.template()).negate();
-        verifier.addProperty(new Edge(NODE_C.getIp(),exit),property);
+        verifier.addProperty(new Edge(NODE_C.getSingleIp(),exit),property);
 
         Infer.Result result = verifier.run();
 

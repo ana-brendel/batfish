@@ -1,5 +1,5 @@
 {
-    "class": "org.batfish.minesweeper.question.verify.VerifierQuestion",
+    "class": "org.batfish.minesweeper.question.safety.SafetyQuestion",
     "differential": false,
     "target": "${target}",
     "location": "${location}",
@@ -8,7 +8,7 @@
     "readable": "${readable}",
     "instance": {
         "description": "...",
-        "instanceName": "verify",
+        "instanceName": "safety",
         "longDescription": "This question...",
         "orderedVariableNames": [
             "target",
@@ -22,7 +22,7 @@
         ],
         "variables": {
             "target": {
-                "description": "Property to verify",
+                "description": "Safety property to verify",
                 "type": "string",
                 "optional": true,
                 "displayName": "Target Property"

@@ -1,4 +1,4 @@
-package org.batfish.minesweeper.question.verify;
+package org.batfish.minesweeper.question.safety;
 
 import net.sf.javabdd.BDD;
 import net.sf.javabdd.BDDPairing;

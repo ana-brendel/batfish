@@ -1,4 +1,4 @@
-package org.batfish.minesweeper.question.verify;
+package org.batfish.minesweeper.question.safety;
 
 import org.batfish.datamodel.Ip;
 import org.junit.Before;
@@ -27,7 +27,7 @@ public class LocationTest {
         assertEquals(n1,n3);
         assertNotEquals(n2,n4);
         assertEquals(n2,n5);
-        assertEquals(Ip.parse("128.0.0.2"),n4.getIp());
+        assertEquals(Ip.parse("128.0.0.2"),n4.getSingleIp());
         assertTrue(n4.incoming(edge));
         assertTrue(n5.outgoing(edge));
         assertFalse(n6.incoming(edge));

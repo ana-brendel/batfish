@@ -1,4 +1,4 @@
-package org.batfish.minesweeper.question.verify;
+package org.batfish.minesweeper.question.safety;
 
 import net.sf.javabdd.BDD;
 import org.batfish.common.BatfishException;
@@ -26,7 +26,7 @@ import java.util.Set;
 import java.util.stream.Collectors;
 
 import static java.util.Objects.isNull;
-import static org.batfish.minesweeper.question.verify.Invariant.strongestCommonImplicant;
+import static org.batfish.minesweeper.question.safety.Invariant.strongestCommonImplicant;
 
 public class Infer {
     public final BDDString.Shortcuts shortcuts;

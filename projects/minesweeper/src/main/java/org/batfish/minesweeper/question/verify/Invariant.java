@@ -157,6 +157,7 @@ public class Invariant {
         @VisibleForTesting
         static Builder forValue(@Nonnull String value) {
             Builder builder = new Builder(value);
+            if (value.equals("[]")) return builder;
             String[] splits = value.trim().split("]");
             for (String clause : splits) {
                 String trimmed = clause.trim();

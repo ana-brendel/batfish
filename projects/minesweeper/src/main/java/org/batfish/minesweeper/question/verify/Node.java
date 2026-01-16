@@ -35,6 +35,12 @@ public class Node extends Location {
         return Ip.create(ips.get(0).asLong());
     }
 
+    public Ip getRepresentativeIp() {
+        if (ips.isEmpty())
+            throw new BatfishException("Node.getRepresentativeIp() - Trying to get representative Ip with no Ips.");
+        return Ip.create(ips.get(0).asLong());
+    }
+
     public Collection<Ip> getIps() {
         return new ArrayList<>(ips);
     }
@@ -86,10 +92,10 @@ public class Node extends Location {
                 return -1; // this is an edge coming out of provided node, so edges should follow
             else
                 // use the single ip, so that comparisons can remain consistent
-                return this.getSingleIp().compareTo(edge.getSrc());
+                return this.getRepresentativeIp().compareTo(edge.getSrc());
         } else if (location instanceof Node node) {
             // use the single ip, so that comparisons can remain consistent
-            return this.getSingleIp().compareTo(node.getSingleIp());
+            return this.getRepresentativeIp().compareTo(node.getRepresentativeIp());
         } else {
             throw new BatfishException("Node.compareTo() - Only two implementations of Location, should never reach here.");
         }

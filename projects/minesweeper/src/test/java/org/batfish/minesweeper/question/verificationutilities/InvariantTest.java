@@ -59,7 +59,7 @@ import java.util.stream.Stream;
 
 import static org.batfish.datamodel.LineAction.PERMIT;
 import static org.batfish.minesweeper.bdd.TransferBDD.isRelevantForDestination;
-import static org.batfish.minesweeper.question.safety.TestConfigConstructionUtils.getBgpActivePeerConfig;
+import static org.batfish.minesweeper.question.verificationutilities.TestConfigConstructionUtils.getBgpActivePeerConfig;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertTrue;
 

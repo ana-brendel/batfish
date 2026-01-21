@@ -28,6 +28,7 @@ import org.batfish.minesweeper.question.verificationutilities.Invariant;
 import org.batfish.minesweeper.question.verificationutilities.Lightyear;
 import org.batfish.minesweeper.question.verificationutilities.Location;
 import org.batfish.minesweeper.question.verificationutilities.Node;
+import org.batfish.minesweeper.question.verificationutilities.TestConfigConstructionUtils;
 import org.junit.Test;
 
 import java.util.AbstractMap;
@@ -40,16 +41,16 @@ import java.util.Set;
 import java.util.stream.Stream;
 
 import static org.batfish.datamodel.LineAction.PERMIT;
-import static org.batfish.minesweeper.question.safety.TestConfigConstructionUtils.addToCommunities;
-import static org.batfish.minesweeper.question.safety.TestConfigConstructionUtils.checkForCommunity;
-import static org.batfish.minesweeper.question.safety.TestConfigConstructionUtils.checkForPrefixListMatch;
-import static org.batfish.minesweeper.question.safety.TestConfigConstructionUtils.clearCommunities;
-import static org.batfish.minesweeper.question.safety.TestConfigConstructionUtils.getBgpActivePeerConfig;
-import static org.batfish.minesweeper.question.safety.TestConfigConstructionUtils.ifStatement;
-import static org.batfish.minesweeper.question.safety.TestConfigConstructionUtils.includeCommunities;
-import static org.batfish.minesweeper.question.safety.TestConfigConstructionUtils.metricGreaterThan;
-import static org.batfish.minesweeper.question.safety.TestConfigConstructionUtils.permitRoute;
-import static org.batfish.minesweeper.question.safety.TestConfigConstructionUtils.replaceCommunities;
+import static org.batfish.minesweeper.question.verificationutilities.TestConfigConstructionUtils.addToCommunities;
+import static org.batfish.minesweeper.question.verificationutilities.TestConfigConstructionUtils.checkForCommunity;
+import static org.batfish.minesweeper.question.verificationutilities.TestConfigConstructionUtils.checkForPrefixListMatch;
+import static org.batfish.minesweeper.question.verificationutilities.TestConfigConstructionUtils.clearCommunities;
+import static org.batfish.minesweeper.question.verificationutilities.TestConfigConstructionUtils.getBgpActivePeerConfig;
+import static org.batfish.minesweeper.question.verificationutilities.TestConfigConstructionUtils.ifStatement;
+import static org.batfish.minesweeper.question.verificationutilities.TestConfigConstructionUtils.includeCommunities;
+import static org.batfish.minesweeper.question.verificationutilities.TestConfigConstructionUtils.metricGreaterThan;
+import static org.batfish.minesweeper.question.verificationutilities.TestConfigConstructionUtils.permitRoute;
+import static org.batfish.minesweeper.question.verificationutilities.TestConfigConstructionUtils.replaceCommunities;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 
@@ -111,7 +112,7 @@ public class RefineTest {
     }
 
 
-    private TestConfigConstructionUtils.Networkv2 networkA(Ip entry, Ip exit, Node NODE_A, Node NODE_B, Node NODE_C,String p_str) {
+    private TestConfigConstructionUtils.Networkv2 networkA(Ip entry, Ip exit, Node NODE_A, Node NODE_B, Node NODE_C, String p_str) {
         Map<Node, Configuration> configs = new HashMap<>();
 
         String plain_comm_10 = "10:10";

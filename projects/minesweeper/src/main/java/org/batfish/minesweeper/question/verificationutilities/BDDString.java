@@ -1,4 +1,4 @@
-package org.batfish.minesweeper.question.safety;
+package org.batfish.minesweeper.question.verificationutilities;
 
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Sets;
@@ -136,7 +136,7 @@ public class BDDString {
     }
 
     /// Record to hold information relevant to creating string representations for BDD -- somewhat hacky
-    public record Shortcuts(Set<Long> meds, Set<Long> local_prefs, Set<Prefix> prefixes) {
+    public record Shortcuts(@Nonnull Set<Long> meds, @Nonnull Set<Long> local_prefs, @Nonnull Set<Prefix> prefixes) {
         private void addMed(long l) { meds.add(l); }
         private void addLocalPref(long l) { local_prefs.add(l); }
         private void addPrefix(Prefix p) { prefixes.add(p); }
@@ -269,32 +269,39 @@ public class BDDString {
 
             return result;
         }
-        public static Shortcuts ofConfigs(Collection<Configuration> configs) {
+        public static Shortcuts ofConfigs(@Nonnull Collection<Configuration> configs) {
             Set<Long> meds = new HashSet<>();
             Set<Long> local_prefs = new HashSet<>();
             Set<Prefix> prefixes = new HashSet<>();
+            // null checks to ensure the tool runs without throwing error -- might change later
             configs.forEach(config -> {
-                config.getRouteFilterLists().values().forEach(rfl -> rfl.getLines()
-                        .forEach(line -> prefixes.add(line.getIpWildcard().toPrefix())));
-                config.getRoutingPolicies().values().forEach(rp -> {
-                    Shortcuts fromPolicy = ofPolicy(config,rp);
-                    meds.addAll(fromPolicy.meds());
-                    local_prefs.addAll(fromPolicy.local_prefs());
-                    prefixes.addAll(fromPolicy.prefixes());
-                });
+                if (config.getRouteFilterLists() != null)
+                    config.getRouteFilterLists().values().stream().filter(Objects::nonNull)
+                            .forEach(rfl -> rfl.getLines()
+                                    .stream().filter(line -> line.getIpWildcard().isPrefix())
+                                    .forEach(line -> prefixes.add(line.getIpWildcard().toPrefix())));
+                if (config.getRoutingPolicies() != null)
+                    config.getRoutingPolicies().values().stream().filter(Objects::nonNull)
+                            .forEach(rp -> {
+                                Shortcuts fromPolicy = ofPolicy(config,rp);
+                                meds.addAll(fromPolicy.meds());
+                                local_prefs.addAll(fromPolicy.local_prefs());
+                                prefixes.addAll(fromPolicy.prefixes());
+                            });
             });
             return new Shortcuts(meds,local_prefs,prefixes);
         }
-        public static Shortcuts ofPolicy(Configuration config, RoutingPolicy policy) {
+        public static Shortcuts ofPolicy(@Nonnull Configuration config, @Nonnull RoutingPolicy policy) {
             Set<Long> meds = new HashSet<>();
             Set<Long> local_prefs = new HashSet<>();
             Set<Prefix> prefixes = new HashSet<>();
-            policy.getStatements().forEach(line -> {
-                Shortcuts fromStatement = ofStatement(config, line);
-                meds.addAll(fromStatement.meds);
-                local_prefs.addAll(fromStatement.local_prefs);
-                prefixes.addAll(fromStatement.prefixes);
-            });
+            policy.getStatements().stream().filter(Objects::nonNull)
+                    .forEach(line -> {
+                        Shortcuts fromStatement = ofStatement(config, line);
+                        meds.addAll(fromStatement.meds);
+                        local_prefs.addAll(fromStatement.local_prefs);
+                        prefixes.addAll(fromStatement.prefixes);
+                    });
             return new Shortcuts(meds,local_prefs,prefixes);
         }
         private static Shortcuts ofBooleanExpr(Configuration c, BooleanExpr expr) {
@@ -316,18 +323,24 @@ public class BDDString {
             }
             return running;
         }
-        private static Shortcuts ofStatement(Configuration c, Statement line) {
+        private static Shortcuts ofStatement(@Nonnull Configuration c, @Nonnull Statement line) {
+            // try catches to prevent unnecessarily throwing error and terminating
             Shortcuts running = new Shortcuts(new HashSet<>(),new HashSet<>(),new HashSet<>());
             if (line instanceof If if_statement) {
-                running = running.combineWith(ofBooleanExpr(c,if_statement.getGuard()));
-                running = running.combineWith(combineSet(if_statement.getTrueStatements().stream()
-                        .map(s -> ofStatement(c,s)).collect(Collectors.toSet())));
-                running = running.combineWith(combineSet(if_statement.getFalseStatements().stream()
-                        .map(s -> ofStatement(c,s)).collect(Collectors.toSet())));
+                try { running = running.combineWith(ofBooleanExpr(c,if_statement.getGuard())); }
+                catch (Exception ignore) {}
+                try { running = running.combineWith(combineSet(if_statement.getTrueStatements().stream()
+                        .map(s -> ofStatement(c,s)).collect(Collectors.toSet()))); }
+                catch (Exception ignore) {}
+                try { running = running.combineWith(combineSet(if_statement.getFalseStatements().stream()
+                        .map(s -> ofStatement(c,s)).collect(Collectors.toSet()))); }
+                catch (Exception ignore) {}
             } else if (line instanceof SetMetric metric) {
-                running.addMed(metric.getMetric().evaluate(Environment.builder(c).build()));
+                try { running.addMed(metric.getMetric().evaluate(Environment.builder(c).build())); }
+                catch (Exception ignore) {}
             } else if (line instanceof SetLocalPreference localPref) {
-                running.addLocalPref(localPref.getLocalPreference().evaluate(Environment.builder(c).build()));
+                 try { running.addLocalPref(localPref.getLocalPreference().evaluate(Environment.builder(c).build())); }
+                 catch (Exception ignore) {}
             } // weight?
             return running;
         }
@@ -354,11 +367,15 @@ public class BDDString {
         this.shortcuts = shortcuts;
     }
 
-    public static String get(TransferBDD tbdd, BDD bdd, Shortcuts shortcuts) {
+    public static String get(@Nonnull TransferBDD tbdd, @Nonnull BDD bdd, @Nonnull Shortcuts shortcuts) {
         BDDString str = new BDDString(tbdd,bdd,shortcuts);
         String result = str.str();
         assert !result.isEmpty();
         return result;
+    }
+
+    public static String get(@Nonnull TransferBDD tbdd, @Nonnull BDD bdd) {
+        return get(tbdd,bdd,new Shortcuts(new HashSet<>(),new HashSet<>(),new HashSet<>()));
     }
 
     private static Map<BDD,String> variableToString(TransferBDD tbdd) {

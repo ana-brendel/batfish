@@ -27,6 +27,10 @@ import org.batfish.minesweeper.ConfigAtomicPredicates;
 import org.batfish.minesweeper.bdd.TransferBDD;
 import org.batfish.minesweeper.communities.CommunityMatchExprVarCollector;
 import org.batfish.minesweeper.question.searchroutepolicies.RegexConstraint;
+import org.batfish.minesweeper.question.verificationutilities.Edge;
+import org.batfish.minesweeper.question.verificationutilities.Invariant;
+import org.batfish.minesweeper.question.verificationutilities.Location;
+import org.batfish.minesweeper.question.verificationutilities.Node;
 import org.batfish.specifier.SpecifierContext;
 
 import javax.annotation.Nonnull;
@@ -68,6 +72,8 @@ public final class SafetyAnswerer extends Answerer {
         }
 
         _communityRegexes = new HashSet<>();
+        invAssumptions.forEach(clauses -> clauses.getClauses()
+                .forEach(c -> _communityRegexes.addAll(c.getCommunities().getRegexConstraints())));
         _asPathRegexes = new HashSet<>(); // not included in the NetworkClause nor Invariant class yet
         _targets.values().forEach(clauses -> clauses.getClauses()
                 .forEach(c -> _communityRegexes.addAll(c.getCommunities().getRegexConstraints())));
@@ -101,8 +107,8 @@ public final class SafetyAnswerer extends Answerer {
                     // need to create variables to adhere to types
                     return (Map.Entry<Configuration, Collection<RoutingPolicy>>) new AbstractMap.SimpleImmutableEntry<Configuration, Collection<RoutingPolicy>>(config, policies);
                 } ).toList(),
-                Set.of(),
-                _asPathRegexes.stream().map(RegexConstraint::getRegex).collect(ImmutableSet.toImmutableSet()));
+                getCommunityVars(configs), // need to add atomic predicates for communities exclusive to the provided properties
+                _asPathRegexes.stream().map(RegexConstraint::getRegex).collect(ImmutableSet.toImmutableSet())); // should be empty, not handling as path yet
     }
 
     /// This function takes the provided invariants and builds them in the context of the current network and tbdd

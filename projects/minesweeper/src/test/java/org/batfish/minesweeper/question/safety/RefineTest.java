@@ -23,6 +23,11 @@ import org.batfish.minesweeper.CommunityVar;
 import org.batfish.minesweeper.ConfigAtomicPredicates;
 import org.batfish.minesweeper.bdd.TransferBDD;
 import org.batfish.minesweeper.question.searchroutepolicies.RegexConstraint;
+import org.batfish.minesweeper.question.verificationutilities.Edge;
+import org.batfish.minesweeper.question.verificationutilities.Invariant;
+import org.batfish.minesweeper.question.verificationutilities.Lightyear;
+import org.batfish.minesweeper.question.verificationutilities.Location;
+import org.batfish.minesweeper.question.verificationutilities.Node;
 import org.junit.Test;
 
 import java.util.AbstractMap;

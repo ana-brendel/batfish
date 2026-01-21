@@ -1,4 +1,4 @@
-package org.batfish.minesweeper.question.safety;
+package org.batfish.minesweeper.question.verificationutilities;
 
 import org.batfish.common.BatfishException;
 import org.batfish.datamodel.Ip;
@@ -49,7 +49,7 @@ public class Edge extends Location {
     }
 
     @Override
-    Edge copy() {
+    public Edge copy() {
         return new Edge(Ip.create(src.asLong()),Ip.create(dst.asLong()));
     }
 

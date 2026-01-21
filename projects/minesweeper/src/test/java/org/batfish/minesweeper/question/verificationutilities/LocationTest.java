@@ -1,4 +1,4 @@
-package org.batfish.minesweeper.question.safety;
+package org.batfish.minesweeper.question.verificationutilities;
 
 import org.batfish.datamodel.Ip;
 import org.junit.Before;

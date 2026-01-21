@@ -1,4 +1,4 @@
-package org.batfish.minesweeper.question.safety;
+package org.batfish.minesweeper.question.verificationutilities;
 
 import com.google.common.collect.ImmutableList;
 import net.sf.javabdd.BDD;

@@ -5,6 +5,11 @@ import org.batfish.common.BatfishException;
 import org.batfish.datamodel.Ip;
 import org.batfish.datamodel.routing_policy.RoutingPolicy;
 import org.batfish.minesweeper.bdd.TransferBDD;
+import org.batfish.minesweeper.question.verificationutilities.BDDString;
+import org.batfish.minesweeper.question.verificationutilities.Edge;
+import org.batfish.minesweeper.question.verificationutilities.Invariant;
+import org.batfish.minesweeper.question.verificationutilities.Location;
+import org.batfish.minesweeper.question.verificationutilities.Node;
 
 import java.util.HashMap;
 import java.util.LinkedList;
@@ -18,7 +23,7 @@ import static org.batfish.minesweeper.bdd.TransferBDDUtils.interpolate;
 
 public class Refine {
     private final TransferBDD tbdd;
-    private final Map<Ip,Node> nodes;
+    private final Map<Ip, Node> nodes;
     private final Set<Location> locations;
     private final Map<Edge, RoutingPolicy> imports;
     private final Map<Edge, RoutingPolicy> exports;

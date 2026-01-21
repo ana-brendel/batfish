@@ -1,4 +1,4 @@
-package org.batfish.minesweeper.question.safety;
+package org.batfish.minesweeper.question.verificationutilities;
 
 import com.fasterxml.jackson.annotation.JsonCreator;
 import com.fasterxml.jackson.annotation.JsonProperty;

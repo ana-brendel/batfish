@@ -1,4 +1,4 @@
-package org.batfish.minesweeper.question.safety;
+package org.batfish.minesweeper.question.verificationutilities;
 
 import net.sf.javabdd.BDD;
 import net.sf.javabdd.BDDPairing;
@@ -8,6 +8,7 @@ import org.batfish.datamodel.routing_policy.RoutingPolicy;
 import org.batfish.minesweeper.bdd.BDDRoute;
 import org.batfish.minesweeper.bdd.TransferBDD;
 import org.batfish.minesweeper.bdd.TransferReturn;
+
 import java.util.AbstractMap;
 import java.util.HashMap;
 import java.util.List;

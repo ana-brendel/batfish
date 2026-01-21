@@ -1,4 +1,4 @@
-package org.batfish.minesweeper.question.safety;
+package org.batfish.minesweeper.question.verificationutilities;
 
 import org.batfish.common.BatfishException;
 import org.batfish.datamodel.Ip;
@@ -60,7 +60,7 @@ public class Node extends Location {
     }
 
     @Override
-    Node copy() {
+    public Node copy() {
         return new Node(ips, name);
     }
 

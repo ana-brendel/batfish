@@ -4,6 +4,8 @@ import com.fasterxml.jackson.annotation.JsonCreator;
 import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import org.batfish.datamodel.questions.Question;
+import org.batfish.minesweeper.question.verificationutilities.Invariant;
+import org.batfish.minesweeper.question.verificationutilities.Location;
 
 import javax.annotation.Nonnull;
 import javax.annotation.Nullable;

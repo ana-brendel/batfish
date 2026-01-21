@@ -31,6 +31,7 @@ import org.batfish.datamodel.routing_policy.statement.If;
 import org.batfish.datamodel.routing_policy.statement.Statement;
 import org.batfish.datamodel.routing_policy.statement.Statements;
 import org.batfish.minesweeper.bdd.TransferBDD;
+import org.batfish.minesweeper.question.verificationutilities.Node;
 
 import java.util.HashMap;
 import java.util.List;

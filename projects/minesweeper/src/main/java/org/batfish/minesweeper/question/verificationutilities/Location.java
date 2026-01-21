@@ -1,4 +1,4 @@
-package org.batfish.minesweeper.question.safety;
+package org.batfish.minesweeper.question.verificationutilities;
 
 import com.fasterxml.jackson.annotation.JsonCreator;
 import com.fasterxml.jackson.annotation.JsonProperty;
@@ -6,6 +6,7 @@ import com.google.common.annotations.VisibleForTesting;
 import com.google.common.collect.ImmutableList;
 import org.batfish.common.BatfishException;
 import org.batfish.datamodel.Ip;
+import org.batfish.minesweeper.question.safety.Infer;
 
 import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
@@ -15,7 +16,7 @@ import java.util.Optional;
 import java.util.Set;
 
 public abstract class Location implements Comparable<Location> {
-    abstract Location copy();
+    public abstract Location copy();
 
     /// Builder for location to take in the location independent of the network info
     public static class Builder {

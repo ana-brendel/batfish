@@ -11,6 +11,12 @@ import org.batfish.datamodel.bgp.Ipv4UnicastAddressFamily;
 import org.batfish.datamodel.routing_policy.RoutingPolicy;
 import org.batfish.minesweeper.bdd.ModelGeneration;
 import org.batfish.minesweeper.bdd.TransferBDD;
+import org.batfish.minesweeper.question.verificationutilities.BDDString;
+import org.batfish.minesweeper.question.verificationutilities.Edge;
+import org.batfish.minesweeper.question.verificationutilities.Invariant;
+import org.batfish.minesweeper.question.verificationutilities.Lightyear;
+import org.batfish.minesweeper.question.verificationutilities.Location;
+import org.batfish.minesweeper.question.verificationutilities.Node;
 
 import javax.annotation.Nonnull;
 import java.util.Collection;
@@ -20,19 +26,22 @@ import java.util.Hashtable;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.Queue;
 import java.util.Set;
 import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 import static java.util.Objects.isNull;
-import static org.batfish.minesweeper.question.safety.Invariant.strongestCommonImplicant;
+import static java.util.Objects.nonNull;
+import static org.batfish.minesweeper.question.verificationutilities.Invariant.strongestCommonImplicant;
 
 public class Infer {
     public final BDDString.Shortcuts shortcuts;
     private final TransferBDD tbdd;
 
-    private final Map<Ip,Node> nodes = new HashMap<>();
+    private final Map<Ip, Node> nodes = new HashMap<>();
     private final Set<Location> locations = new HashSet<>();
     private final Map<Edge, RoutingPolicy> imports = new HashMap<>();
     private final Map<Edge, RoutingPolicy> exports = new HashMap<>();
@@ -70,31 +79,39 @@ public class Infer {
         }
     }
 
-    private void processConfigs(Map<String, Configuration> configs) {
+    private void processConfigs(@Nonnull Map<String, Configuration> configs) {
         for (String nodeName : configs.keySet()) {
             Configuration config = configs.get(nodeName);
-            List<BgpProcess> bgpProcesses = config.getVrfs().values().stream().map(Vrf::getBgpProcess).toList();
+            // no need to evaluate any configs which are null or don't yield anything
+            if (isNull(config) || isNull(config.getVrfs())) continue;
+            // filter out any null VRFs
+            Stream<Vrf> forwarding = config.getVrfs().values().stream().filter(Objects::nonNull);
+            // gets the bgp processes and filters out any null processes
+            List<BgpProcess> bgpProcesses = forwarding.map(Vrf::getBgpProcess).filter(Objects::nonNull).toList();
+            // note, getRouterId's return value is Nonnull
             Set<Ip> nodeIps = bgpProcesses.stream().map(BgpProcess::getRouterId).collect(Collectors.toSet());
             // gather the policies
             bgpProcesses.stream().flatMap(proc -> proc.getActiveNeighbors().entrySet().stream())
+                    // make sure any null neighbors are filtered out, and filter out any node without an ip address
+                    .filter(entry -> nonNull(entry) && nonNull(entry.getKey()) && nonNull(entry.getValue()) &&
+                            (nodeIps.stream().findFirst().isPresent() || nonNull(entry.getValue().getLocalIp())))
                     .forEach(entry -> {
-                        Ip nodeIp = entry.getValue().getLocalIp();
-                        if (nodeIp == null) {
-                            nodeIp = nodeIps.stream().findFirst().orElse(null);
-                            if (nodeIp == null)
-                                throw new BatfishException("Infer.processConfigs() - Cannot find IP address for node.");
-                        }
+                        // at least one of these will be non-null based on filter, null pointer exception should never be thrown
+                        Ip nodeIp = nonNull(entry.getValue().getLocalIp()) ?
+                                entry.getValue().getLocalIp() : nodeIps.stream().findFirst().get();
                         nodeIps.add(nodeIp);
                         Edge incoming = new Edge(entry.getKey(),nodeIp);
                         Edge outgoing = new Edge(nodeIp,entry.getKey());
-                        Ipv4UnicastAddressFamily unicast = (entry.getValue().getIpv4UnicastAddressFamily());
+                        Ipv4UnicastAddressFamily unicast = entry.getValue().getIpv4UnicastAddressFamily();
                         imports.put(incoming,isNull(unicast) || isNull(unicast.getImportPolicy())
+                                || isNull(config.getRoutingPolicies()) || isNull(config.getRoutingPolicies().get(unicast.getImportPolicy()))
                                 ? new RoutingPolicy("from null",config)
                                 : config.getRoutingPolicies().get(unicast.getImportPolicy()));
                         exports.put(outgoing,isNull(unicast) || isNull(unicast.getExportPolicy())
+                                || isNull(config.getRoutingPolicies()) || isNull(config.getRoutingPolicies().get(unicast.getExportPolicy()))
                                 ? new RoutingPolicy("from null",config)
                                 : config.getRoutingPolicies().get(unicast.getExportPolicy()));
-                        // add any where edge is going into this node (i.e. the incoming edge above)
+                        // add anywhere edge is going into this node (i.e. the incoming edge above)
                         locations.add(new Edge(entry.getKey(),nodeIp));
                     });
             Node node = new Node(nodeIps,nodeName);
@@ -103,7 +120,7 @@ public class Infer {
         }
     }
 
-    public Infer(TransferBDD tbdd, Map<String, Configuration> configs) {
+    public Infer(@Nonnull TransferBDD tbdd, @Nonnull Map<String, Configuration> configs) {
         this.tbdd = tbdd;
         processConfigs(configs);
         shortcuts = BDDString.Shortcuts.ofConfigs(configs.values());

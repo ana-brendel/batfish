@@ -425,13 +425,13 @@ public class Invariant {
     }
 
     /**
-     * Synthesizes the weakest precondition for this invariant to hold after the provided policy is executed. Note, this
-     * method does not guarantee that there exists a route that satisfies the invariant, just that any route which is permitted
-     * will satisfy the invariant.
+     * Synthesizes the weakest precondition for this invariant to hold after the provided policy is executed. If
+     * the includeDenied flag is false, then only preconditions which result in routes that are permitted is considered.
      * @param policy weakest precondition for this policy
+     * @param includeDenied true if denied routes should be included
      * @return weakest precondition for this invariant to hold on policy
      */
-    public Invariant weakestPrecondition(@Nonnull RoutingPolicy policy) {
+    public Invariant weakestPrecondition(@Nonnull RoutingPolicy policy, boolean includeDenied) {
         if (policy.getStatements().isEmpty()) {
             if (policy.getOwner() == null || policy.getOwner().getDefaultInboundAction() == LineAction.PERMIT) {
                 return this.copy(); // default is permit, so invariant itself is the weakest precondition
@@ -442,16 +442,27 @@ public class Invariant {
             TransferBDD.Context context = TransferBDD.Context.forPolicy(policy);
             List<TransferReturn> paths;
             try {
-                paths = tbdd.computePaths(policy.getStatements(),context,true);
+                paths = tbdd.computePaths(policy.getStatements(), context, true);
             } catch (Exception e) {
                 String name = policy.getOwner() != null ? policy.getOwner().getHostname() : "policy owner null";
                 throw new BatfishException("Unexpected error analyzing policy " + policy.getName() + " in node " + name, e);
             }
-            BDD acceptedWP = TransferBDDUtils.weakestPrecondition(paths,this.wellFormedBDD(),tbdd,
-                    (post,path) -> conditionsForConstraint(tbdd,post,path.getOutputRoute()));
-            BDD weakest = acceptedWP.or(TransferBDDUtils.deniedRoutes(paths,tbdd));
-            return new Invariant(tbdd,weakest);
+            BDD acceptedWP = TransferBDDUtils.weakestPrecondition(paths, this.wellFormedBDD(), tbdd,
+                    (post, path) -> conditionsForConstraint(tbdd, post, path.getOutputRoute()));
+
+            return new Invariant(tbdd, includeDenied ? acceptedWP.or(TransferBDDUtils.deniedRoutes(paths, tbdd)) : acceptedWP);
         }
+    }
+
+    /**
+     * Synthesizes the weakest precondition for this invariant to hold after the provided policy is executed. Note, this
+     * method does not guarantee that there exists a route that satisfies the invariant, just that any route which is permitted
+     * will satisfy the invariant.
+     * @param policy weakest precondition for this policy
+     * @return weakest precondition for this invariant to hold on policy
+     */
+    public Invariant weakestPrecondition(@Nonnull RoutingPolicy policy) {
+        return this.weakestPrecondition(policy,true);
     }
 
     /**

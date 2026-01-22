@@ -5,12 +5,16 @@ import org.apache.logging.log4j.Logger;
 import org.batfish.common.Answerer;
 import org.batfish.common.NetworkSnapshot;
 import org.batfish.common.plugin.IBatfish;
+import org.batfish.datamodel.Configuration;
 import org.batfish.datamodel.PrefixSpace;
 import org.batfish.datamodel.answers.AnswerElement;
-import org.batfish.minesweeper.question.safety.SafetyAnswerer;
+import org.batfish.minesweeper.ConfigAtomicPredicates;
+import org.batfish.minesweeper.bdd.TransferBDD;
+import org.batfish.minesweeper.question.safety.Infer;
 import org.batfish.minesweeper.question.searchroutepolicies.RegexConstraint;
 import org.batfish.minesweeper.question.verificationutilities.Invariant;
 import org.batfish.minesweeper.question.verificationutilities.Location;
+import org.batfish.specifier.SpecifierContext;
 
 import javax.annotation.Nonnull;
 import java.util.HashMap;
@@ -18,6 +22,8 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+
+import static org.batfish.minesweeper.question.verificationutilities.Setup.getConfigAtomicPredicates;
 
 public class LivenessAnswerer extends Answerer {
     private static final Logger LOGGER = LogManager.getLogger(LivenessAnswerer.class);
@@ -55,6 +61,11 @@ public class LivenessAnswerer extends Answerer {
     }
     @Override
     public AnswerElement answer(NetworkSnapshot snapshot) {
+        SpecifierContext context = _batfish.specifierContext(snapshot);
+        Map<String, Configuration> configs = context.getConfigs();
+        ConfigAtomicPredicates configAPs = getConfigAtomicPredicates(_communityRegexes,_asPathRegexes,configs.values());
+        TransferBDD tbdd = new TransferBDD(configAPs);
+        Infer verifier = new Infer(tbdd,configs);
         return null;
     }
 }

@@ -75,6 +75,6 @@ public final class SafetyQuestion extends Question {
     @JsonIgnore
     @Override
     public String getName() {
-        return "verify";
+        return "safety";
     }
 }

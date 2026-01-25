@@ -27,6 +27,7 @@ import org.batfish.minesweeper.question.verificationutilities.Edge;
 import org.batfish.minesweeper.question.verificationutilities.Invariant;
 import org.batfish.minesweeper.question.verificationutilities.Lightyear;
 import org.batfish.minesweeper.question.verificationutilities.Location;
+import org.batfish.minesweeper.question.verificationutilities.NetworkInfo;
 import org.batfish.minesweeper.question.verificationutilities.Node;
 import org.batfish.minesweeper.question.verificationutilities.TestConfigConstructionUtils;
 import org.junit.Test;
@@ -623,7 +624,8 @@ public class RefineTest {
 
         String p_str = "25.13.0.0/16";
         TestConfigConstructionUtils.Networkv2 net = networkA(entry,exit,NODE_A,NODE_B,NODE_C,p_str);
-        Infer verifier = new Infer(net.tbdd(),configInput(net.configs()));
+        NetworkInfo info = net.getInfo();
+        Infer verifier = info.toInfer();
         Lightyear lightyear = verifier.checker();
 
         Edge target = new Edge(NODE_C.getSingleIp(),exit);
@@ -653,7 +655,8 @@ public class RefineTest {
 
         String p_str = "25.13.0.0/16";
         TestConfigConstructionUtils.Networkv2 net = networkB(entry,exit,NODE_A,NODE_B,NODE_C,p_str);
-        Infer verifier = new Infer(net.tbdd(),configInput(net.configs()));
+        NetworkInfo info = net.getInfo();
+        Infer verifier = info.toInfer();
         Lightyear lightyear = verifier.checker();
 
         Edge target = new Edge(NODE_C.getSingleIp(),exit);
@@ -683,7 +686,8 @@ public class RefineTest {
 
         String p_str = "25.13.0.0/16";
         TestConfigConstructionUtils.Networkv2 net = networkC(entry,exit,NODE_A,NODE_B,NODE_C,p_str);
-        Infer verifier = new Infer(net.tbdd(),configInput(net.configs()));
+        NetworkInfo info = net.getInfo();
+        Infer verifier = info.toInfer();
         Lightyear lightyear = verifier.checker();
 
         Edge target = new Edge(NODE_C.getSingleIp(),exit);
@@ -713,7 +717,8 @@ public class RefineTest {
 
         String p_str = "25.13.0.0/16";
         TestConfigConstructionUtils.Networkv2 net = networkD(entry,exit,NODE_A,NODE_B,NODE_C,p_str);
-        Infer verifier = new Infer(net.tbdd(),configInput(net.configs()));
+        NetworkInfo info = net.getInfo();
+        Infer verifier = info.toInfer();
         Lightyear lightyear = verifier.checker();
 
         Edge target = new Edge(NODE_C.getSingleIp(),exit);
@@ -744,7 +749,8 @@ public class RefineTest {
 
         String p_str = "25.13.0.0/16";
         TestConfigConstructionUtils.Networkv2 net = networkE(entry,exit,NODE_A,NODE_B,NODE_C,p_str);
-        Infer verifier = new Infer(net.tbdd(),configInput(net.configs()));
+        NetworkInfo info = net.getInfo();
+        Infer verifier = info.toInfer();
         Lightyear lightyear = verifier.checker();
 
         PrefixSpace PREFIX = new PrefixSpace(PrefixRange.fromPrefix(Prefix.parse(p_str)));
@@ -773,7 +779,8 @@ public class RefineTest {
 
         String p_str = "25.13.0.0/16";
         TestConfigConstructionUtils.Networkv2 net = networkF(entry,exit,NODE_A,NODE_B,NODE_C,p_str);
-        Infer verifier = new Infer(net.tbdd(),configInput(net.configs()));
+        NetworkInfo info = net.getInfo();
+        Infer verifier = info.toInfer();
         Lightyear lightyear = verifier.checker();
 
         PrefixSpace PREFIX = new PrefixSpace(PrefixRange.fromPrefix(Prefix.parse(p_str)));
@@ -802,7 +809,8 @@ public class RefineTest {
 
         String p_str = "25.13.0.0/16";
         TestConfigConstructionUtils.Networkv2 net = networkG(entry,exit,NODE_A,NODE_B,NODE_C,p_str);
-        Infer verifier = new Infer(net.tbdd(),configInput(net.configs()));
+        NetworkInfo info = net.getInfo();
+        Infer verifier = info.toInfer();
         Lightyear lightyear = verifier.checker();
 
         PrefixSpace PREFIX = new PrefixSpace(PrefixRange.fromPrefix(Prefix.parse(p_str)));
@@ -832,7 +840,8 @@ public class RefineTest {
         String p_str = "25.13.0.0/16";
         String q_str = "13.25.0.0/16";
         TestConfigConstructionUtils.Networkv2 net = networkH(entry,exit,NODE_A,NODE_B,NODE_C,p_str,q_str,true);
-        Infer verifier = new Infer(net.tbdd(),configInput(net.configs()));
+        NetworkInfo info = net.getInfo();
+        Infer verifier = info.toInfer();
         Lightyear lightyear = verifier.checker();
 
         Invariant.ClauseBuilder PREFIX_P = Invariant.clauseBuilder().matchPrefix(new PrefixSpace(PrefixRange.fromPrefix(Prefix.parse(p_str))));
@@ -863,7 +872,8 @@ public class RefineTest {
         String p_str = "25.13.0.0/16";
         String q_str = "13.25.0.0/16";
         TestConfigConstructionUtils.Networkv2 net = networkI(entry,exit,NODE_A,NODE_B,NODE_C,p_str,q_str);
-        Infer verifier = new Infer(net.tbdd(),configInput(net.configs()));
+        NetworkInfo info = net.getInfo();
+        Infer verifier = info.toInfer();
         Lightyear lightyear = verifier.checker();
 
         Invariant.ClauseBuilder PREFIX_P = Invariant.clauseBuilder().matchPrefix(new PrefixSpace(PrefixRange.fromPrefix(Prefix.parse(p_str))));

@@ -16,7 +16,6 @@ import org.batfish.datamodel.table.TableMetadata;
 import org.batfish.minesweeper.CommunityVar;
 import org.batfish.minesweeper.ConfigAtomicPredicates;
 import org.batfish.minesweeper.communities.CommunityMatchExprVarCollector;
-import org.batfish.minesweeper.question.safety.Infer;
 import org.batfish.minesweeper.question.searchroutepolicies.RegexConstraint;
 
 import java.util.AbstractMap;
@@ -64,18 +63,18 @@ public class Setup {
     }
 
     /// This function takes the provided invariants and builds them in the context of the current network and tbdd
-    public static Map.Entry<Location, Invariant> buildInvariant(Infer verifier, boolean wpQuery, Map.Entry<Location.Builder, Invariant.Builder> entry) {
+    public static Map.Entry<Location, Invariant> buildInvariant(NetworkInfo info, boolean wpQuery, Map.Entry<Location.Builder, Invariant.Builder> entry) {
         RoutingPolicy policy;
-        Location location = entry.getKey().instantiate(verifier);
+        Location location = entry.getKey().instantiate(info);
         boolean getImportPolicy = (location instanceof Edge) != wpQuery;
         if (location instanceof Edge edge) {
-            policy = verifier.getPolicy(edge,getImportPolicy);
+            policy = info.getPolicy(edge,getImportPolicy);
         } else if (location instanceof Node node) {
-            policy = verifier.getPolicy(verifier.getAnyIncomingEdge(node),getImportPolicy);
+            policy = info.getPolicy(info.getAnyIncomingEdge(node),getImportPolicy);
         } else {
             throw new BatfishException("This should be unreachable.");
         }
-        return new AbstractMap.SimpleEntry<>(entry.getKey().instantiate(verifier),entry.getValue().build(verifier.getTBDD(),policy));
+        return new AbstractMap.SimpleEntry<>(entry.getKey().instantiate(info),entry.getValue().build(info.tbdd,policy));
     }
 
     /// In cases where there is some counterexample, format counterexample in a more readable manner

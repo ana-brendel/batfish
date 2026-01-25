@@ -2,15 +2,12 @@ package org.batfish.minesweeper.question.safety;
 
 import net.sf.javabdd.BDD;
 import org.batfish.common.BatfishException;
-import org.batfish.datamodel.BgpProcess;
 import org.batfish.datamodel.Bgpv4Route;
-import org.batfish.datamodel.Configuration;
 import org.batfish.datamodel.Ip;
-import org.batfish.datamodel.Vrf;
-import org.batfish.datamodel.bgp.Ipv4UnicastAddressFamily;
 import org.batfish.datamodel.routing_policy.RoutingPolicy;
 import org.batfish.minesweeper.bdd.ModelGeneration;
 import org.batfish.minesweeper.bdd.TransferBDD;
+import org.batfish.minesweeper.question.liveness.Path;
 import org.batfish.minesweeper.question.verificationutilities.BDDString;
 import org.batfish.minesweeper.question.verificationutilities.Edge;
 import org.batfish.minesweeper.question.verificationutilities.Invariant;
@@ -19,22 +16,16 @@ import org.batfish.minesweeper.question.verificationutilities.Location;
 import org.batfish.minesweeper.question.verificationutilities.Node;
 
 import javax.annotation.Nonnull;
-import java.util.Collection;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Hashtable;
 import java.util.LinkedList;
-import java.util.List;
 import java.util.Map;
-import java.util.Objects;
 import java.util.Optional;
 import java.util.Queue;
 import java.util.Set;
 import java.util.stream.Collectors;
-import java.util.stream.Stream;
 
-import static java.util.Objects.isNull;
-import static java.util.Objects.nonNull;
 import static org.batfish.minesweeper.question.verificationutilities.Invariant.strongestCommonImplicant;
 
 public class Infer {
@@ -67,11 +58,6 @@ public class Infer {
             }
             return false;
         }
-//        public Map<Location,String> weakDisplay(List<String> prefixes) {
-//            Map<Location,String> strings = new HashMap<>();
-//            invariants.forEach((loc,inv) -> strings.put(loc,inv.weakDisplay(prefixes)));
-//            return strings;
-//        }
         public Map<Location,String> strings(Infer infer) {
             Map<Location,String> strings = new HashMap<>();
             invariants.forEach((loc,inv) -> strings.put(loc,inv.toString(false,infer.shortcuts)));
@@ -79,60 +65,14 @@ public class Infer {
         }
     }
 
-    private void processConfigs(@Nonnull Map<String, Configuration> configs) {
-        for (String nodeName : configs.keySet()) {
-            Configuration config = configs.get(nodeName);
-            // no need to evaluate any configs which are null or don't yield anything
-            if (isNull(config) || isNull(config.getVrfs())) continue;
-            // filter out any null VRFs
-            Stream<Vrf> forwarding = config.getVrfs().values().stream().filter(Objects::nonNull);
-            // gets the bgp processes and filters out any null processes
-            List<BgpProcess> bgpProcesses = forwarding.map(Vrf::getBgpProcess).filter(Objects::nonNull).toList();
-            // note, getRouterId's return value is Nonnull
-            Set<Ip> nodeIps = bgpProcesses.stream().map(BgpProcess::getRouterId).collect(Collectors.toSet());
-            // gather the policies
-            bgpProcesses.stream().flatMap(proc -> proc.getActiveNeighbors().entrySet().stream())
-                    // make sure any null neighbors are filtered out, and filter out any node without an ip address
-                    .filter(entry -> nonNull(entry) && nonNull(entry.getKey()) && nonNull(entry.getValue()) &&
-                            (nodeIps.stream().findFirst().isPresent() || nonNull(entry.getValue().getLocalIp())))
-                    .forEach(entry -> {
-                        // at least one of these will be non-null based on filter, null pointer exception should never be thrown
-                        Ip nodeIp = nonNull(entry.getValue().getLocalIp()) ?
-                                entry.getValue().getLocalIp() : nodeIps.stream().findFirst().get();
-                        nodeIps.add(nodeIp);
-                        Edge incoming = new Edge(entry.getKey(),nodeIp);
-                        Edge outgoing = new Edge(nodeIp,entry.getKey());
-                        Ipv4UnicastAddressFamily unicast = entry.getValue().getIpv4UnicastAddressFamily();
-                        imports.put(incoming,isNull(unicast) || isNull(unicast.getImportPolicy())
-                                || isNull(config.getRoutingPolicies()) || isNull(config.getRoutingPolicies().get(unicast.getImportPolicy()))
-                                ? new RoutingPolicy("from null",config)
-                                : config.getRoutingPolicies().get(unicast.getImportPolicy()));
-                        exports.put(outgoing,isNull(unicast) || isNull(unicast.getExportPolicy())
-                                || isNull(config.getRoutingPolicies()) || isNull(config.getRoutingPolicies().get(unicast.getExportPolicy()))
-                                ? new RoutingPolicy("from null",config)
-                                : config.getRoutingPolicies().get(unicast.getExportPolicy()));
-                        // add anywhere edge is going into this node (i.e. the incoming edge above)
-                        locations.add(new Edge(entry.getKey(),nodeIp));
-                    });
-            Node node = new Node(nodeIps,nodeName);
-            locations.add(node); // add node
-            nodeIps.forEach(nodeIp -> nodes.put(nodeIp,node));
-        }
-    }
-
-    public Infer(@Nonnull TransferBDD tbdd, @Nonnull Map<String, Configuration> configs) {
-        this.tbdd = tbdd;
-        processConfigs(configs);
-        shortcuts = BDDString.Shortcuts.ofConfigs(configs.values());
-        // default assumption of True for incoming edges
-        for (Location location : locations) {
-            if (location instanceof Edge edge) {
-                // if the edge's source is not in the set of nodes (i.e. out of network)
-                if (!nodes.containsKey(edge.getSrc())) {
-                    assumptions.put(edge,new Invariant(tbdd));
-                }
-            }
-        }
+    public Infer(@Nonnull Path.Context context, BDDString.Shortcuts shortcuts, @Nonnull Map<Ip, Node> nodes, @Nonnull Set<Location> locations) {
+        this.tbdd = context.tbdd();
+        this.shortcuts = shortcuts;
+        this.nodes.putAll(nodes);
+        this.locations.addAll(locations);
+        this.imports.putAll(context.imports());
+        this.exports.putAll(context.exports());
+        this.assumptions.putAll(context.assumptions());
     }
 
     public Lightyear checker() {
@@ -140,82 +80,13 @@ public class Infer {
     }
 
     /// Added for pybatfish question development
-    public TransferBDD getTBDD() {
-        return tbdd;
-    }
-
-    /// Added for pybatfish question development
-    public RoutingPolicy getPolicy(Edge location, boolean getImport) {
-        if (getImport) {
-            return imports.getOrDefault(location,null);
-        } else {
-            return exports.getOrDefault(location,null);
-        }
-    }
-
-    /// Added for pybatfish question development
-    public Optional<Collection<Ip>> ipsFromNodeName(String name) {
-        for (Location location : locations) {
-            if (location instanceof Node node && node.getName().equals(name))
-                return Optional.of(node.getIps());
-        }
-        return Optional.empty();
-    }
-
-    /// Added for pybatfish question development
-    public boolean containsPolicy(Edge edge) {
-        return imports.containsKey(edge) || exports.containsKey(edge);
-    }
-
-    /// Added for pybatfish question development
-    public Edge getAnyIncomingEdge(Node node) {
-        for (Location location : locations) {
-            if (location instanceof Edge edge) {
-                if (edge.isDst(node)) {
-                    return edge.copy();
-                }
-            }
-        }
-        return null;
-    }
-
-    /// Added for pybatfish question development
-    public Map<Location, Invariant> getTargets() { return targets; }
-
-    /// Added for pybatfish question development
-    public Map<Location, Invariant> getAssumptions() { return assumptions; }
-
-    /**
-     * Add a location which should allow for any route
-     * @param anchor location where invariant should be true
-     * @return updated Verified object
-     */
-    public Infer addAnchor(Location anchor) {
-        return this.addAssumption(anchor,new Invariant(this.tbdd));
-    }
-
-    public Infer addAssumption(@Nonnull Location location, @Nonnull Invariant assumption) {
-        assumptions.put(location,assumption);
-        return this;
-    }
-
-    public void addAssumption(@Nonnull Location.Builder locationBuilder, @Nonnull Invariant.Builder assumption) {
-        Location location = locationBuilder.instantiate(this);
-        RoutingPolicy policy;
-        if (location instanceof Node node) {
-            Optional<Edge> incoming = imports.keySet().stream().filter(e -> e.isDst(node)).findFirst();
-            if (incoming.isPresent()) {
-                policy = imports.get(incoming.get());
-            } else {
-                Optional<Edge> outgoing = exports.keySet().stream().filter(e -> e.isSrc(node)).findFirst();
-                policy = outgoing.map(imports::get).orElse(null);
-            }
-        } else {
-            assert location instanceof Edge;
-            policy = exports.getOrDefault(location,imports.getOrDefault(location,null));
-        }
-        this.addAssumption(location,assumption.build(tbdd,policy));
-    }
+//    public RoutingPolicy getPolicy(Edge location, boolean getImport) {
+//        if (getImport) {
+//            return imports.getOrDefault(location,null);
+//        } else {
+//            return exports.getOrDefault(location,null);
+//        }
+//    }
 
     /**
      * Add a property to be verified at provided location. If provided a node, this will add the node
@@ -361,22 +232,5 @@ public class Infer {
             result.put(location.copy(),base.get(location).copy());
         }
         return result;
-    }
-
-    public String displayNodes() {
-        StringBuilder builder = new StringBuilder();
-        Set<Node> done = new HashSet<>();
-        for (Node n : nodes.values().stream().sorted().toList()) {
-            if (!done.contains(n)) {
-                done.add(n);
-                builder.append("\n + ").append(n);
-                for (Location l : locations) {
-                    if (l instanceof Edge e && e.isSrc(n)) {
-                        builder.append("\n    - ").append(e.getDst());
-                    }
-                }
-            }
-        }
-        return builder.toString();
     }
 }

@@ -1,7 +1,14 @@
 package org.batfish.minesweeper.question.liveness;
 
+import com.google.common.annotations.VisibleForTesting;
+import com.google.common.collect.ImmutableMap;
+import net.sf.javabdd.BDD;
+import net.sf.javabdd.BDDFactory;
 import org.batfish.common.BatfishException;
+import org.batfish.datamodel.PrefixRange;
+import org.batfish.datamodel.PrefixSpace;
 import org.batfish.datamodel.routing_policy.RoutingPolicy;
+import org.batfish.minesweeper.bdd.BDDRoute;
 import org.batfish.minesweeper.bdd.TransferBDD;
 import org.batfish.minesweeper.question.verificationutilities.Edge;
 import org.batfish.minesweeper.question.verificationutilities.Invariant;
@@ -9,28 +16,75 @@ import org.batfish.minesweeper.question.verificationutilities.Location;
 import org.batfish.minesweeper.question.verificationutilities.Node;
 
 import javax.annotation.Nonnull;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
+import java.util.Optional;
+import java.util.Set;
 import java.util.Stack;
 
+import static org.batfish.minesweeper.bdd.TransferBDD.isRelevantForDestination;
+
 public class Path {
+    private final @Nonnull Context context;
     private final @Nonnull Location[] steps;
     private final @Nonnull Invariant[] properties;
 
-    private Path(Location[] steps, Invariant[] properties) {
+    private Path(Location[] steps, Invariant[] properties, @Nonnull Context context) {
         this.steps = steps == null ? new Location[0] : steps;
         this.properties = properties == null ? new Invariant[0] : properties;
+        this.context = context;
         if (this.steps.length != this.properties.length)
             throw new BatfishException("Path.constructor - " + this.steps.length +
                     " locations on the path and " + this.properties.length + " properties provided.");
     }
 
     public record Context(@Nonnull TransferBDD tbdd, @Nonnull Map<Location, Invariant> assumptions,
-                          @Nonnull Map<Edge, RoutingPolicy> imports, @Nonnull Map<Edge, RoutingPolicy> exports) {}
+                          @Nonnull Map<Edge, RoutingPolicy> imports, @Nonnull Map<Edge, RoutingPolicy> exports) {
+        public BDD prefixSpaceToBDD(PrefixSpace space) {
+            BDDRoute r = new BDDRoute(tbdd.getFactory(),tbdd.getConfigAtomicPredicates());
+            BDDFactory factory = r.getPrefix().getFactory();
+            BDD result = factory.zero();
+            for (PrefixRange range : space.getPrefixRanges()) {
+                BDD rangeBDD = isRelevantForDestination(r,range);
+                result = result.or(rangeBDD);
+            }
+            return result.and(r.wellFormednessConstraints(true));
+        }
+    }
 
     public static Builder builder(@Nonnull Context ctx) { return new Builder(ctx.tbdd(),ctx.imports(),ctx.exports(),ctx.assumptions()); }
 
-    public static class Builder {
+    /// Returns this if it is a valid path supported by the assumptions, otherwise returns empty.
+    public Optional<Path> isGoodPath() {
+        Invariant initialAssumption = context.assumptions().getOrDefault(steps[steps.length-1],new Invariant(context.tbdd()));
+        // returns this path if the assumption implies the condition needed to have a live path reach the target location
+        return properties[properties.length-1].impliedBy(initialAssumption) ? Optional.of(this) : Optional.empty();
+    }
+
+    /// Returns this if it is an interfering path according to the assumptions, otherwise returns empty.
+//    public Optional<Path> interferingPath() {
+//        Invariant initialAssumption = context.assumptions().getOrDefault(steps[steps.length-1],new Invariant(context.tbdd()));
+//        BDD conjunction = initialAssumption.wellFormedBDD().and(properties[properties.length-1].wellFormedBDD());
+//        // returns this path if the assumption implies the condition needed to have a live path reach the target location
+//        return conjunction.isZero() ? Optional.empty() : Optional.of(this);
+//    }
+
+    public String display() {
+        StringBuilder builder = new StringBuilder();
+        for (Location step : steps) {
+            if (step instanceof Edge edge) {
+                builder.insert(0,edge);
+            } else if (step instanceof Node node) {
+                builder.insert(0," [" + node + "] ");
+            }
+        }
+        return builder.toString();
+    }
+
+    @VisibleForTesting
+    public static class Builder implements Comparable<Builder> {
         private final @Nonnull TransferBDD tbdd;
         private final @Nonnull Map<Edge, RoutingPolicy> imports;
         private final @Nonnull Map<Edge, RoutingPolicy> exports;
@@ -38,18 +92,54 @@ public class Path {
         private final @Nonnull Map<Location, Invariant> assumptions;
 
         private Builder(@Nonnull TransferBDD tbdd, @Nonnull Map<Edge, RoutingPolicy> imports, @Nonnull Map<Edge, RoutingPolicy> exports,
-                        @Nonnull Map<Location, Invariant> assumptions) {
+                        @Nonnull Map<Location, Invariant> assumptions, @Nonnull Stack<Location> steps) {
             this.tbdd = tbdd;
-            this.imports = imports;
-            this.exports = exports;
-            this.assumptions = assumptions;
-            this.steps = new Stack<>();
+            this.imports = ImmutableMap.copyOf(imports);
+            this.exports = ImmutableMap.copyOf(exports);
+            this.assumptions = ImmutableMap.copyOf(assumptions);;
+            this.steps = copySteps(steps);
+        }
+
+        @VisibleForTesting
+        static Stack<Location> copySteps(Stack<Location> steps) {
+            Stack<Location> result = new Stack<>();
+            steps.forEach(loc -> result.push(loc.copy()));
+            return result;
+        }
+
+        private Builder(@Nonnull TransferBDD tbdd, @Nonnull Map<Edge, RoutingPolicy> imports, @Nonnull Map<Edge, RoutingPolicy> exports,
+                        @Nonnull Map<Location, Invariant> assumptions) {
+            this(tbdd,imports,exports,assumptions,new Stack<>());
+        }
+
+        // include loops for bad routes
+        public Set<Builder> expand(@Nonnull Set<Edge> potentialSteps) {
+            Set<Builder> result = new HashSet<>();
+            for (Location step : potentialSteps) {
+                Builder curr = new Builder(tbdd,imports,exports,assumptions,steps);
+                if (curr.addToPath(step))
+                    result.add(curr);
+            }
+            return result;
+        }
+
+        ///  Mainly included for testing purposes
+        public String display() {
+            StringBuilder builder = new StringBuilder();
+            for (Location step : steps) {
+                if (step instanceof Edge edge) {
+                    builder.insert(0,edge);
+                } else if (step instanceof Node node) {
+                    builder.insert(0," [" + node + "] ");
+                }
+            }
+            return builder.toString();
         }
 
         /// Adds the location to the path (going backwards from the target) if the path is valid,
         /// returns a boolean indicating if the path was updated
-        public boolean addToPath(Location next) {
-            Location previous = steps.peek();
+        public boolean addToPath(@Nonnull Location next) {
+            Location previous = steps.isEmpty() ? null : steps.peek();
             if (previous == null) {
                 // first node in path
                 steps.push(next.copy());
@@ -60,13 +150,13 @@ public class Path {
                 return false;
             } else if (next instanceof Edge incomingToPrevious && previous instanceof Node previousNode) {
                 // previous location is a node, so the next location should be the edge going into it
-                if (incomingToPrevious.isDst(previousNode) && imports.containsKey(incomingToPrevious)) {
+                if (incomingToPrevious.isDst(previousNode)) {
                     steps.push(next.copy());
                     return true;
                 } // otherwise falls through to false
             } else if (next instanceof Node outgoingFromNode && previous instanceof Edge outgoingEdge) {
                 // previous location is an edge, so the next location should be the node it came from
-                if (outgoingEdge.isSrc(outgoingFromNode) && exports.containsKey(outgoingEdge)) {
+                if (outgoingEdge.isSrc(outgoingFromNode)) {
                     steps.push(next.copy());
                     return true;
                 } // otherwise falls through to false
@@ -78,22 +168,18 @@ public class Path {
 
         /// Populates path builder from a list of locations (starting with the target location at index 0),
         /// returns boolean indicating if path builder was updated (i.e. path was valid)
-        public boolean fromList(List<Location> steps) {
-            if (steps == null) {
-                this.steps.clear();
-                return false;
-            } else {
-                for (Location next : steps) {
-                    if (!this.addToPath(next)) {
-                        this.steps.clear();
-                        return false;
-                    }
+        public boolean fromList(@Nonnull List<Location> steps) {
+            for (Location next : steps) {
+                if (!this.addToPath(next)) {
+                    this.steps.clear();
+                    return false;
                 }
-                return true;
             }
+            return true;
         }
 
-        /// Builds a path object according to the builder. If there is no path that can be constructed, a null is returned.
+        /// Builds a path object according to the builder. This includes inferring the invariants, all paths
+        /// go to the outside of the network.
         public Path build(@Nonnull Location location, @Nonnull Invariant target) {
             if (steps.isEmpty()) {
                 return null;
@@ -122,7 +208,34 @@ public class Path {
                 predicates[i] = post.weakestPrecondition(policy,false);
             }
             Invariant initialAssumption = assumptions.getOrDefault(locations[locations.length-1],new Invariant(tbdd));
-            return predicates[predicates.length-1].impliedBy(initialAssumption) ? new Path(locations,predicates) : null;
+            //return predicates[predicates.length-1].impliedBy(initialAssumption) ? new Path(locations,predicates) : null;
+            return new Path(locations,predicates,new Context(tbdd,assumptions,imports,exports));
+        }
+
+        @Override
+        public boolean equals(Object obj) {
+            if (obj instanceof Builder other && other.steps.size() == this.steps.size()) {
+                for (int i = 0; i < this.steps.size(); i++) {
+                    if (!this.steps.elementAt(i).equals(other.steps.elementAt(i)))
+                        return false;
+                }
+                return true;
+            } else {
+                return false;
+            }
+        }
+
+        public Optional<Location> previous() {
+            return steps.isEmpty() ? Optional.empty() : Optional.of(steps.peek().copy());
+        }
+        @Override
+        public int hashCode() {
+            return Objects.hash(steps);
+        }
+
+        @Override
+        public int compareTo(Builder o) {
+            return Integer.compare(this.steps.size(), o.steps.size());
         }
     }
 }

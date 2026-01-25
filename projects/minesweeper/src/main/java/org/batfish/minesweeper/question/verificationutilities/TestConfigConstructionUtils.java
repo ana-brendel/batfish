@@ -45,6 +45,9 @@ public class TestConfigConstructionUtils {
             }
             return result;
         }
+        public NetworkInfo getInfo() {
+            return new NetworkInfo(this.tbdd(), configInput());
+        }
     }
 
     public record Networkv2(TransferBDD tbdd, Map<Node, Configuration> configs, RoutingPolicy template, List<String> prefixes) {
@@ -54,6 +57,9 @@ public class TestConfigConstructionUtils {
                 result.put(node.getName(),configs.get(node));
             }
             return result;
+        }
+        public NetworkInfo getInfo() {
+            return new NetworkInfo(this.tbdd(), configInput());
         }
     }
 

@@ -4,6 +4,7 @@ import net.sf.javabdd.BDD;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.batfish.common.Answerer;
+import org.batfish.common.BatfishException;
 import org.batfish.common.NetworkSnapshot;
 import org.batfish.common.plugin.IBatfish;
 import org.batfish.datamodel.Bgpv4Route;
@@ -16,6 +17,7 @@ import org.batfish.minesweeper.bdd.TransferBDD;
 import org.batfish.minesweeper.question.searchroutepolicies.RegexConstraint;
 import org.batfish.minesweeper.question.verificationutilities.Invariant;
 import org.batfish.minesweeper.question.verificationutilities.Location;
+import org.batfish.minesweeper.question.verificationutilities.NetworkInfo;
 import org.batfish.minesweeper.question.verificationutilities.Setup;
 import org.batfish.specifier.SpecifierContext;
 
@@ -66,64 +68,84 @@ public final class SafetyAnswerer extends Answerer {
                 .forEach(c -> _communityRegexes.addAll(c.getCommunities().getRegexConstraints())));
     }
 
-    /// Gather the answer element needed for a question return
-    private TableAnswerElement getAnswerElement(
-            boolean refinementOccurred, Map<Location, Optional<Bgpv4Route>> checks, Refine.Result refinement, Infer verifier) {
-        Map<Location,Invariant> results = refinement.refined();
-        Map<Location,String> result_str = new HashMap<>(results.size());
-        Map<BDD,String> cache = new HashMap<>();
-        if (_readable) {
-            results.forEach((l, i) -> result_str.put(l, i.toString(refinementOccurred,verifier.shortcuts, cache)));
-        } else {
-            // we only get strings for the targets and assumptions, or if true or false (saves time)
-            results.forEach((l, i) -> {
-                if (verifier.getTargets().containsKey(l) || verifier.getAssumptions().containsKey(l) || i.isFalse() || i.isTrue())
-                    result_str.put(l, i.toString(refinementOccurred,verifier.shortcuts, cache));
-                else
-                    result_str.put(l,"...");
-            });
+    public record Result(NetworkInfo info, boolean refinementOccurred, Map<Location, Optional<Bgpv4Route>> checks,
+                         Map<Location,Invariant> targets, Refine.Result refinement) {
+        /// Gather the answer element needed for a question return
+        public TableAnswerElement getAnswerElement(boolean readable) {
+            Map<Location,Invariant> results = refinement.refined();
+            Map<Location,String> result_str = new HashMap<>(results.size());
+            Map<BDD,String> cache = new HashMap<>();
+            if (readable) {
+                results.forEach((l, i) -> result_str.put(l, i.toString(refinementOccurred,info.shortcuts, cache)));
+            } else {
+                // we only get strings for the targets and assumptions, or if true or false (saves time)
+                results.forEach((l, i) -> {
+                    if (targets.containsKey(l) || info.getAssumptions().containsKey(l) || i.isFalse() || i.isTrue())
+                        result_str.put(l, i.toString(refinementOccurred,info.shortcuts, cache));
+                    else
+                        result_str.put(l,"...");
+                });
+            }
+            TableAnswerElement tae = new TableAnswerElement(metadata_safety());
+            results.keySet().stream().sorted()
+                    .forEach(loc -> tae.addRow(Row.builder()
+                            .put(Setup.LOCATION_COL, loc.toString())
+                            .put(Setup.ASSUMPTION_COL, info.getAssumptions().containsKey(loc) ?
+                                    info.getAssumptions().get(loc).toString(refinementOccurred,info.shortcuts,cache) : "-")
+                            .put(Setup.TARGET_COL, targets.containsKey(loc) ?
+                                    targets.get(loc).toString(refinementOccurred,info.shortcuts,cache) : "-")
+                            .put(Setup.INFERRED_INVARIANTS_COL, result_str.containsKey(loc) && result_str.get(loc).isEmpty() ?
+                                    "STRING OF BDD ERROR" : result_str.get(loc))
+                            .put(Setup.OVERALL_VERIFICATION_COL, refinement.verified())
+                            .put(Setup.LOCAL_VERIFICATION_COL, checks.containsKey(loc) ? checks.get(loc).isEmpty() : "")
+                            .put(Setup.ASSUMPTION_VIOLATION_COL, checks.containsKey(loc) && checks.get(loc).isPresent()
+                                    ? nonDefaultRoute(checks.get(loc).get()) : "").build()));
+            return tae;
         }
-        TableAnswerElement tae = new TableAnswerElement(metadata_safety());
-        results.keySet().stream().sorted()
-                .forEach(loc -> tae.addRow(Row.builder()
-                .put(Setup.LOCATION_COL, loc.toString())
-                .put(Setup.ASSUMPTION_COL, verifier.getAssumptions().containsKey(loc) ?
-                        verifier.getAssumptions().get(loc).toString(refinementOccurred,verifier.shortcuts,cache) : "-")
-                .put(Setup.TARGET_COL, verifier.getTargets().containsKey(loc) ?
-                        verifier.getTargets().get(loc).toString(refinementOccurred,verifier.shortcuts,cache) : "-")
-                .put(Setup.INFERRED_INVARIANTS_COL, result_str.containsKey(loc) && result_str.get(loc).isEmpty() ?
-                        "STRING OF BDD ERROR" : result_str.get(loc))
-                .put(Setup.OVERALL_VERIFICATION_COL, refinement.verified())
-                .put(Setup.LOCAL_VERIFICATION_COL, checks.containsKey(loc) ? checks.get(loc).isEmpty() : "")
-                .put(Setup.ASSUMPTION_VIOLATION_COL, checks.containsKey(loc) && checks.get(loc).isPresent()
-                        ? nonDefaultRoute(checks.get(loc).get()) : "").build()));
-        return tae;
     }
 
-    @Override
-    public AnswerElement answer(NetworkSnapshot snapshot) {
-        LOGGER.info("Within the answerer for verification.");
-        SpecifierContext context = _batfish.specifierContext(snapshot);
-        Map<String, Configuration> configs = context.getConfigs();
-        ConfigAtomicPredicates configAPs = getConfigAtomicPredicates(_communityRegexes,_asPathRegexes,configs.values());
-        TransferBDD tbdd = new TransferBDD(configAPs);
-        Infer verifier = new Infer(tbdd,configs);
-        LOGGER.info(verifier.displayNodes());
-        _targets.entrySet().stream()
-                .map(e -> buildInvariant(verifier,true,e))
-                .forEach(e -> verifier.addProperty(e.getKey(),e.getValue()));
-        _assumptions.forEach(verifier::addAssumption);
-        Infer.Result result = verifier.run();
+    public static Result run(NetworkInfo info, Location location, Invariant target) {
+        // Set up and run the invariant inference
+        Infer inference = info.toInfer();
+        inference.addProperty(location,target);
+        Infer.Result result = inference.run();
+
+        // Run the refinement of invariants, if the initial inference supports the safety condition
         Refine.Result refined;
         boolean refinementOccurred = true;
         // we only want to refine if the inference did not yield any falses
         if (result.counter().isPresent()) {
             refinementOccurred = false;
-            refined = verifier.refiner().noRefinement();
+            refined = inference.refiner().noRefinement();
         } else {
-            refined = verifier.refiner().refine();
+            refined = inference.refiner().refine();
         }
-        assert result.verified() == refined.verified();
-        return getAnswerElement(refinementOccurred,result.checks(),refined,verifier);
+
+        if (result.verified() != refined.verified())
+            throw new BatfishException("SafetyAnswerer.run() - Inference and refinement final verification results inconsistent.");
+
+        return new Result(info,refinementOccurred,result.checks(),Map.of(location,target),refined);
+    }
+
+    @Override
+    public AnswerElement answer(NetworkSnapshot snapshot) {
+        LOGGER.info("Within the answerer for verification.");
+
+        // Gather information from the network
+        SpecifierContext context = _batfish.specifierContext(snapshot);
+        Map<String, Configuration> configs = context.getConfigs();
+        ConfigAtomicPredicates configAPs = getConfigAtomicPredicates(_communityRegexes,_asPathRegexes,configs.values());
+        TransferBDD tbdd = new TransferBDD(configAPs);
+        NetworkInfo info = new NetworkInfo(tbdd,configs);
+        _assumptions.forEach(info::addAssumption);
+        LOGGER.info(info.displayNodes());
+
+        if (_targets.size() != 1)
+            throw new BatfishException("SafetyAnswerer.answer() - Expects exactly one property to verify, provided with " + _targets.size());
+
+        Map.Entry<Location, Invariant> target = buildInvariant(info,true,_targets.entrySet().stream().findFirst().get());
+        Result result = run(info,target.getKey(),target.getValue());
+
+        return result.getAnswerElement(_readable);
     }
 }

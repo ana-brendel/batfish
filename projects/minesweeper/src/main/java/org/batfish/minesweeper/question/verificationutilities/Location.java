@@ -6,7 +6,6 @@ import com.google.common.annotations.VisibleForTesting;
 import com.google.common.collect.ImmutableList;
 import org.batfish.common.BatfishException;
 import org.batfish.datamodel.Ip;
-import org.batfish.minesweeper.question.safety.Infer;
 
 import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
@@ -58,10 +57,10 @@ public abstract class Location implements Comparable<Location> {
 
         /// Gets the Location based on the Verifier (which is based on Network Snapshot)
         /// -- maybe change to only succeed if provided with IPs
-        public Location instantiate(Infer v) {
+        public Location instantiate(NetworkInfo info) {
             if (_head != null && _tail != null) {
-                Collection<Ip> heads = v.ipsFromNodeName(_head).orElse(Ip.tryParse(_head).<Collection<Ip>>map(Set::of).orElse(null));
-                Collection<Ip> tails = v.ipsFromNodeName(_tail).orElse(Ip.tryParse(_tail).<Collection<Ip>>map(Set::of).orElse(null));
+                Collection<Ip> heads = info.ipsFromNodeName(_head).orElse(Ip.tryParse(_head).<Collection<Ip>>map(Set::of).orElse(null));
+                Collection<Ip> tails = info.ipsFromNodeName(_tail).orElse(Ip.tryParse(_tail).<Collection<Ip>>map(Set::of).orElse(null));
                  if (heads == null || tails == null || heads.isEmpty() || tails.isEmpty()) {
                      throw new BatfishException("Location.instantiate() - Unable to find edge corresponding to input (" +
                              _head + " -> " + _tail + ") within network.");
@@ -69,11 +68,11 @@ public abstract class Location implements Comparable<Location> {
                      // look for edge in location set to guarantee ips used are correct (specifically, when just provided with node's name)
                      Optional<Edge> edge = heads.stream()
                              .flatMap(head -> tails.stream().map(tail -> new Edge(head,tail)))
-                             .filter(v::containsPolicy).findFirst();
+                             .filter(info::containsPolicy).findFirst();
                      if (edge.isEmpty()) {
                          // if there is no policies found for provided edge, we can do best guess (might throw error)
-                         Ip head = Ip.tryParse(_head).orElse(v.ipsFromNodeName(_head).orElse(Set.of()).stream().findFirst().orElse(null));
-                         Ip tail = Ip.tryParse(_tail).orElse(v.ipsFromNodeName(_tail).orElse(Set.of()).stream().findFirst().orElse(null));
+                         Ip head = Ip.tryParse(_head).orElse(info.ipsFromNodeName(_head).orElse(Set.of()).stream().findFirst().orElse(null));
+                         Ip tail = Ip.tryParse(_tail).orElse(info.ipsFromNodeName(_tail).orElse(Set.of()).stream().findFirst().orElse(null));
                          assert head != null && tail != null;
                          return new Edge(head,tail);
                      } else {
@@ -82,7 +81,7 @@ public abstract class Location implements Comparable<Location> {
                  }
             } else {
                 assert _head != null;
-                Collection<Ip> ips = v.ipsFromNodeName(_head).orElse(Ip.tryParse(_head).<Collection<Ip>>map(Set::of).orElse(null));
+                Collection<Ip> ips = info.ipsFromNodeName(_head).orElse(Ip.tryParse(_head).<Collection<Ip>>map(Set::of).orElse(null));
                 if (ips == null || ips.isEmpty()) {
                     throw new BatfishException("Location.instantiate() - Unable to find node corresponding to (" + _head + ") in network.");
                 } else {
@@ -113,9 +112,9 @@ public abstract class Location implements Comparable<Location> {
             return new Builders(builders.build());
         }
 
-        public List<Location> instantiate(Infer v) {
+        public List<Location> instantiate(NetworkInfo info) {
             ImmutableList.Builder<Location> builder = ImmutableList.builder();
-            _builders.forEach(loc -> builder.add(loc.instantiate(v)));
+            _builders.forEach(loc -> builder.add(loc.instantiate(info)));
             return builder.build();
         }
 

@@ -15,7 +15,8 @@
             "location",
             "assumption_locations",
             "assumptions",
-            "readable"
+            "readable",
+            "refine"
         ],
         "tags": [
             "routing"
@@ -45,12 +46,18 @@
                 "optional": true,
                 "displayName": "Assumptions"
             },
-          "readable": {
-            "description": "Flag indicating if you want to see a readable version of all variables (does not scale well)",
-            "type": "boolean",
-            "optional": true,
-            "displayName": "Weak Print"
-          }
+            "readable": {
+              "description": "Flag indicating if you want to see a readable version of all variables (does not scale well)",
+              "type": "boolean",
+              "optional": true,
+              "displayName": "Weak Print"
+            },
+            "refine": {
+              "description": "Flag indicating if refinement of invariants should occur.",
+              "type": "boolean",
+              "optional": true,
+              "displayName": "Perform refinement"
+            }
         }
     }
 }

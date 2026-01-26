@@ -45,6 +45,7 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.stream.Collectors;
 
+import static java.util.Objects.nonNull;
 import static org.batfish.minesweeper.question.searchroutepolicies.SearchRoutePoliciesAnswerer.longSpaceToBDD;
 import static org.batfish.minesweeper.question.searchroutepolicies.SearchRoutePoliciesAnswerer.prefixSpaceToBDD;
 
@@ -277,8 +278,8 @@ public class BDDString {
             configs.forEach(config -> {
                 if (config.getRouteFilterLists() != null)
                     config.getRouteFilterLists().values().stream().filter(Objects::nonNull)
-                            .forEach(rfl -> rfl.getLines()
-                                    .stream().filter(line -> line.getIpWildcard().isPrefix())
+                            .forEach(rfl -> rfl.getLines().stream()
+                                    .filter(line -> nonNull(line) && line.getIpWildcard().isPrefix())
                                     .forEach(line -> prefixes.add(line.getIpWildcard().toPrefix())));
                 if (config.getRoutingPolicies() != null)
                     config.getRoutingPolicies().values().stream().filter(Objects::nonNull)
@@ -462,6 +463,9 @@ public class BDDString {
                     disjuncts.add(stringOfBDD);
                 }
             }
+            if (wf_target.equals(wf.and(tbdd.getFactory().orAll(disjuncts.stream().map(s -> s.bdd).collect(Collectors.toSet()))))) {
+                break;
+            }
         }
         BDD disjunction = tbdd.getFactory().orAll(disjuncts.stream().map(stringOfBDD::bdd).collect(Collectors.toSet()));
         String stringResult = String.join(" OR ",disjuncts.stream().map(stringOfBDD::str).collect(Collectors.toSet()));
@@ -557,8 +561,7 @@ public class BDDString {
             }
         } else {
             Optional<stringOfBDD> disjuncts = gatherDisjuncts(running);
-            if (disjuncts.isPresent()) {
-                assert (this.bdd.id().and(wf)).equals(disjuncts.get().bdd());
+            if (disjuncts.isPresent() && (this.bdd.id().and(wf)).equals(disjuncts.get().bdd())) {
                 return disjuncts.get().str();
             } else {
                 return "STRING OF BDD ERROR";

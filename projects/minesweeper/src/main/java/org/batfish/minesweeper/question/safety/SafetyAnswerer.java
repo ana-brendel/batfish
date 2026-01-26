@@ -43,11 +43,13 @@ public final class SafetyAnswerer extends Answerer {
     private final @Nonnull Set<RegexConstraint> _communityRegexes;
     private final @Nonnull Set<RegexConstraint> _asPathRegexes;
     private final boolean _readable;
+    private final boolean _refine;
 
     public SafetyAnswerer(SafetyQuestion question, IBatfish batfish) {
         super(question, batfish);
         _readable = question.get_readable();
         _targets = question.get_targets();
+        _refine = question.get_refine();
 
         // this is added because the assumptions are taken as two lists with corresponding inputs
         List<Invariant.Builder> invAssumptions = question.get_assumptions().isPresent() ?
@@ -104,7 +106,7 @@ public final class SafetyAnswerer extends Answerer {
         }
     }
 
-    public static Result run(NetworkInfo info, Location location, Invariant target) {
+    public static Result run(NetworkInfo info, boolean refine, Location location, Invariant target) {
         // Set up and run the invariant inference
         Infer inference = info.toInfer();
         inference.addProperty(location,target);
@@ -113,8 +115,8 @@ public final class SafetyAnswerer extends Answerer {
         // Run the refinement of invariants, if the initial inference supports the safety condition
         Refine.Result refined;
         boolean refinementOccurred = true;
-        // we only want to refine if the inference did not yield any falses
-        if (result.counter().isPresent()) {
+        // we only want to refine if the inference did not yield any falses, or if the refinement flag is set
+        if (result.counter().isPresent() || !refine) {
             refinementOccurred = false;
             refined = inference.refiner().noRefinement();
         } else {
@@ -144,7 +146,7 @@ public final class SafetyAnswerer extends Answerer {
             throw new BatfishException("SafetyAnswerer.answer() - Expects exactly one property to verify, provided with " + _targets.size());
 
         Map.Entry<Location, Invariant> target = buildInvariant(info,true,_targets.entrySet().stream().findFirst().get());
-        Result result = run(info,target.getKey(),target.getValue());
+        Result result = run(info,_refine,target.getKey(),target.getValue());
 
         return result.getAnswerElement(_readable);
     }

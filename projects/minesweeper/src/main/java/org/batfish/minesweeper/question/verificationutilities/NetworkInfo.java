@@ -7,6 +7,8 @@ import org.batfish.datamodel.PrefixSpace;
 import org.batfish.datamodel.Vrf;
 import org.batfish.datamodel.bgp.Ipv4UnicastAddressFamily;
 import org.batfish.datamodel.routing_policy.RoutingPolicy;
+import org.batfish.datamodel.table.Row;
+import org.batfish.datamodel.table.TableAnswerElement;
 import org.batfish.minesweeper.bdd.TransferBDD;
 import org.batfish.minesweeper.question.liveness.InterferenceCheck;
 import org.batfish.minesweeper.question.liveness.Path;
@@ -27,6 +29,7 @@ import java.util.stream.Stream;
 
 import static java.util.Objects.isNull;
 import static java.util.Objects.nonNull;
+import static org.batfish.minesweeper.question.verificationutilities.Setup.metadata_locations;
 
 public class NetworkInfo {
     public final BDDString.Shortcuts shortcuts;
@@ -187,6 +190,12 @@ public class NetworkInfo {
             }
         }
         return new InterferenceCheck(context,this.shortcuts,prefix,location,target, this.nodes, edgesByDestination);
+    }
+
+    public TableAnswerElement getAnswerElement(boolean readable) {
+        TableAnswerElement tae = new TableAnswerElement(metadata_locations());
+        locations.stream().sorted().forEach(loc -> tae.addRow(Row.builder().put(Setup.LOCATION_COL, loc.toString()).build()));
+        return tae;
     }
 
     // CODE BELOW FOR DEBUGGING PURPOSES

@@ -137,4 +137,11 @@ public class Setup {
         return new TableMetadata(
                 columnMetadata, "Invariant Inference and Verification Results");
     }
+
+    public static TableMetadata metadata_locations() {
+        List<ColumnMetadata> columnMetadata =
+                ImmutableList.of(new ColumnMetadata(LOCATION_COL, STRING, "InDev", true, false));
+        return new TableMetadata(
+                columnMetadata, "Invariant Inference and Verification Results");
+    }
 }

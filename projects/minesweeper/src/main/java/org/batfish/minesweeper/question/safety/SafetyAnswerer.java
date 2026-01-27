@@ -142,7 +142,9 @@ public final class SafetyAnswerer extends Answerer {
         _assumptions.forEach(info::addAssumption);
         LOGGER.info(info.displayNodes());
 
-        if (_targets.size() != 1)
+        if (_targets.isEmpty())
+            return info.getAnswerElement(_readable);
+        else if (_targets.size() != 1)
             throw new BatfishException("SafetyAnswerer.answer() - Expects exactly one property to verify, provided with " + _targets.size());
 
         Map.Entry<Location, Invariant> target = buildInvariant(info,true,_targets.entrySet().stream().findFirst().get());

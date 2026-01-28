@@ -6,6 +6,7 @@
     "assumption_locations": "${assumption_locations}",
     "assumptions": "${assumptions}",
     "readable": "${readable}",
+    "refine": "${refine}",
     "instance": {
         "description": "...",
         "instanceName": "safety",

@@ -29,7 +29,7 @@ public final class SafetyQuestion extends Question {
     private final boolean _readable;
     private final boolean _refine;
 
-   public SafetyQuestion() { this(null,null,null,null,false,true); }
+   public SafetyQuestion() { this(null,null,null,null,false,false); }
 
     private SafetyQuestion(
             @Nullable Invariant.Builder target,

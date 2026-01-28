@@ -233,10 +233,13 @@ public class BDDString {
             if (isRelevant(target,prefixStrBDDs)) considered.addAll(prefixStrBDDs);
 
             // Sets.powerSet throws an error when there are more than 30 possible elements.
-            // Might be worth capping the power set at a lower threshold for timing.
-            Set<Set<stringOfBDD>> combos = new HashSet<>(considered.size() > 30 ?
-                    Sets.combinations(considered,2) : Sets.powerSet(considered));
-            if (considered.size() > 30) combos.addAll(Sets.combinations(considered,1));
+            // Might be worth capping the power set at a lower threshold for timing - currently limiting for space too
+            Set<Set<stringOfBDD>> combos = new HashSet<>();
+            if (!considered.isEmpty()) {
+                combos.addAll(Sets.combinations(considered,1));
+                if (considered.size() < 100 && considered.size() >= 2)
+                    combos.addAll(Sets.combinations(considered,2));
+            }
 
             //Set<stringOfBDD> prefixStrBDDs = prefixBDDCombos(base);
             // if prefixes are relevant try adding the different prefix combos, as option

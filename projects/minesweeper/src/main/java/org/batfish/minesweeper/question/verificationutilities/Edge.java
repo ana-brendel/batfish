@@ -85,7 +85,7 @@ public class Edge extends Location {
                 return 1; // this is an edge coming out of provided node, so edges should follow
             else
                 // use the single ip, so that comparisons can remain consistent
-                return this.src.compareTo(node.getRepresentativeIp());
+                return node.getRepresentativeIp().map(this.src::compareTo).orElse(1);
         } else {
             throw new BatfishException("Edge.compareTo() - Only two implementations of Location, should never reach here.");
         }

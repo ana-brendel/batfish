@@ -1,6 +1,8 @@
 package org.batfish.minesweeper.question.safety;
 
 import net.sf.javabdd.BDD;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 import org.batfish.common.BatfishException;
 import org.batfish.datamodel.Ip;
 import org.batfish.datamodel.routing_policy.RoutingPolicy;
@@ -22,6 +24,8 @@ import static org.batfish.minesweeper.bdd.TransferBDDUtils.interpolate;
 
 
 public class Refine {
+    private static final Logger LOGGER = LogManager.getLogger(Refine.class);
+
     private final TransferBDD tbdd;
     private final Map<Ip, Node> nodes;
     private final Set<Location> locations;
@@ -142,6 +146,7 @@ public class Refine {
                 refinements.put(starter,working.contains(starter) ? inferred.get(starter) : Invariant.getFalse(tbdd)));
         while (!working.isEmpty()) {
             Location lastKnown = working.remove();
+            LOGGER.info("Working to refine the property following: {}", lastKnown);
             if (lastKnown instanceof Edge edge && nodes.containsKey(edge.getDst())) {
                 Node toRefine = nodes.get(edge.getDst());
                 Invariant weakest = inferred.get(toRefine).copy();

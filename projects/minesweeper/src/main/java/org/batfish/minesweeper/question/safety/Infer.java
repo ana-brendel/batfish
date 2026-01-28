@@ -1,6 +1,8 @@
 package org.batfish.minesweeper.question.safety;
 
 import net.sf.javabdd.BDD;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 import org.batfish.common.BatfishException;
 import org.batfish.datamodel.Bgpv4Route;
 import org.batfish.datamodel.Ip;
@@ -29,6 +31,7 @@ import java.util.stream.Collectors;
 import static org.batfish.minesweeper.question.verificationutilities.Invariant.strongestCommonImplicant;
 
 public class Infer {
+    private static final Logger LOGGER = LogManager.getLogger(Infer.class);
     public final BDDString.Shortcuts shortcuts;
     private final TransferBDD tbdd;
 
@@ -138,6 +141,7 @@ public class Infer {
         while (!working.isEmpty()) {
             Location location = working.remove();
             Invariant property = inferred.get(location);
+            LOGGER.info("Working to weakest precondition for property to hold at: {}", location);
             assert !property.isFalse();
             if (location instanceof Edge edge && nodes.containsKey(edge.getSrc())) {
                 RoutingPolicy exportPolicy = exports.getOrDefault(edge, null);
@@ -204,9 +208,12 @@ public class Infer {
     public Result run() {
         inferred.clear();
         working.clear();
+        LOGGER.info("Initializing invariants for inference.");
         initializeInvariants();
         working.addAll(targets.keySet());
+        LOGGER.info("Beginning initial inference of safety invariants.");
         Optional<CounterExample> counter = inferenceLoop();
+        LOGGER.info("Inference loop terminated.");
         Map<Location,Optional<Bgpv4Route>> checks = verificationAssumptionCheck();
         return new Result(counter.isEmpty() && checks.values().stream().allMatch(Optional::isEmpty),copyInferred(inferred),counter,checks);
     }

@@ -82,10 +82,10 @@ public class NetworkInfo {
         }
     }
 
-    public NetworkInfo(@Nonnull TransferBDD tbdd, @Nonnull Map<String, Configuration> configs) {
+    public NetworkInfo(@Nonnull TransferBDD tbdd, @Nonnull Map<String, Configuration> configs, boolean readable) {
         this.tbdd = tbdd;
         processConfigs(configs);
-        shortcuts = BDDString.Shortcuts.ofConfigs(configs.values());
+        shortcuts = BDDString.Shortcuts.ofConfigs(readable ? configs.values() : Set.of());
         // default assumption of True for incoming edges
         for (Location location : locations) {
             if (location instanceof Edge edge) {
@@ -192,9 +192,9 @@ public class NetworkInfo {
         return new InterferenceCheck(context,this.shortcuts,prefix,location,target, this.nodes, edgesByDestination);
     }
 
-    public TableAnswerElement getAnswerElement(boolean readable) {
+    public TableAnswerElement getAnswerElement() {
         TableAnswerElement tae = new TableAnswerElement(metadata_locations());
-        locations.stream().sorted().forEach(loc -> tae.addRow(Row.builder().put(Setup.LOCATION_COL, loc.toString()).build()));
+        locations.forEach(loc -> tae.addRow(Row.builder().put(Setup.LOCATION_COL, loc.toString()).build()));
         return tae;
     }
 

@@ -8,6 +8,7 @@ import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
 import java.util.Objects;
+import java.util.Optional;
 import java.util.stream.Collectors;
 
 public class Node extends Location {
@@ -35,10 +36,10 @@ public class Node extends Location {
         return Ip.create(ips.get(0).asLong());
     }
 
-    public Ip getRepresentativeIp() {
-        if (ips.isEmpty())
-            throw new BatfishException("Node.getRepresentativeIp() - Trying to get representative Ip with no Ips.");
-        return Ip.create(ips.get(0).asLong());
+    public Optional<Ip> getRepresentativeIp() {
+//        if (ips.isEmpty())
+//            throw new BatfishException("Node.getRepresentativeIp() - Trying to get representative Ip with no Ips.");
+        return ips.isEmpty() ? Optional.empty() : Optional.of(Ip.create(ips.get(0).asLong()));
     }
 
     public Collection<Ip> getIps() {
@@ -92,10 +93,14 @@ public class Node extends Location {
                 return -1; // this is an edge coming out of provided node, so edges should follow
             else
                 // use the single ip, so that comparisons can remain consistent
-                return this.getRepresentativeIp().compareTo(edge.getSrc());
+                return this.getRepresentativeIp().map(edge.getSrc()::compareTo).orElse(1);
         } else if (location instanceof Node node) {
             // use the single ip, so that comparisons can remain consistent
-            return this.getRepresentativeIp().compareTo(node.getRepresentativeIp());
+            Optional<Ip> thisRep = this.getRepresentativeIp();
+            Optional<Ip> otherRep = node.getRepresentativeIp();
+            return thisRep.isPresent() && otherRep.isPresent() ? thisRep.get().compareTo(otherRep.get())
+                    : thisRep.isPresent() ? -1
+                    : otherRep.isPresent() ? 1 : this.name.compareTo(node.name);
         } else {
             throw new BatfishException("Node.compareTo() - Only two implementations of Location, should never reach here.");
         }

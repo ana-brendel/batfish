@@ -89,7 +89,7 @@ public final class SafetyAnswerer extends Answerer {
                 });
             }
             TableAnswerElement tae = new TableAnswerElement(metadata_safety());
-            results.keySet().stream().sorted()
+            results.keySet()
                     .forEach(loc -> tae.addRow(Row.builder()
                             .put(Setup.LOCATION_COL, loc.toString())
                             .put(Setup.ASSUMPTION_COL, info.getAssumptions().containsKey(loc) ?
@@ -110,17 +110,23 @@ public final class SafetyAnswerer extends Answerer {
         // Set up and run the invariant inference
         Infer inference = info.toInfer();
         inference.addProperty(location,target);
+
+        LOGGER.info("Beginning inference...");
         Infer.Result result = inference.run();
+        LOGGER.info("Finished inferring weakest conditions needed for property to hold.");
 
         // Run the refinement of invariants, if the initial inference supports the safety condition
         Refine.Result refined;
         boolean refinementOccurred = true;
         // we only want to refine if the inference did not yield any falses, or if the refinement flag is set
         if (result.counter().isPresent() || !refine) {
+            LOGGER.info("No invariant refinement.");
             refinementOccurred = false;
             refined = inference.refiner().noRefinement();
         } else {
+            LOGGER.info("Beginning invariant refinement...");
             refined = inference.refiner().refine();
+            LOGGER.info("Finished refining invariants.");
         }
 
         if (result.verified() != refined.verified())
@@ -138,17 +144,18 @@ public final class SafetyAnswerer extends Answerer {
         Map<String, Configuration> configs = context.getConfigs();
         ConfigAtomicPredicates configAPs = getConfigAtomicPredicates(_communityRegexes,_asPathRegexes,configs.values());
         TransferBDD tbdd = new TransferBDD(configAPs);
-        NetworkInfo info = new NetworkInfo(tbdd,configs);
+        NetworkInfo info = new NetworkInfo(tbdd,configs,_readable);
         _assumptions.forEach(info::addAssumption);
         LOGGER.info(info.displayNodes());
 
         if (_targets.isEmpty())
-            return info.getAnswerElement(_readable);
+            return info.getAnswerElement();
         else if (_targets.size() != 1)
             throw new BatfishException("SafetyAnswerer.answer() - Expects exactly one property to verify, provided with " + _targets.size());
 
         Map.Entry<Location, Invariant> target = buildInvariant(info,true,_targets.entrySet().stream().findFirst().get());
         Result result = run(info,_refine,target.getKey(),target.getValue());
+        LOGGER.info("Completed analysis.");
 
         return result.getAnswerElement(_readable);
     }

@@ -56,9 +56,10 @@ public final class SafetyQuestion extends Question {
             @JsonProperty(PROP_READABLE) @Nullable Boolean readable,
             @JsonProperty(PROP_REFINE) @Nullable Boolean refine
     ) {
-       // default for display is false (as it is not efficient), default for refine is true (as it is not efficient)
+       // default for readable is false (as it is not efficient), default for refine is true (as it is not efficient)
+        // NOTE: made the refine default false because it wasn't correctly getting false flag
        return new SafetyQuestion(target,location,assumption_locations,assumptions,
-               readable != null && readable,refine == null || refine);
+               readable != null && readable,refine != null && refine);
     }
 
     @Nonnull

@@ -96,7 +96,7 @@ public final class BgpProtocolHelper {
     builder.setTag(null);
 
     // Set originatorIP
-    if (localSessionProperties.isEbgp() || !routeProtocol.equals(RoutingProtocol.IBGP)) {
+    if (localSessionProperties.isEbgp() || routeProtocol != RoutingProtocol.IBGP) {
       // eBGP session or not iBGP route: override the originator
       builder.setOriginatorIp(localBgpProcess.getRouterId());
     }
@@ -133,9 +133,8 @@ public final class BgpProtocolHelper {
       return null;
     }
 
-    builder.setClusterList(ImmutableSet.of());
     boolean routeOriginatedLocally = route.getReceivedFrom().equals(ReceivedFromSelf.instance());
-    if (routeProtocol.equals(RoutingProtocol.IBGP) && !localSessionProperties.isEbgp()) {
+    if (routeProtocol == RoutingProtocol.IBGP && !localSessionProperties.isEbgp()) {
       /*
        * The remote route is iBGP. The session is iBGP. We consider whether to reflect, and
        * modify the outgoing route as appropriate.
@@ -148,23 +147,39 @@ public final class BgpProtocolHelper {
          */
         return null;
       }
-      builder.addClusterList(route.getClusterList());
-      if (!routeOriginatedLocally) {
-        // we are reflecting, so we need to get the clusterid associated with the
-        // remoteRoute
-        Long newClusterId = localNeighbor.getClusterId();
-        if (newClusterId != null) {
-          builder.addToClusterList(newClusterId);
-        }
-      }
-      Set<Long> localClusterIds = remoteBgpProcess.getClusterIds();
-      Set<Long> outgoingClusterList = builder.getClusterList();
-      if (localClusterIds.stream().anyMatch(outgoingClusterList::contains)) {
+
+      // Check for cluster loops before building the outgoing cluster list
+      Set<Long> receiverClusterIds = remoteBgpProcess.getClusterIds();
+      if (!Collections.disjoint(receiverClusterIds, route.getClusterList())) {
         /*
-         *  receiver will reject new route if it contains any of its local cluster ids
+         * Receiver will reject new route if it contains any of its cluster IDs
          */
         return null;
       }
+
+      // Start with existing cluster list
+      Set<Long> outgoingClusterList = route.getClusterList();
+
+      if (!routeOriginatedLocally) {
+        // We are reflecting, so we need to get the clusterid associated with the remoteRoute
+        // and add it to the cluster list
+        Long newClusterId = localNeighbor.getClusterId();
+        if (newClusterId != null) {
+          // Check if adding our cluster ID would create a loop
+          if (receiverClusterIds.contains(newClusterId)) {
+            return null;
+          }
+          outgoingClusterList =
+              ImmutableSet.<Long>builderWithExpectedSize(route.getClusterList().size() + 1)
+                  .addAll(route.getClusterList())
+                  .add(newClusterId)
+                  .build();
+        }
+      }
+
+      builder.setClusterList(outgoingClusterList);
+    } else {
+      builder.setClusterList(ImmutableSet.of());
     }
 
     // Outgoing metric (MED) is preserved only if advertising to IBGP peer, within a confederation,
@@ -202,7 +217,7 @@ public final class BgpProtocolHelper {
         return false;
     }
 
-    if (!route.getProtocol().equals(RoutingProtocol.IBGP)) {
+    if (route.getProtocol() != RoutingProtocol.IBGP) {
       return false;
     }
 
@@ -463,7 +478,7 @@ public final class BgpProtocolHelper {
 
       // Remove any confederations if propagating route outside of the confederation border
       AsPath routeAsPath = routeBuilder.getAsPath();
-      if (confedSessionType.equals(ConfedSessionType.ACROSS_CONFED_BORDER)) {
+      if (confedSessionType == ConfedSessionType.ACROSS_CONFED_BORDER) {
         routeAsPath = routeAsPath.removeConfederations();
       }
       routeAsPath =

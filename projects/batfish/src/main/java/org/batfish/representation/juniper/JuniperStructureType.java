@@ -2,6 +2,7 @@ package org.batfish.representation.juniper;
 
 import com.google.common.collect.ImmutableListMultimap;
 import com.google.common.collect.ImmutableSet;
+import com.google.common.collect.ImmutableSetMultimap;
 import com.google.common.collect.Multimap;
 import com.google.common.collect.Sets;
 import java.util.Set;
@@ -38,6 +39,7 @@ public enum JuniperStructureType implements StructureType {
   FIREWALL_INET6_FILTER("firewall family inet6 filter"),
   FIREWALL_FILTER_TERM("firewall filter term"),
   FIREWALL_INTERFACE_SET("firewall interface-set"),
+  FIREWALL_POLICER("firewall policer"),
   IKE_GATEWAY("ike gateway"),
   IKE_POLICY("ike policy"),
   IKE_PROPOSAL("ike proposal"),
@@ -83,6 +85,24 @@ public enum JuniperStructureType implements StructureType {
       ImmutableListMultimap.<JuniperStructureType, JuniperStructureType>builder()
           .putAll(APPLICATION_OR_APPLICATION_SET, APPLICATION, APPLICATION_SET)
           .putAll(SNMP_CLIENT_LIST_OR_PREFIX_LIST, SNMP_CLIENT_LIST, PREFIX_LIST)
+          .build();
+
+  /**
+   * Built-in structures that don't appear in configurations but can be referenced. Maps structure
+   * types to their built-in names.
+   */
+  public static final ImmutableSetMultimap<JuniperStructureType, String> BUILT_IN_STRUCTURES =
+      ImmutableSetMultimap.<JuniperStructureType, String>builder()
+          .put(CLASS_OF_SERVICE_CLASSIFIER, "default")
+          .putAll(CLASS_OF_SERVICE_FORWARDING_CLASS, ForwardingClassUtil.builtinNames())
+          .putAll(CLASS_OF_SERVICE_DSCP_CODE_POINT_ALIAS, DscpUtil.builtinNames())
+          .putAll(CLASS_OF_SERVICE_EXP_CODE_POINT_ALIAS, ExpUtil.builtinNames())
+          .putAll(CLASS_OF_SERVICE_IEEE_802_1_CODE_POINT_ALIAS, Ieee8021pUtil.builtinNames())
+          .putAll(
+              CLASS_OF_SERVICE_INET_PRECEDENCE_CODE_POINT_ALIAS, InetPrecedenceUtil.builtinNames())
+          .put(CLASS_OF_SERVICE_REWRITE_RULE, "default")
+          .put(CLASS_OF_SERVICE_SCHEDULER, "default-be")
+          .put(CLASS_OF_SERVICE_SCHEDULER_MAP, "default")
           .build();
 
   public static final Set<JuniperStructureType> CONCRETE_STRUCTURES =

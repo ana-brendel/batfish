@@ -8,6 +8,10 @@ on:
     - cron: "0 12 * * *" # Daily at 5am Seattle time (12 UTC)
   workflow_dispatch:
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.head_ref || github.run_id }}
+  cancel-in-progress: true
+
 jobs:
   get_date:
     name: ":clock: Get Date"
@@ -25,7 +29,7 @@ jobs:
     steps:
       - uses: actions/checkout@v6
       - name: google-java-format cache
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: "~/.cache/google-java-format"
           key: google-java-format-${{ hashFiles('tools/fix_java_format.sh') }}
@@ -52,7 +56,7 @@ jobs:
     steps:
       - uses: actions/checkout@v6
       - name: Checkstyle cache
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: "~/.cache/checkstyle"
           key: checkstyle-${{ hashFiles('tools/run_checkstyle.sh') }}
@@ -69,12 +73,12 @@ jobs:
     steps:
       - uses: actions/checkout@v6
       - name: Bazelisk cache
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: "~/.cache/bazelisk"
           key: ${{runner.os}}-bazelisk-${{ hashFiles('.bazelversion') }}
       - name: Bazel cache
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: "~/.cache/bazel"
           key: ${{runner.os}}-bazel-17-${{ hashFiles('.bazelversion', 'WORKSPACE', 'maven_install.json') }}-test-${{ needs.get_date.outputs.ymd }}
@@ -87,15 +91,19 @@ jobs:
           java-version: "17"
       - name: Bazel build and test
         run: |
-          bazel test --test_output=errors --test_tag_filters=-pmd_test --build_tag_filters=-pmd_test -- //...
-          bazel test --test_output=errors --test_tag_filters=pmd_test -- //...
+          # Stop on first test failure for PRs; keep going for scheduled runs to see all failures
+          TEST_KEEP_GOING="false"
+          if [ "${{ github.event_name }}" = "schedule" ]; then
+            TEST_KEEP_GOING="true"
+          fi
+          bazel test --test_output=errors --test_keep_going=$TEST_KEEP_GOING -- //...
       - name: Build JAR
         run: |
           mkdir workspace
           bazel build //projects/allinone:allinone_main_deploy.jar
           cp bazel-bin/projects/allinone/allinone_main_deploy.jar workspace/allinone.jar
       - name: Save JAR
-        uses: actions/upload-artifact@v5
+        uses: actions/upload-artifact@v6
         with:
           name: allinone_jar_17
           path: workspace/allinone.jar
@@ -108,12 +116,12 @@ jobs:
     steps:
       - uses: actions/checkout@v6
       - name: Bazelisk cache
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: "~/.cache/bazelisk"
           key: ${{runner.os}}-bazelisk-${{ hashFiles('.bazelversion') }}
       - name: Bazel cache
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: "~/.cache/bazel"
           key: ${{runner.os}}-bazel-${{ hashFiles('.bazelversion', 'WORKSPACE', 'maven_install.json') }}-junit-${{ needs.get_date.outputs.ymd }}
@@ -128,7 +136,7 @@ jobs:
       - name: Bazel Junit Tests and Coverage
         run: |
           bazel coverage //projects/... \
-            --instrumentation_filter="-//projects/batfish/src/main/java/org/batfish/representation/juniper/parboiled,-//projects/batfish/src/main/java/org/batfish/vendor/check_point_management/parsing/parboiled,-//projects/batfish-common-protocol/src/main/java:specifier_common,-//projects/batfish/src/main/antlr4[/:],-//projects/.*/src/test[/:]" \
+            --instrumentation_filter="-//projects/batfish/src/main/java/org/batfish/representation/juniper/parboiled,-//projects/batfish/src/main/java/org/batfish/vendor/check_point_management/parsing/parboiled,-//projects/common/src/main/java:specifier_common,-//projects/batfish/src/main/antlr4[/:],-//projects/.*/src/test[/:]" \
             --test_tag_filters=-pmd_test \
             --combined_report=lcov \
             --instrument_test_targets=false

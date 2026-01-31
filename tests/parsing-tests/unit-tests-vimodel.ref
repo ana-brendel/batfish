@@ -39818,6 +39818,98 @@
         "disconnectAdminDownInterfaces" : true,
         "mainRibEnforceResolvability" : false,
         "routingPolicies" : {
+          "~BGP_PEER_EXPORT_POLICY:default:10.1.1.0/24~" : {
+            "name" : "~BGP_PEER_EXPORT_POLICY:default:10.1.1.0/24~",
+            "statements" : [
+              {
+                "class" : "org.batfish.datamodel.routing_policy.statement.SetDefaultPolicy",
+                "defaultPolicy" : "~DEFAULT_BGP_EXPORT_POLICY~"
+              },
+              {
+                "class" : "org.batfish.datamodel.routing_policy.statement.If",
+                "guard" : {
+                  "class" : "org.batfish.datamodel.routing_policy.expr.MatchProtocol",
+                  "protocols" : [
+                    "local"
+                  ]
+                },
+                "trueStatements" : [
+                  {
+                    "class" : "org.batfish.datamodel.routing_policy.statement.Statements$StaticStatement",
+                    "type" : "ExitReject"
+                  }
+                ]
+              },
+              {
+                "class" : "org.batfish.datamodel.routing_policy.statement.If",
+                "falseStatements" : [
+                  {
+                    "class" : "org.batfish.datamodel.routing_policy.statement.SetOrigin",
+                    "originType" : {
+                      "class" : "org.batfish.datamodel.routing_policy.expr.LiteralOrigin",
+                      "originType" : "igp"
+                    }
+                  }
+                ],
+                "guard" : {
+                  "class" : "org.batfish.datamodel.routing_policy.expr.MatchProtocol",
+                  "protocols" : [
+                    "bgp",
+                    "ibgp"
+                  ]
+                }
+              },
+              {
+                "class" : "org.batfish.datamodel.routing_policy.statement.If",
+                "falseStatements" : [
+                  {
+                    "class" : "org.batfish.datamodel.routing_policy.statement.Statements$StaticStatement",
+                    "type" : "ExitReject"
+                  }
+                ],
+                "guard" : {
+                  "class" : "org.batfish.datamodel.routing_policy.expr.FirstMatchChain"
+                },
+                "trueStatements" : [
+                  {
+                    "class" : "org.batfish.datamodel.routing_policy.statement.Statements$StaticStatement",
+                    "type" : "ExitAccept"
+                  }
+                ]
+              }
+            ]
+          },
+          "~BGP_PEER_IMPORT_POLICY:default:10.1.1.0/24~" : {
+            "name" : "~BGP_PEER_IMPORT_POLICY:default:10.1.1.0/24~",
+            "statements" : [
+              {
+                "class" : "org.batfish.datamodel.routing_policy.statement.SetDefaultPolicy",
+                "defaultPolicy" : "~DEFAULT_BGP_IMPORT_POLICY~"
+              },
+              {
+                "class" : "org.batfish.datamodel.routing_policy.statement.Statements$StaticStatement",
+                "type" : "SetDefaultActionAccept"
+              },
+              {
+                "class" : "org.batfish.datamodel.routing_policy.statement.If",
+                "falseStatements" : [
+                  {
+                    "class" : "org.batfish.datamodel.routing_policy.statement.Statements$StaticStatement",
+                    "type" : "ExitReject"
+                  }
+                ],
+                "guard" : {
+                  "class" : "org.batfish.datamodel.routing_policy.expr.FirstMatchChain"
+                },
+                "trueStatements" : [
+                  {
+                    "class" : "org.batfish.datamodel.routing_policy.statement.Statements$StaticStatement",
+                    "type" : "ExitAccept"
+                  }
+                ]
+              }
+            ]
+          },
           "~DEFAULT_BGP_EXPORT_POLICY~" : {
             "name" : "~DEFAULT_BGP_EXPORT_POLICY~",
             "statements" : [
@@ -39898,98 +39990,6 @@
                 ]
               }
             ]
-          },
-          "~PEER_EXPORT_POLICY:10.1.1.0/24~" : {
-            "name" : "~PEER_EXPORT_POLICY:10.1.1.0/24~",
-            "statements" : [
-              {
-                "class" : "org.batfish.datamodel.routing_policy.statement.SetDefaultPolicy",
-                "defaultPolicy" : "~DEFAULT_BGP_EXPORT_POLICY~"
-              },
-              {
-                "class" : "org.batfish.datamodel.routing_policy.statement.If",
-                "guard" : {
-                  "class" : "org.batfish.datamodel.routing_policy.expr.MatchProtocol",
-                  "protocols" : [
-                    "local"
-                  ]
-                },
-                "trueStatements" : [
-                  {
-                    "class" : "org.batfish.datamodel.routing_policy.statement.Statements$StaticStatement",
-                    "type" : "ExitReject"
-                  }
-                ]
-              },
-              {
-                "class" : "org.batfish.datamodel.routing_policy.statement.If",
-                "falseStatements" : [
-                  {
-                    "class" : "org.batfish.datamodel.routing_policy.statement.SetOrigin",
-                    "originType" : {
-                      "class" : "org.batfish.datamodel.routing_policy.expr.LiteralOrigin",
-                      "originType" : "igp"
-                    }
-                  }
-                ],
-                "guard" : {
-                  "class" : "org.batfish.datamodel.routing_policy.expr.MatchProtocol",
-                  "protocols" : [
-                    "bgp",
-                    "ibgp"
-                  ]
-                }
-              },
-              {
-                "class" : "org.batfish.datamodel.routing_policy.statement.If",
-                "falseStatements" : [
-                  {
-                    "class" : "org.batfish.datamodel.routing_policy.statement.Statements$StaticStatement",
-                    "type" : "ExitReject"
-                  }
-                ],
-                "guard" : {
-                  "class" : "org.batfish.datamodel.routing_policy.expr.FirstMatchChain"
-                },
-                "trueStatements" : [
-                  {
-                    "class" : "org.batfish.datamodel.routing_policy.statement.Statements$StaticStatement",
-                    "type" : "ExitAccept"
-                  }
-                ]
-              }
-            ]
-          },
-          "~PEER_IMPORT_POLICY:10.1.1.0/24~" : {
-            "name" : "~PEER_IMPORT_POLICY:10.1.1.0/24~",
-            "statements" : [
-              {
-                "class" : "org.batfish.datamodel.routing_policy.statement.SetDefaultPolicy",
-                "defaultPolicy" : "~DEFAULT_BGP_IMPORT_POLICY~"
-              },
-              {
-                "class" : "org.batfish.datamodel.routing_policy.statement.Statements$StaticStatement",
-                "type" : "SetDefaultActionAccept"
-              },
-              {
-                "class" : "org.batfish.datamodel.routing_policy.statement.If",
-                "falseStatements" : [
-                  {
-                    "class" : "org.batfish.datamodel.routing_policy.statement.Statements$StaticStatement",
-                    "type" : "ExitReject"
-                  }
-                ],
-                "guard" : {
-                  "class" : "org.batfish.datamodel.routing_policy.expr.FirstMatchChain"
-                },
-                "trueStatements" : [
-                  {
-                    "class" : "org.batfish.datamodel.routing_policy.statement.Statements$StaticStatement",
-                    "type" : "ExitAccept"
-                  }
-                ]
-              }
-            ]
           }
         },
         "vendorFamily" : {
@@ -40062,8 +40062,8 @@
                       "sendCommunity" : true,
                       "sendExtendedCommunity" : true
                     },
-                    "exportPolicy" : "~PEER_EXPORT_POLICY:10.1.1.0/24~",
-                    "importPolicy" : "~PEER_IMPORT_POLICY:10.1.1.0/24~",
+                    "exportPolicy" : "~BGP_PEER_EXPORT_POLICY:default:10.1.1.0/24~",
+                    "importPolicy" : "~BGP_PEER_IMPORT_POLICY:default:10.1.1.0/24~",
                     "routeReflectorClient" : false
                   },
                   "localAs" : 1,
@@ -40143,6 +40143,98 @@
         "disconnectAdminDownInterfaces" : true,
         "mainRibEnforceResolvability" : false,
         "routingPolicies" : {
+          "~BGP_PEER_EXPORT_POLICY:default:1.1.1.1/32~" : {
+            "name" : "~BGP_PEER_EXPORT_POLICY:default:1.1.1.1/32~",
+            "statements" : [
+              {
+                "class" : "org.batfish.datamodel.routing_policy.statement.SetDefaultPolicy",
+                "defaultPolicy" : "~DEFAULT_BGP_EXPORT_POLICY~"
+              },
+              {
+                "class" : "org.batfish.datamodel.routing_policy.statement.If",
+                "guard" : {
+                  "class" : "org.batfish.datamodel.routing_policy.expr.MatchProtocol",
+                  "protocols" : [
+                    "local"
+                  ]
+                },
+                "trueStatements" : [
+                  {
+                    "class" : "org.batfish.datamodel.routing_policy.statement.Statements$StaticStatement",
+                    "type" : "ExitReject"
+                  }
+                ]
+              },
+              {
+                "class" : "org.batfish.datamodel.routing_policy.statement.If",
+                "falseStatements" : [
+                  {
+                    "class" : "org.batfish.datamodel.routing_policy.statement.SetOrigin",
+                    "originType" : {
+                      "class" : "org.batfish.datamodel.routing_policy.expr.LiteralOrigin",
+                      "originType" : "igp"
+                    }
+                  }
+                ],
+                "guard" : {
+                  "class" : "org.batfish.datamodel.routing_policy.expr.MatchProtocol",
+                  "protocols" : [
+                    "bgp",
+                    "ibgp"
+                  ]
+                }
+              },
+              {
+                "class" : "org.batfish.datamodel.routing_policy.statement.If",
+                "falseStatements" : [
+                  {
+                    "class" : "org.batfish.datamodel.routing_policy.statement.Statements$StaticStatement",
+                    "type" : "ExitReject"
+                  }
+                ],
+                "guard" : {
+                  "class" : "org.batfish.datamodel.routing_policy.expr.FirstMatchChain"
+                },
+                "trueStatements" : [
+                  {
+                    "class" : "org.batfish.datamodel.routing_policy.statement.Statements$StaticStatement",
+                    "type" : "ExitAccept"
+                  }
+                ]
+              }
+            ]
+          },
+          "~BGP_PEER_IMPORT_POLICY:default:1.1.1.1/32~" : {
+            "name" : "~BGP_PEER_IMPORT_POLICY:default:1.1.1.1/32~",
+            "statements" : [
+              {
+                "class" : "org.batfish.datamodel.routing_policy.statement.SetDefaultPolicy",
+                "defaultPolicy" : "~DEFAULT_BGP_IMPORT_POLICY~"
+              },
+              {
+                "class" : "org.batfish.datamodel.routing_policy.statement.Statements$StaticStatement",
+                "type" : "SetDefaultActionAccept"
+              },
+              {
+                "class" : "org.batfish.datamodel.routing_policy.statement.If",
+                "falseStatements" : [
+                  {
+                    "class" : "org.batfish.datamodel.routing_policy.statement.Statements$StaticStatement",
+                    "type" : "ExitReject"
+                  }
+                ],
+                "guard" : {
+                  "class" : "org.batfish.datamodel.routing_policy.expr.FirstMatchChain"
+                },
+                "trueStatements" : [
+                  {
+                    "class" : "org.batfish.datamodel.routing_policy.statement.Statements$StaticStatement",
+                    "type" : "ExitAccept"
+                  }
+                ]
+              }
+            ]
+          },
           "~DEFAULT_BGP_EXPORT_POLICY~" : {
             "name" : "~DEFAULT_BGP_EXPORT_POLICY~",
             "statements" : [
@@ -40223,98 +40315,6 @@
                 ]
               }
             ]
-          },
-          "~PEER_EXPORT_POLICY:1.1.1.1/32~" : {
-            "name" : "~PEER_EXPORT_POLICY:1.1.1.1/32~",
-            "statements" : [
-              {
-                "class" : "org.batfish.datamodel.routing_policy.statement.SetDefaultPolicy",
-                "defaultPolicy" : "~DEFAULT_BGP_EXPORT_POLICY~"
-              },
-              {
-                "class" : "org.batfish.datamodel.routing_policy.statement.If",
-                "guard" : {
-                  "class" : "org.batfish.datamodel.routing_policy.expr.MatchProtocol",
-                  "protocols" : [
-                    "local"
-                  ]
-                },
-                "trueStatements" : [
-                  {
-                    "class" : "org.batfish.datamodel.routing_policy.statement.Statements$StaticStatement",
-                    "type" : "ExitReject"
-                  }
-                ]
-              },
-              {
-                "class" : "org.batfish.datamodel.routing_policy.statement.If",
-                "falseStatements" : [
-                  {
-                    "class" : "org.batfish.datamodel.routing_policy.statement.SetOrigin",
-                    "originType" : {
-                      "class" : "org.batfish.datamodel.routing_policy.expr.LiteralOrigin",
-                      "originType" : "igp"
-                    }
-                  }
-                ],
-                "guard" : {
-                  "class" : "org.batfish.datamodel.routing_policy.expr.MatchProtocol",
-                  "protocols" : [
-                    "bgp",
-                    "ibgp"
-                  ]
-                }
-              },
-              {
-                "class" : "org.batfish.datamodel.routing_policy.statement.If",
-                "falseStatements" : [
-                  {
-                    "class" : "org.batfish.datamodel.routing_policy.statement.Statements$StaticStatement",
-                    "type" : "ExitReject"
-                  }
-                ],
-                "guard" : {
-                  "class" : "org.batfish.datamodel.routing_policy.expr.FirstMatchChain"
-                },
-                "trueStatements" : [
-                  {
-                    "class" : "org.batfish.datamodel.routing_policy.statement.Statements$StaticStatement",
-                    "type" : "ExitAccept"
-                  }
-                ]
-              }
-            ]
-          },
-          "~PEER_IMPORT_POLICY:1.1.1.1/32~" : {
-            "name" : "~PEER_IMPORT_POLICY:1.1.1.1/32~",
-            "statements" : [
-              {
-                "class" : "org.batfish.datamodel.routing_policy.statement.SetDefaultPolicy",
-                "defaultPolicy" : "~DEFAULT_BGP_IMPORT_POLICY~"
-              },
-              {
-                "class" : "org.batfish.datamodel.routing_policy.statement.Statements$StaticStatement",
-                "type" : "SetDefaultActionAccept"
-              },
-              {
-                "class" : "org.batfish.datamodel.routing_policy.statement.If",
-                "falseStatements" : [
-                  {
-                    "class" : "org.batfish.datamodel.routing_policy.statement.Statements$StaticStatement",
-                    "type" : "ExitReject"
-                  }
-                ],
-                "guard" : {
-                  "class" : "org.batfish.datamodel.routing_policy.expr.FirstMatchChain"
-                },
-                "trueStatements" : [
-                  {
-                    "class" : "org.batfish.datamodel.routing_policy.statement.Statements$StaticStatement",
-                    "type" : "ExitAccept"
-                  }
-                ]
-              }
-            ]
           }
         },
         "vendorFamily" : {
@@ -40390,8 +40390,8 @@
                       "sendCommunity" : true,
                       "sendExtendedCommunity" : true
                     },
-                    "exportPolicy" : "~PEER_EXPORT_POLICY:1.1.1.1/32~",
-                    "importPolicy" : "~PEER_IMPORT_POLICY:1.1.1.1/32~",
+                    "exportPolicy" : "~BGP_PEER_EXPORT_POLICY:default:1.1.1.1/32~",
+                    "importPolicy" : "~BGP_PEER_IMPORT_POLICY:default:1.1.1.1/32~",
                     "routeReflectorClient" : false
                   },
                   "localAs" : 1,
@@ -109482,6 +109482,296 @@
         "disconnectAdminDownInterfaces" : true,
         "mainRibEnforceResolvability" : false,
         "routingPolicies" : {
+          "~BGP_PEER_EXPORT_POLICY:default:1.2.3.5/32~" : {
+            "name" : "~BGP_PEER_EXPORT_POLICY:default:1.2.3.5/32~",
+            "statements" : [
+              {
+                "class" : "org.batfish.datamodel.routing_policy.statement.SetDefaultPolicy",
+                "defaultPolicy" : "~DEFAULT_BGP_EXPORT_POLICY~"
+              },
+              {
+                "class" : "org.batfish.datamodel.routing_policy.statement.If",
+                "guard" : {
+                  "class" : "org.batfish.datamodel.routing_policy.expr.MatchProtocol",
+                  "protocols" : [
+                    "local"
+                  ]
+                },
+                "trueStatements" : [
+                  {
+                    "class" : "org.batfish.datamodel.routing_policy.statement.Statements$StaticStatement",
+                    "type" : "ExitReject"
+                  }
+                ]
+              },
+              {
+                "class" : "org.batfish.datamodel.routing_policy.statement.If",
+                "falseStatements" : [
+                  {
+                    "class" : "org.batfish.datamodel.routing_policy.statement.SetOrigin",
+                    "originType" : {
+                      "class" : "org.batfish.datamodel.routing_policy.expr.LiteralOrigin",
+                      "originType" : "igp"
+                    }
+                  }
+                ],
+                "guard" : {
+                  "class" : "org.batfish.datamodel.routing_policy.expr.MatchProtocol",
+                  "protocols" : [
+                    "bgp",
+                    "ibgp"
+                  ]
+                }
+              },
+              {
+                "class" : "org.batfish.datamodel.routing_policy.statement.If",
+                "falseStatements" : [
+                  {
+                    "class" : "org.batfish.datamodel.routing_policy.statement.Statements$StaticStatement",
+                    "type" : "ExitReject"
+                  }
+                ],
+                "guard" : {
+                  "class" : "org.batfish.datamodel.routing_policy.expr.FirstMatchChain"
+                },
+                "trueStatements" : [
+                  {
+                    "class" : "org.batfish.datamodel.routing_policy.statement.Statements$StaticStatement",
+                    "type" : "ExitAccept"
+                  }
+                ]
+              }
+            ]
+          },
+          "~BGP_PEER_EXPORT_POLICY:default:3.4.5.6/32~" : {
+            "name" : "~BGP_PEER_EXPORT_POLICY:default:3.4.5.6/32~",
+            "statements" : [
+              {
+                "class" : "org.batfish.datamodel.routing_policy.statement.SetDefaultPolicy",
+                "defaultPolicy" : "~DEFAULT_BGP_EXPORT_POLICY~"
+              },
+              {
+                "class" : "org.batfish.datamodel.routing_policy.statement.If",
+                "guard" : {
+                  "class" : "org.batfish.datamodel.routing_policy.expr.MatchProtocol",
+                  "protocols" : [
+                    "local"
+                  ]
+                },
+                "trueStatements" : [
+                  {
+                    "class" : "org.batfish.datamodel.routing_policy.statement.Statements$StaticStatement",
+                    "type" : "ExitReject"
+                  }
+                ]
+              },
+              {
+                "class" : "org.batfish.datamodel.routing_policy.statement.If",
+                "falseStatements" : [
+                  {
+                    "class" : "org.batfish.datamodel.routing_policy.statement.SetOrigin",
+                    "originType" : {
+                      "class" : "org.batfish.datamodel.routing_policy.expr.LiteralOrigin",
+                      "originType" : "igp"
+                    }
+                  }
+                ],
+                "guard" : {
+                  "class" : "org.batfish.datamodel.routing_policy.expr.MatchProtocol",
+                  "protocols" : [
+                    "bgp",
+                    "ibgp"
+                  ]
+                }
+              },
+              {
+                "class" : "org.batfish.datamodel.routing_policy.statement.If",
+                "falseStatements" : [
+                  {
+                    "class" : "org.batfish.datamodel.routing_policy.statement.Statements$StaticStatement",
+                    "type" : "ExitReject"
+                  }
+                ],
+                "guard" : {
+                  "class" : "org.batfish.datamodel.routing_policy.expr.FirstMatchChain"
+                },
+                "trueStatements" : [
+                  {
+                    "class" : "org.batfish.datamodel.routing_policy.statement.Statements$StaticStatement",
+                    "type" : "ExitAccept"
+                  }
+                ]
+              }
+            ]
+          },
+          "~BGP_PEER_EXPORT_POLICY:default:3.4.5.7/32~" : {
+            "name" : "~BGP_PEER_EXPORT_POLICY:default:3.4.5.7/32~",
+            "statements" : [
+              {
+                "class" : "org.batfish.datamodel.routing_policy.statement.SetDefaultPolicy",
+                "defaultPolicy" : "~DEFAULT_BGP_EXPORT_POLICY~"
+              },
+              {
+                "class" : "org.batfish.datamodel.routing_policy.statement.If",
+                "guard" : {
+                  "class" : "org.batfish.datamodel.routing_policy.expr.MatchProtocol",
+                  "protocols" : [
+                    "local"
+                  ]
+                },
+                "trueStatements" : [
+                  {
+                    "class" : "org.batfish.datamodel.routing_policy.statement.Statements$StaticStatement",
+                    "type" : "ExitReject"
+                  }
+                ]
+              },
+              {
+                "class" : "org.batfish.datamodel.routing_policy.statement.If",
+                "falseStatements" : [
+                  {
+                    "class" : "org.batfish.datamodel.routing_policy.statement.SetOrigin",
+                    "originType" : {
+                      "class" : "org.batfish.datamodel.routing_policy.expr.LiteralOrigin",
+                      "originType" : "igp"
+                    }
+                  }
+                ],
+                "guard" : {
+                  "class" : "org.batfish.datamodel.routing_policy.expr.MatchProtocol",
+                  "protocols" : [
+                    "bgp",
+                    "ibgp"
+                  ]
+                }
+              },
+              {
+                "class" : "org.batfish.datamodel.routing_policy.statement.If",
+                "falseStatements" : [
+                  {
+                    "class" : "org.batfish.datamodel.routing_policy.statement.Statements$StaticStatement",
+                    "type" : "ExitReject"
+                  }
+                ],
+                "guard" : {
+                  "class" : "org.batfish.datamodel.routing_policy.expr.FirstMatchChain"
+                },
+                "trueStatements" : [
+                  {
+                    "class" : "org.batfish.datamodel.routing_policy.statement.Statements$StaticStatement",
+                    "type" : "ExitAccept"
+                  }
+                ]
+              }
+            ]
+          },
+          "~BGP_PEER_IMPORT_POLICY:default:1.2.3.5/32~" : {
+            "name" : "~BGP_PEER_IMPORT_POLICY:default:1.2.3.5/32~",
+            "statements" : [
+              {
+                "class" : "org.batfish.datamodel.routing_policy.statement.SetDefaultPolicy",
+                "defaultPolicy" : "~DEFAULT_BGP_IMPORT_POLICY~"
+              },
+              {
+                "class" : "org.batfish.datamodel.routing_policy.statement.Statements$StaticStatement",
+                "type" : "SetDefaultActionAccept"
+              },
+              {
+                "class" : "org.batfish.datamodel.routing_policy.statement.If",
+                "falseStatements" : [
+                  {
+                    "class" : "org.batfish.datamodel.routing_policy.statement.Statements$StaticStatement",
+                    "type" : "ExitReject"
+                  }
+                ],
+                "guard" : {
+                  "class" : "org.batfish.datamodel.routing_policy.expr.FirstMatchChain"
+                },
+                "trueStatements" : [
+                  {
+                    "class" : "org.batfish.datamodel.routing_policy.statement.Statements$StaticStatement",
+                    "type" : "ExitAccept"
+                  }
+                ]
+              }
+            ]
+          },
+          "~BGP_PEER_IMPORT_POLICY:default:3.4.5.6/32~" : {
+            "name" : "~BGP_PEER_IMPORT_POLICY:default:3.4.5.6/32~",
+            "statements" : [
+              {
+                "class" : "org.batfish.datamodel.routing_policy.statement.SetDefaultPolicy",
+                "defaultPolicy" : "~DEFAULT_BGP_IMPORT_POLICY~"
+              },
+              {
+                "class" : "org.batfish.datamodel.routing_policy.statement.Statements$StaticStatement",
+                "type" : "SetDefaultActionAccept"
+              },
+              {
+                "class" : "org.batfish.datamodel.routing_policy.statement.SetAdministrativeCost",
+                "admin" : {
+                  "class" : "org.batfish.datamodel.routing_policy.expr.LiteralInt",
+                  "value" : 130
+                }
+              },
+              {
+                "class" : "org.batfish.datamodel.routing_policy.statement.If",
+                "falseStatements" : [
+                  {
+                    "class" : "org.batfish.datamodel.routing_policy.statement.Statements$StaticStatement",
+                    "type" : "ExitReject"
+                  }
+                ],
+                "guard" : {
+                  "class" : "org.batfish.datamodel.routing_policy.expr.FirstMatchChain"
+                },
+                "trueStatements" : [
+                  {
+                    "class" : "org.batfish.datamodel.routing_policy.statement.Statements$StaticStatement",
+                    "type" : "ExitAccept"
+                  }
+                ]
+              }
+            ]
+          },
+          "~BGP_PEER_IMPORT_POLICY:default:3.4.5.7/32~" : {
+            "name" : "~BGP_PEER_IMPORT_POLICY:default:3.4.5.7/32~",
+            "statements" : [
+              {
+                "class" : "org.batfish.datamodel.routing_policy.statement.SetDefaultPolicy",
+                "defaultPolicy" : "~DEFAULT_BGP_IMPORT_POLICY~"
+              },
+              {
+                "class" : "org.batfish.datamodel.routing_policy.statement.Statements$StaticStatement",
+                "type" : "SetDefaultActionAccept"
+              },
+              {
+                "class" : "org.batfish.datamodel.routing_policy.statement.SetAdministrativeCost",
+                "admin" : {
+                  "class" : "org.batfish.datamodel.routing_policy.expr.LiteralInt",
+                  "value" : 130
+                }
+              },
+              {
+                "class" : "org.batfish.datamodel.routing_policy.statement.If",
+                "falseStatements" : [
+                  {
+                    "class" : "org.batfish.datamodel.routing_policy.statement.Statements$StaticStatement",
+                    "type" : "ExitReject"
+                  }
+                ],
+                "guard" : {
+                  "class" : "org.batfish.datamodel.routing_policy.expr.FirstMatchChain"
+                },
+                "trueStatements" : [
+                  {
+                    "class" : "org.batfish.datamodel.routing_policy.statement.Statements$StaticStatement",
+                    "type" : "ExitAccept"
+                  }
+                ]
+              }
+            ]
+          },
           "~DEFAULT_BGP_EXPORT_POLICY~" : {
             "name" : "~DEFAULT_BGP_EXPORT_POLICY~",
             "statements" : [
@@ -109558,296 +109848,6 @@
                   {
                     "class" : "org.batfish.datamodel.routing_policy.statement.Statements$StaticStatement",
                     "type" : "ReturnTrue"
-                  }
-                ]
-              }
-            ]
-          },
-          "~PEER_EXPORT_POLICY:1.2.3.5/32~" : {
-            "name" : "~PEER_EXPORT_POLICY:1.2.3.5/32~",
-            "statements" : [
-              {
-                "class" : "org.batfish.datamodel.routing_policy.statement.SetDefaultPolicy",
-                "defaultPolicy" : "~DEFAULT_BGP_EXPORT_POLICY~"
-              },
-              {
-                "class" : "org.batfish.datamodel.routing_policy.statement.If",
-                "guard" : {
-                  "class" : "org.batfish.datamodel.routing_policy.expr.MatchProtocol",
-                  "protocols" : [
-                    "local"
-                  ]
-                },
-                "trueStatements" : [
-                  {
-                    "class" : "org.batfish.datamodel.routing_policy.statement.Statements$StaticStatement",
-                    "type" : "ExitReject"
-                  }
-                ]
-              },
-              {
-                "class" : "org.batfish.datamodel.routing_policy.statement.If",
-                "falseStatements" : [
-                  {
-                    "class" : "org.batfish.datamodel.routing_policy.statement.SetOrigin",
-                    "originType" : {
-                      "class" : "org.batfish.datamodel.routing_policy.expr.LiteralOrigin",
-                      "originType" : "igp"
-                    }
-                  }
-                ],
-                "guard" : {
-                  "class" : "org.batfish.datamodel.routing_policy.expr.MatchProtocol",
-                  "protocols" : [
-                    "bgp",
-                    "ibgp"
-                  ]
-                }
-              },
-              {
-                "class" : "org.batfish.datamodel.routing_policy.statement.If",
-                "falseStatements" : [
-                  {
-                    "class" : "org.batfish.datamodel.routing_policy.statement.Statements$StaticStatement",
-                    "type" : "ExitReject"
-                  }
-                ],
-                "guard" : {
-                  "class" : "org.batfish.datamodel.routing_policy.expr.FirstMatchChain"
-                },
-                "trueStatements" : [
-                  {
-                    "class" : "org.batfish.datamodel.routing_policy.statement.Statements$StaticStatement",
-                    "type" : "ExitAccept"
-                  }
-                ]
-              }
-            ]
-          },
-          "~PEER_EXPORT_POLICY:3.4.5.6/32~" : {
-            "name" : "~PEER_EXPORT_POLICY:3.4.5.6/32~",
-            "statements" : [
-              {
-                "class" : "org.batfish.datamodel.routing_policy.statement.SetDefaultPolicy",
-                "defaultPolicy" : "~DEFAULT_BGP_EXPORT_POLICY~"
-              },
-              {
-                "class" : "org.batfish.datamodel.routing_policy.statement.If",
-                "guard" : {
-                  "class" : "org.batfish.datamodel.routing_policy.expr.MatchProtocol",
-                  "protocols" : [
-                    "local"
-                  ]
-                },
-                "trueStatements" : [
-                  {
-                    "class" : "org.batfish.datamodel.routing_policy.statement.Statements$StaticStatement",
-                    "type" : "ExitReject"
-                  }
-                ]
-              },
-              {
-                "class" : "org.batfish.datamodel.routing_policy.statement.If",
-                "falseStatements" : [
-                  {
-                    "class" : "org.batfish.datamodel.routing_policy.statement.SetOrigin",
-                    "originType" : {
-                      "class" : "org.batfish.datamodel.routing_policy.expr.LiteralOrigin",
-                      "originType" : "igp"
-                    }
-                  }
-                ],
-                "guard" : {
-                  "class" : "org.batfish.datamodel.routing_policy.expr.MatchProtocol",
-                  "protocols" : [
-                    "bgp",
-                    "ibgp"
-                  ]
-                }
-              },
-              {
-                "class" : "org.batfish.datamodel.routing_policy.statement.If",
-                "falseStatements" : [
-                  {
-                    "class" : "org.batfish.datamodel.routing_policy.statement.Statements$StaticStatement",
-                    "type" : "ExitReject"
-                  }
-                ],
-                "guard" : {
-                  "class" : "org.batfish.datamodel.routing_policy.expr.FirstMatchChain"
-                },
-                "trueStatements" : [
-                  {
-                    "class" : "org.batfish.datamodel.routing_policy.statement.Statements$StaticStatement",
-                    "type" : "ExitAccept"
-                  }
-                ]
-              }
-            ]
-          },
-          "~PEER_EXPORT_POLICY:3.4.5.7/32~" : {
-            "name" : "~PEER_EXPORT_POLICY:3.4.5.7/32~",
-            "statements" : [
-              {
-                "class" : "org.batfish.datamodel.routing_policy.statement.SetDefaultPolicy",
-                "defaultPolicy" : "~DEFAULT_BGP_EXPORT_POLICY~"
-              },
-              {
-                "class" : "org.batfish.datamodel.routing_policy.statement.If",
-                "guard" : {
-                  "class" : "org.batfish.datamodel.routing_policy.expr.MatchProtocol",
-                  "protocols" : [
-                    "local"
-                  ]
-                },
-                "trueStatements" : [
-                  {
-                    "class" : "org.batfish.datamodel.routing_policy.statement.Statements$StaticStatement",
-                    "type" : "ExitReject"
-                  }
-                ]
-              },
-              {
-                "class" : "org.batfish.datamodel.routing_policy.statement.If",
-                "falseStatements" : [
-                  {
-                    "class" : "org.batfish.datamodel.routing_policy.statement.SetOrigin",
-                    "originType" : {
-                      "class" : "org.batfish.datamodel.routing_policy.expr.LiteralOrigin",
-                      "originType" : "igp"
-                    }
-                  }
-                ],
-                "guard" : {
-                  "class" : "org.batfish.datamodel.routing_policy.expr.MatchProtocol",
-                  "protocols" : [
-                    "bgp",
-                    "ibgp"
-                  ]
-                }
-              },
-              {
-                "class" : "org.batfish.datamodel.routing_policy.statement.If",
-                "falseStatements" : [
-                  {
-                    "class" : "org.batfish.datamodel.routing_policy.statement.Statements$StaticStatement",
-                    "type" : "ExitReject"
-                  }
-                ],
-                "guard" : {
-                  "class" : "org.batfish.datamodel.routing_policy.expr.FirstMatchChain"
-                },
-                "trueStatements" : [
-                  {
-                    "class" : "org.batfish.datamodel.routing_policy.statement.Statements$StaticStatement",
-                    "type" : "ExitAccept"
-                  }
-                ]
-              }
-            ]
-          },
-          "~PEER_IMPORT_POLICY:1.2.3.5/32~" : {
-            "name" : "~PEER_IMPORT_POLICY:1.2.3.5/32~",
-            "statements" : [
-              {
-                "class" : "org.batfish.datamodel.routing_policy.statement.SetDefaultPolicy",
-                "defaultPolicy" : "~DEFAULT_BGP_IMPORT_POLICY~"
-              },
-              {
-                "class" : "org.batfish.datamodel.routing_policy.statement.Statements$StaticStatement",
-                "type" : "SetDefaultActionAccept"
-              },
-              {
-                "class" : "org.batfish.datamodel.routing_policy.statement.If",
-                "falseStatements" : [
-                  {
-                    "class" : "org.batfish.datamodel.routing_policy.statement.Statements$StaticStatement",
-                    "type" : "ExitReject"
-                  }
-                ],
-                "guard" : {
-                  "class" : "org.batfish.datamodel.routing_policy.expr.FirstMatchChain"
-                },
-                "trueStatements" : [
-                  {
-                    "class" : "org.batfish.datamodel.routing_policy.statement.Statements$StaticStatement",
-                    "type" : "ExitAccept"
-                  }
-                ]
-              }
-            ]
-          },
-          "~PEER_IMPORT_POLICY:3.4.5.6/32~" : {
-            "name" : "~PEER_IMPORT_POLICY:3.4.5.6/32~",
-            "statements" : [
-              {
-                "class" : "org.batfish.datamodel.routing_policy.statement.SetDefaultPolicy",
-                "defaultPolicy" : "~DEFAULT_BGP_IMPORT_POLICY~"
-              },
-              {
-                "class" : "org.batfish.datamodel.routing_policy.statement.Statements$StaticStatement",
-                "type" : "SetDefaultActionAccept"
-              },
-              {
-                "class" : "org.batfish.datamodel.routing_policy.statement.SetAdministrativeCost",
-                "admin" : {
-                  "class" : "org.batfish.datamodel.routing_policy.expr.LiteralInt",
-                  "value" : 130
-                }
-              },
-              {
-                "class" : "org.batfish.datamodel.routing_policy.statement.If",
-                "falseStatements" : [
-                  {
-                    "class" : "org.batfish.datamodel.routing_policy.statement.Statements$StaticStatement",
-                    "type" : "ExitReject"
-                  }
-                ],
-                "guard" : {
-                  "class" : "org.batfish.datamodel.routing_policy.expr.FirstMatchChain"
-                },
-                "trueStatements" : [
-                  {
-                    "class" : "org.batfish.datamodel.routing_policy.statement.Statements$StaticStatement",
-                    "type" : "ExitAccept"
-                  }
-                ]
-              }
-            ]
-          },
-          "~PEER_IMPORT_POLICY:3.4.5.7/32~" : {
-            "name" : "~PEER_IMPORT_POLICY:3.4.5.7/32~",
-            "statements" : [
-              {
-                "class" : "org.batfish.datamodel.routing_policy.statement.SetDefaultPolicy",
-                "defaultPolicy" : "~DEFAULT_BGP_IMPORT_POLICY~"
-              },
-              {
-                "class" : "org.batfish.datamodel.routing_policy.statement.Statements$StaticStatement",
-                "type" : "SetDefaultActionAccept"
-              },
-              {
-                "class" : "org.batfish.datamodel.routing_policy.statement.SetAdministrativeCost",
-                "admin" : {
-                  "class" : "org.batfish.datamodel.routing_policy.expr.LiteralInt",
-                  "value" : 130
-                }
-              },
-              {
-                "class" : "org.batfish.datamodel.routing_policy.statement.If",
-                "falseStatements" : [
-                  {
-                    "class" : "org.batfish.datamodel.routing_policy.statement.Statements$StaticStatement",
-                    "type" : "ExitReject"
-                  }
-                ],
-                "guard" : {
-                  "class" : "org.batfish.datamodel.routing_policy.expr.FirstMatchChain"
-                },
-                "trueStatements" : [
-                  {
-                    "class" : "org.batfish.datamodel.routing_policy.statement.Statements$StaticStatement",
-                    "type" : "ExitAccept"
                   }
                 ]
               }
@@ -109927,8 +109927,8 @@
                       "sendCommunity" : true,
                       "sendExtendedCommunity" : true
                     },
-                    "exportPolicy" : "~PEER_EXPORT_POLICY:3.4.5.7/32~",
-                    "importPolicy" : "~PEER_IMPORT_POLICY:3.4.5.7/32~",
+                    "exportPolicy" : "~BGP_PEER_EXPORT_POLICY:default:3.4.5.7/32~",
+                    "importPolicy" : "~BGP_PEER_IMPORT_POLICY:default:3.4.5.7/32~",
                     "routeReflectorClient" : false
                   },
                   "localAs" : 1,
@@ -109976,6 +109976,190 @@
         "disconnectAdminDownInterfaces" : true,
         "mainRibEnforceResolvability" : false,
         "routingPolicies" : {
+          "~BGP_PEER_EXPORT_POLICY:default:172.16.2.1/32~" : {
+            "name" : "~BGP_PEER_EXPORT_POLICY:default:172.16.2.1/32~",
+            "statements" : [
+              {
+                "class" : "org.batfish.datamodel.routing_policy.statement.SetDefaultPolicy",
+                "defaultPolicy" : "~DEFAULT_BGP_EXPORT_POLICY~"
+              },
+              {
+                "class" : "org.batfish.datamodel.routing_policy.statement.If",
+                "guard" : {
+                  "class" : "org.batfish.datamodel.routing_policy.expr.MatchProtocol",
+                  "protocols" : [
+                    "local"
+                  ]
+                },
+                "trueStatements" : [
+                  {
+                    "class" : "org.batfish.datamodel.routing_policy.statement.Statements$StaticStatement",
+                    "type" : "ExitReject"
+                  }
+                ]
+              },
+              {
+                "class" : "org.batfish.datamodel.routing_policy.statement.If",
+                "falseStatements" : [
+                  {
+                    "class" : "org.batfish.datamodel.routing_policy.statement.SetOrigin",
+                    "originType" : {
+                      "class" : "org.batfish.datamodel.routing_policy.expr.LiteralOrigin",
+                      "originType" : "igp"
+                    }
+                  }
+                ],
+                "guard" : {
+                  "class" : "org.batfish.datamodel.routing_policy.expr.MatchProtocol",
+                  "protocols" : [
+                    "bgp",
+                    "ibgp"
+                  ]
+                }
+              },
+              {
+                "class" : "org.batfish.datamodel.routing_policy.statement.If",
+                "falseStatements" : [
+                  {
+                    "class" : "org.batfish.datamodel.routing_policy.statement.Statements$StaticStatement",
+                    "type" : "ExitReject"
+                  }
+                ],
+                "guard" : {
+                  "class" : "org.batfish.datamodel.routing_policy.expr.FirstMatchChain"
+                },
+                "trueStatements" : [
+                  {
+                    "class" : "org.batfish.datamodel.routing_policy.statement.Statements$StaticStatement",
+                    "type" : "ExitAccept"
+                  }
+                ]
+              }
+            ]
+          },
+          "~BGP_PEER_EXPORT_POLICY:default:172.16.2.2/32~" : {
+            "name" : "~BGP_PEER_EXPORT_POLICY:default:172.16.2.2/32~",
+            "statements" : [
+              {
+                "class" : "org.batfish.datamodel.routing_policy.statement.SetDefaultPolicy",
+                "defaultPolicy" : "~DEFAULT_BGP_EXPORT_POLICY~"
+              },
+              {
+                "class" : "org.batfish.datamodel.routing_policy.statement.If",
+                "guard" : {
+                  "class" : "org.batfish.datamodel.routing_policy.expr.MatchProtocol",
+                  "protocols" : [
+                    "local"
+                  ]
+                },
+                "trueStatements" : [
+                  {
+                    "class" : "org.batfish.datamodel.routing_policy.statement.Statements$StaticStatement",
+                    "type" : "ExitReject"
+                  }
+                ]
+              },
+              {
+                "class" : "org.batfish.datamodel.routing_policy.statement.If",
+                "falseStatements" : [
+                  {
+                    "class" : "org.batfish.datamodel.routing_policy.statement.SetOrigin",
+                    "originType" : {
+                      "class" : "org.batfish.datamodel.routing_policy.expr.LiteralOrigin",
+                      "originType" : "igp"
+                    }
+                  }
+                ],
+                "guard" : {
+                  "class" : "org.batfish.datamodel.routing_policy.expr.MatchProtocol",
+                  "protocols" : [
+                    "bgp",
+                    "ibgp"
+                  ]
+                }
+              },
+              {
+                "class" : "org.batfish.datamodel.routing_policy.statement.If",
+                "falseStatements" : [
+                  {
+                    "class" : "org.batfish.datamodel.routing_policy.statement.Statements$StaticStatement",
+                    "type" : "ExitReject"
+                  }
+                ],
+                "guard" : {
+                  "class" : "org.batfish.datamodel.routing_policy.expr.FirstMatchChain"
+                },
+                "trueStatements" : [
+                  {
+                    "class" : "org.batfish.datamodel.routing_policy.statement.Statements$StaticStatement",
+                    "type" : "ExitAccept"
+                  }
+                ]
+              }
+            ]
+          },
+          "~BGP_PEER_IMPORT_POLICY:default:172.16.2.1/32~" : {
+            "name" : "~BGP_PEER_IMPORT_POLICY:default:172.16.2.1/32~",
+            "statements" : [
+              {
+                "class" : "org.batfish.datamodel.routing_policy.statement.SetDefaultPolicy",
+                "defaultPolicy" : "~DEFAULT_BGP_IMPORT_POLICY~"
+              },
+              {
+                "class" : "org.batfish.datamodel.routing_policy.statement.Statements$StaticStatement",
+                "type" : "SetDefaultActionAccept"
+              },
+              {
+                "class" : "org.batfish.datamodel.routing_policy.statement.If",
+                "falseStatements" : [
+                  {
+                    "class" : "org.batfish.datamodel.routing_policy.statement.Statements$StaticStatement",
+                    "type" : "ExitReject"
+                  }
+                ],
+                "guard" : {
+                  "class" : "org.batfish.datamodel.routing_policy.expr.FirstMatchChain"
+                },
+                "trueStatements" : [
+                  {
+                    "class" : "org.batfish.datamodel.routing_policy.statement.Statements$StaticStatement",
+                    "type" : "ExitAccept"
+                  }
+                ]
+              }
+            ]
+          },
+          "~BGP_PEER_IMPORT_POLICY:default:172.16.2.2/32~" : {
+            "name" : "~BGP_PEER_IMPORT_POLICY:default:172.16.2.2/32~",
+            "statements" : [
+              {
+                "class" : "org.batfish.datamodel.routing_policy.statement.SetDefaultPolicy",
+                "defaultPolicy" : "~DEFAULT_BGP_IMPORT_POLICY~"
+              },
+              {
+                "class" : "org.batfish.datamodel.routing_policy.statement.Statements$StaticStatement",
+                "type" : "SetDefaultActionAccept"
+              },
+              {
+                "class" : "org.batfish.datamodel.routing_policy.statement.If",
+                "falseStatements" : [
+                  {
+                    "class" : "org.batfish.datamodel.routing_policy.statement.Statements$StaticStatement",
+                    "type" : "ExitReject"
+                  }
+                ],
+                "guard" : {
+                  "class" : "org.batfish.datamodel.routing_policy.expr.FirstMatchChain"
+                },
+                "trueStatements" : [
+                  {
+                    "class" : "org.batfish.datamodel.routing_policy.statement.Statements$StaticStatement",
+                    "type" : "ExitAccept"
+                  }
+                ]
+              }
+            ]
+          },
           "~DEFAULT_BGP_EXPORT_POLICY~" : {
             "name" : "~DEFAULT_BGP_EXPORT_POLICY~",
             "statements" : [
@@ -110052,190 +110236,6 @@
                   {
                     "class" : "org.batfish.datamodel.routing_policy.statement.Statements$StaticStatement",
                     "type" : "ReturnTrue"
-                  }
-                ]
-              }
-            ]
-          },
-          "~PEER_EXPORT_POLICY:172.16.2.1/32~" : {
-            "name" : "~PEER_EXPORT_POLICY:172.16.2.1/32~",
-            "statements" : [
-              {
-                "class" : "org.batfish.datamodel.routing_policy.statement.SetDefaultPolicy",
-                "defaultPolicy" : "~DEFAULT_BGP_EXPORT_POLICY~"
-              },
-              {
-                "class" : "org.batfish.datamodel.routing_policy.statement.If",
-                "guard" : {
-                  "class" : "org.batfish.datamodel.routing_policy.expr.MatchProtocol",
-                  "protocols" : [
-                    "local"
-                  ]
-                },
-                "trueStatements" : [
-                  {
-                    "class" : "org.batfish.datamodel.routing_policy.statement.Statements$StaticStatement",
-                    "type" : "ExitReject"
-                  }
-                ]
-              },
-              {
-                "class" : "org.batfish.datamodel.routing_policy.statement.If",
-                "falseStatements" : [
-                  {
-                    "class" : "org.batfish.datamodel.routing_policy.statement.SetOrigin",
-                    "originType" : {
-                      "class" : "org.batfish.datamodel.routing_policy.expr.LiteralOrigin",
-                      "originType" : "igp"
-                    }
-                  }
-                ],
-                "guard" : {
-                  "class" : "org.batfish.datamodel.routing_policy.expr.MatchProtocol",
-                  "protocols" : [
-                    "bgp",
-                    "ibgp"
-                  ]
-                }
-              },
-              {
-                "class" : "org.batfish.datamodel.routing_policy.statement.If",
-                "falseStatements" : [
-                  {
-                    "class" : "org.batfish.datamodel.routing_policy.statement.Statements$StaticStatement",
-                    "type" : "ExitReject"
-                  }
-                ],
-                "guard" : {
-                  "class" : "org.batfish.datamodel.routing_policy.expr.FirstMatchChain"
-                },
-                "trueStatements" : [
-                  {
-                    "class" : "org.batfish.datamodel.routing_policy.statement.Statements$StaticStatement",
-                    "type" : "ExitAccept"
-                  }
-                ]
-              }
-            ]
-          },
-          "~PEER_EXPORT_POLICY:172.16.2.2/32~" : {
-            "name" : "~PEER_EXPORT_POLICY:172.16.2.2/32~",
-            "statements" : [
-              {
-                "class" : "org.batfish.datamodel.routing_policy.statement.SetDefaultPolicy",
-                "defaultPolicy" : "~DEFAULT_BGP_EXPORT_POLICY~"
-              },
-              {
-                "class" : "org.batfish.datamodel.routing_policy.statement.If",
-                "guard" : {
-                  "class" : "org.batfish.datamodel.routing_policy.expr.MatchProtocol",
-                  "protocols" : [
-                    "local"
-                  ]
-                },
-                "trueStatements" : [
-                  {
-                    "class" : "org.batfish.datamodel.routing_policy.statement.Statements$StaticStatement",
-                    "type" : "ExitReject"
-                  }
-                ]
-              },
-              {
-                "class" : "org.batfish.datamodel.routing_policy.statement.If",
-                "falseStatements" : [
-                  {
-                    "class" : "org.batfish.datamodel.routing_policy.statement.SetOrigin",
-                    "originType" : {
-                      "class" : "org.batfish.datamodel.routing_policy.expr.LiteralOrigin",
-                      "originType" : "igp"
-                    }
-                  }
-                ],
-                "guard" : {
-                  "class" : "org.batfish.datamodel.routing_policy.expr.MatchProtocol",
-                  "protocols" : [
-                    "bgp",
-                    "ibgp"
-                  ]
-                }
-              },
-              {
-                "class" : "org.batfish.datamodel.routing_policy.statement.If",
-                "falseStatements" : [
-                  {
-                    "class" : "org.batfish.datamodel.routing_policy.statement.Statements$StaticStatement",
-                    "type" : "ExitReject"
-                  }
-                ],
-                "guard" : {
-                  "class" : "org.batfish.datamodel.routing_policy.expr.FirstMatchChain"
-                },
-                "trueStatements" : [
-                  {
-                    "class" : "org.batfish.datamodel.routing_policy.statement.Statements$StaticStatement",
-                    "type" : "ExitAccept"
-                  }
-                ]
-              }
-            ]
-          },
-          "~PEER_IMPORT_POLICY:172.16.2.1/32~" : {
-            "name" : "~PEER_IMPORT_POLICY:172.16.2.1/32~",
-            "statements" : [
-              {
-                "class" : "org.batfish.datamodel.routing_policy.statement.SetDefaultPolicy",
-                "defaultPolicy" : "~DEFAULT_BGP_IMPORT_POLICY~"
-              },
-              {
-                "class" : "org.batfish.datamodel.routing_policy.statement.Statements$StaticStatement",
-                "type" : "SetDefaultActionAccept"
-              },
-              {
-                "class" : "org.batfish.datamodel.routing_policy.statement.If",
-                "falseStatements" : [
-                  {
-                    "class" : "org.batfish.datamodel.routing_policy.statement.Statements$StaticStatement",
-                    "type" : "ExitReject"
-                  }
-                ],
-                "guard" : {
-                  "class" : "org.batfish.datamodel.routing_policy.expr.FirstMatchChain"
-                },
-                "trueStatements" : [
-                  {
-                    "class" : "org.batfish.datamodel.routing_policy.statement.Statements$StaticStatement",
-                    "type" : "ExitAccept"
-                  }
-                ]
-              }
-            ]
-          },
-          "~PEER_IMPORT_POLICY:172.16.2.2/32~" : {
-            "name" : "~PEER_IMPORT_POLICY:172.16.2.2/32~",
-            "statements" : [
-              {
-                "class" : "org.batfish.datamodel.routing_policy.statement.SetDefaultPolicy",
-                "defaultPolicy" : "~DEFAULT_BGP_IMPORT_POLICY~"
-              },
-              {
-                "class" : "org.batfish.datamodel.routing_policy.statement.Statements$StaticStatement",
-                "type" : "SetDefaultActionAccept"
-              },
-              {
-                "class" : "org.batfish.datamodel.routing_policy.statement.If",
-                "falseStatements" : [
-                  {
-                    "class" : "org.batfish.datamodel.routing_policy.statement.Statements$StaticStatement",
-                    "type" : "ExitReject"
-                  }
-                ],
-                "guard" : {
-                  "class" : "org.batfish.datamodel.routing_policy.expr.FirstMatchChain"
-                },
-                "trueStatements" : [
-                  {
-                    "class" : "org.batfish.datamodel.routing_policy.statement.Statements$StaticStatement",
-                    "type" : "ExitAccept"
                   }
                 ]
               }
@@ -110317,8 +110317,8 @@
                       "sendCommunity" : true,
                       "sendExtendedCommunity" : true
                     },
-                    "exportPolicy" : "~PEER_EXPORT_POLICY:172.16.2.1/32~",
-                    "importPolicy" : "~PEER_IMPORT_POLICY:172.16.2.1/32~",
+                    "exportPolicy" : "~BGP_PEER_EXPORT_POLICY:default:172.16.2.1/32~",
+                    "importPolicy" : "~BGP_PEER_IMPORT_POLICY:default:172.16.2.1/32~",
                     "routeReflectorClient" : false
                   },
                   "localAs" : 65533,
@@ -110350,8 +110350,8 @@
                       "sendCommunity" : true,
                       "sendExtendedCommunity" : true
                     },
-                    "exportPolicy" : "~PEER_EXPORT_POLICY:172.16.2.2/32~",
-                    "importPolicy" : "~PEER_IMPORT_POLICY:172.16.2.2/32~",
+                    "exportPolicy" : "~BGP_PEER_EXPORT_POLICY:default:172.16.2.2/32~",
+                    "importPolicy" : "~BGP_PEER_IMPORT_POLICY:default:172.16.2.2/32~",
                     "routeReflectorClient" : false
                   },
                   "localAs" : 65533,
@@ -113734,6 +113734,190 @@
         "disconnectAdminDownInterfaces" : true,
         "mainRibEnforceResolvability" : false,
         "routingPolicies" : {
+          "~BGP_PEER_EXPORT_POLICY:ROUTING_INSTANCE_NAME:1.1.1.1/32~" : {
+            "name" : "~BGP_PEER_EXPORT_POLICY:ROUTING_INSTANCE_NAME:1.1.1.1/32~",
+            "statements" : [
+              {
+                "class" : "org.batfish.datamodel.routing_policy.statement.SetDefaultPolicy",
+                "defaultPolicy" : "~DEFAULT_BGP_EXPORT_POLICY~"
+              },
+              {
+                "class" : "org.batfish.datamodel.routing_policy.statement.If",
+                "guard" : {
+                  "class" : "org.batfish.datamodel.routing_policy.expr.MatchProtocol",
+                  "protocols" : [
+                    "local"
+                  ]
+                },
+                "trueStatements" : [
+                  {
+                    "class" : "org.batfish.datamodel.routing_policy.statement.Statements$StaticStatement",
+                    "type" : "ExitReject"
+                  }
+                ]
+              },
+              {
+                "class" : "org.batfish.datamodel.routing_policy.statement.If",
+                "falseStatements" : [
+                  {
+                    "class" : "org.batfish.datamodel.routing_policy.statement.SetOrigin",
+                    "originType" : {
+                      "class" : "org.batfish.datamodel.routing_policy.expr.LiteralOrigin",
+                      "originType" : "igp"
+                    }
+                  }
+                ],
+                "guard" : {
+                  "class" : "org.batfish.datamodel.routing_policy.expr.MatchProtocol",
+                  "protocols" : [
+                    "bgp",
+                    "ibgp"
+                  ]
+                }
+              },
+              {
+                "class" : "org.batfish.datamodel.routing_policy.statement.If",
+                "falseStatements" : [
+                  {
+                    "class" : "org.batfish.datamodel.routing_policy.statement.Statements$StaticStatement",
+                    "type" : "ExitReject"
+                  }
+                ],
+                "guard" : {
+                  "class" : "org.batfish.datamodel.routing_policy.expr.FirstMatchChain"
+                },
+                "trueStatements" : [
+                  {
+                    "class" : "org.batfish.datamodel.routing_policy.statement.Statements$StaticStatement",
+                    "type" : "ExitAccept"
+                  }
+                ]
+              }
+            ]
+          },
+          "~BGP_PEER_EXPORT_POLICY:default:1.1.1.1/32~" : {
+            "name" : "~BGP_PEER_EXPORT_POLICY:default:1.1.1.1/32~",
+            "statements" : [
+              {
+                "class" : "org.batfish.datamodel.routing_policy.statement.SetDefaultPolicy",
+                "defaultPolicy" : "~DEFAULT_BGP_EXPORT_POLICY~"
+              },
+              {
+                "class" : "org.batfish.datamodel.routing_policy.statement.If",
+                "guard" : {
+                  "class" : "org.batfish.datamodel.routing_policy.expr.MatchProtocol",
+                  "protocols" : [
+                    "local"
+                  ]
+                },
+                "trueStatements" : [
+                  {
+                    "class" : "org.batfish.datamodel.routing_policy.statement.Statements$StaticStatement",
+                    "type" : "ExitReject"
+                  }
+                ]
+              },
+              {
+                "class" : "org.batfish.datamodel.routing_policy.statement.If",
+                "falseStatements" : [
+                  {
+                    "class" : "org.batfish.datamodel.routing_policy.statement.SetOrigin",
+                    "originType" : {
+                      "class" : "org.batfish.datamodel.routing_policy.expr.LiteralOrigin",
+                      "originType" : "igp"
+                    }
+                  }
+                ],
+                "guard" : {
+                  "class" : "org.batfish.datamodel.routing_policy.expr.MatchProtocol",
+                  "protocols" : [
+                    "bgp",
+                    "ibgp"
+                  ]
+                }
+              },
+              {
+                "class" : "org.batfish.datamodel.routing_policy.statement.If",
+                "falseStatements" : [
+                  {
+                    "class" : "org.batfish.datamodel.routing_policy.statement.Statements$StaticStatement",
+                    "type" : "ExitReject"
+                  }
+                ],
+                "guard" : {
+                  "class" : "org.batfish.datamodel.routing_policy.expr.FirstMatchChain"
+                },
+                "trueStatements" : [
+                  {
+                    "class" : "org.batfish.datamodel.routing_policy.statement.Statements$StaticStatement",
+                    "type" : "ExitAccept"
+                  }
+                ]
+              }
+            ]
+          },
+          "~BGP_PEER_IMPORT_POLICY:ROUTING_INSTANCE_NAME:1.1.1.1/32~" : {
+            "name" : "~BGP_PEER_IMPORT_POLICY:ROUTING_INSTANCE_NAME:1.1.1.1/32~",
+            "statements" : [
+              {
+                "class" : "org.batfish.datamodel.routing_policy.statement.SetDefaultPolicy",
+                "defaultPolicy" : "~DEFAULT_BGP_IMPORT_POLICY~"
+              },
+              {
+                "class" : "org.batfish.datamodel.routing_policy.statement.Statements$StaticStatement",
+                "type" : "SetDefaultActionAccept"
+              },
+              {
+                "class" : "org.batfish.datamodel.routing_policy.statement.If",
+                "falseStatements" : [
+                  {
+                    "class" : "org.batfish.datamodel.routing_policy.statement.Statements$StaticStatement",
+                    "type" : "ExitReject"
+                  }
+                ],
+                "guard" : {
+                  "class" : "org.batfish.datamodel.routing_policy.expr.FirstMatchChain"
+                },
+                "trueStatements" : [
+                  {
+                    "class" : "org.batfish.datamodel.routing_policy.statement.Statements$StaticStatement",
+                    "type" : "ExitAccept"
+                  }
+                ]
+              }
+            ]
+          },
+          "~BGP_PEER_IMPORT_POLICY:default:1.1.1.1/32~" : {
+            "name" : "~BGP_PEER_IMPORT_POLICY:default:1.1.1.1/32~",
+            "statements" : [
+              {
+                "class" : "org.batfish.datamodel.routing_policy.statement.SetDefaultPolicy",
+                "defaultPolicy" : "~DEFAULT_BGP_IMPORT_POLICY~"
+              },
+              {
+                "class" : "org.batfish.datamodel.routing_policy.statement.Statements$StaticStatement",
+                "type" : "SetDefaultActionAccept"
+              },
+              {
+                "class" : "org.batfish.datamodel.routing_policy.statement.If",
+                "falseStatements" : [
+                  {
+                    "class" : "org.batfish.datamodel.routing_policy.statement.Statements$StaticStatement",
+                    "type" : "ExitReject"
+                  }
+                ],
+                "guard" : {
+                  "class" : "org.batfish.datamodel.routing_policy.expr.FirstMatchChain"
+                },
+                "trueStatements" : [
+                  {
+                    "class" : "org.batfish.datamodel.routing_policy.statement.Statements$StaticStatement",
+                    "type" : "ExitAccept"
+                  }
+                ]
+              }
+            ]
+          },
           "~DEFAULT_BGP_EXPORT_POLICY~" : {
             "name" : "~DEFAULT_BGP_EXPORT_POLICY~",
             "statements" : [
@@ -113839,98 +114023,6 @@
                   {
                     "class" : "org.batfish.datamodel.routing_policy.statement.Statements$StaticStatement",
                     "type" : "ReturnTrue"
-                  }
-                ]
-              }
-            ]
-          },
-          "~PEER_EXPORT_POLICY:1.1.1.1/32~" : {
-            "name" : "~PEER_EXPORT_POLICY:1.1.1.1/32~",
-            "statements" : [
-              {
-                "class" : "org.batfish.datamodel.routing_policy.statement.SetDefaultPolicy",
-                "defaultPolicy" : "~DEFAULT_BGP_EXPORT_POLICY~"
-              },
-              {
-                "class" : "org.batfish.datamodel.routing_policy.statement.If",
-                "guard" : {
-                  "class" : "org.batfish.datamodel.routing_policy.expr.MatchProtocol",
-                  "protocols" : [
-                    "local"
-                  ]
-                },
-                "trueStatements" : [
-                  {
-                    "class" : "org.batfish.datamodel.routing_policy.statement.Statements$StaticStatement",
-                    "type" : "ExitReject"
-                  }
-                ]
-              },
-              {
-                "class" : "org.batfish.datamodel.routing_policy.statement.If",
-                "falseStatements" : [
-                  {
-                    "class" : "org.batfish.datamodel.routing_policy.statement.SetOrigin",
-                    "originType" : {
-                      "class" : "org.batfish.datamodel.routing_policy.expr.LiteralOrigin",
-                      "originType" : "igp"
-                    }
-                  }
-                ],
-                "guard" : {
-                  "class" : "org.batfish.datamodel.routing_policy.expr.MatchProtocol",
-                  "protocols" : [
-                    "bgp",
-                    "ibgp"
-                  ]
-                }
-              },
-              {
-                "class" : "org.batfish.datamodel.routing_policy.statement.If",
-                "falseStatements" : [
-                  {
-                    "class" : "org.batfish.datamodel.routing_policy.statement.Statements$StaticStatement",
-                    "type" : "ExitReject"
-                  }
-                ],
-                "guard" : {
-                  "class" : "org.batfish.datamodel.routing_policy.expr.FirstMatchChain"
-                },
-                "trueStatements" : [
-                  {
-                    "class" : "org.batfish.datamodel.routing_policy.statement.Statements$StaticStatement",
-                    "type" : "ExitAccept"
-                  }
-                ]
-              }
-            ]
-          },
-          "~PEER_IMPORT_POLICY:1.1.1.1/32~" : {
-            "name" : "~PEER_IMPORT_POLICY:1.1.1.1/32~",
-            "statements" : [
-              {
-                "class" : "org.batfish.datamodel.routing_policy.statement.SetDefaultPolicy",
-                "defaultPolicy" : "~DEFAULT_BGP_IMPORT_POLICY~"
-              },
-              {
-                "class" : "org.batfish.datamodel.routing_policy.statement.Statements$StaticStatement",
-                "type" : "SetDefaultActionAccept"
-              },
-              {
-                "class" : "org.batfish.datamodel.routing_policy.statement.If",
-                "falseStatements" : [
-                  {
-                    "class" : "org.batfish.datamodel.routing_policy.statement.Statements$StaticStatement",
-                    "type" : "ExitReject"
-                  }
-                ],
-                "guard" : {
-                  "class" : "org.batfish.datamodel.routing_policy.expr.FirstMatchChain"
-                },
-                "trueStatements" : [
-                  {
-                    "class" : "org.batfish.datamodel.routing_policy.statement.Statements$StaticStatement",
-                    "type" : "ExitAccept"
                   }
                 ]
               }
@@ -114136,6 +114228,190 @@
         "disconnectAdminDownInterfaces" : true,
         "mainRibEnforceResolvability" : false,
         "routingPolicies" : {
+          "~BGP_PEER_EXPORT_POLICY:ROUTING_INSTANCE_NAME:1.1.1.1/32~" : {
+            "name" : "~BGP_PEER_EXPORT_POLICY:ROUTING_INSTANCE_NAME:1.1.1.1/32~",
+            "statements" : [
+              {
+                "class" : "org.batfish.datamodel.routing_policy.statement.SetDefaultPolicy",
+                "defaultPolicy" : "~DEFAULT_BGP_EXPORT_POLICY~"
+              },
+              {
+                "class" : "org.batfish.datamodel.routing_policy.statement.If",
+                "guard" : {
+                  "class" : "org.batfish.datamodel.routing_policy.expr.MatchProtocol",
+                  "protocols" : [
+                    "local"
+                  ]
+                },
+                "trueStatements" : [
+                  {
+                    "class" : "org.batfish.datamodel.routing_policy.statement.Statements$StaticStatement",
+                    "type" : "ExitReject"
+                  }
+                ]
+              },
+              {
+                "class" : "org.batfish.datamodel.routing_policy.statement.If",
+                "falseStatements" : [
+                  {
+                    "class" : "org.batfish.datamodel.routing_policy.statement.SetOrigin",
+                    "originType" : {
+                      "class" : "org.batfish.datamodel.routing_policy.expr.LiteralOrigin",
+                      "originType" : "igp"
+                    }
+                  }
+                ],
+                "guard" : {
+                  "class" : "org.batfish.datamodel.routing_policy.expr.MatchProtocol",
+                  "protocols" : [
+                    "bgp",
+                    "ibgp"
+                  ]
+                }
+              },
+              {
+                "class" : "org.batfish.datamodel.routing_policy.statement.If",
+                "falseStatements" : [
+                  {
+                    "class" : "org.batfish.datamodel.routing_policy.statement.Statements$StaticStatement",
+                    "type" : "ExitReject"
+                  }
+                ],
+                "guard" : {
+                  "class" : "org.batfish.datamodel.routing_policy.expr.FirstMatchChain"
+                },
+                "trueStatements" : [
+                  {
+                    "class" : "org.batfish.datamodel.routing_policy.statement.Statements$StaticStatement",
+                    "type" : "ExitAccept"
+                  }
+                ]
+              }
+            ]
+          },
+          "~BGP_PEER_EXPORT_POLICY:default:1.1.1.1/32~" : {
+            "name" : "~BGP_PEER_EXPORT_POLICY:default:1.1.1.1/32~",
+            "statements" : [
+              {
+                "class" : "org.batfish.datamodel.routing_policy.statement.SetDefaultPolicy",
+                "defaultPolicy" : "~DEFAULT_BGP_EXPORT_POLICY~"
+              },
+              {
+                "class" : "org.batfish.datamodel.routing_policy.statement.If",
+                "guard" : {
+                  "class" : "org.batfish.datamodel.routing_policy.expr.MatchProtocol",
+                  "protocols" : [
+                    "local"
+                  ]
+                },
+                "trueStatements" : [
+                  {
+                    "class" : "org.batfish.datamodel.routing_policy.statement.Statements$StaticStatement",
+                    "type" : "ExitReject"
+                  }
+                ]
+              },
+              {
+                "class" : "org.batfish.datamodel.routing_policy.statement.If",
+                "falseStatements" : [
+                  {
+                    "class" : "org.batfish.datamodel.routing_policy.statement.SetOrigin",
+                    "originType" : {
+                      "class" : "org.batfish.datamodel.routing_policy.expr.LiteralOrigin",
+                      "originType" : "igp"
+                    }
+                  }
+                ],
+                "guard" : {
+                  "class" : "org.batfish.datamodel.routing_policy.expr.MatchProtocol",
+                  "protocols" : [
+                    "bgp",
+                    "ibgp"
+                  ]
+                }
+              },
+              {
+                "class" : "org.batfish.datamodel.routing_policy.statement.If",
+                "falseStatements" : [
+                  {
+                    "class" : "org.batfish.datamodel.routing_policy.statement.Statements$StaticStatement",
+                    "type" : "ExitReject"
+                  }
+                ],
+                "guard" : {
+                  "class" : "org.batfish.datamodel.routing_policy.expr.FirstMatchChain"
+                },
+                "trueStatements" : [
+                  {
+                    "class" : "org.batfish.datamodel.routing_policy.statement.Statements$StaticStatement",
+                    "type" : "ExitAccept"
+                  }
+                ]
+              }
+            ]
+          },
+          "~BGP_PEER_IMPORT_POLICY:ROUTING_INSTANCE_NAME:1.1.1.1/32~" : {
+            "name" : "~BGP_PEER_IMPORT_POLICY:ROUTING_INSTANCE_NAME:1.1.1.1/32~",
+            "statements" : [
+              {
+                "class" : "org.batfish.datamodel.routing_policy.statement.SetDefaultPolicy",
+                "defaultPolicy" : "~DEFAULT_BGP_IMPORT_POLICY~"
+              },
+              {
+                "class" : "org.batfish.datamodel.routing_policy.statement.Statements$StaticStatement",
+                "type" : "SetDefaultActionAccept"
+              },
+              {
+                "class" : "org.batfish.datamodel.routing_policy.statement.If",
+                "falseStatements" : [
+                  {
+                    "class" : "org.batfish.datamodel.routing_policy.statement.Statements$StaticStatement",
+                    "type" : "ExitReject"
+                  }
+                ],
+                "guard" : {
+                  "class" : "org.batfish.datamodel.routing_policy.expr.FirstMatchChain"
+                },
+                "trueStatements" : [
+                  {
+                    "class" : "org.batfish.datamodel.routing_policy.statement.Statements$StaticStatement",
+                    "type" : "ExitAccept"
+                  }
+                ]
+              }
+            ]
+          },
+          "~BGP_PEER_IMPORT_POLICY:default:1.1.1.1/32~" : {
+            "name" : "~BGP_PEER_IMPORT_POLICY:default:1.1.1.1/32~",
+            "statements" : [
+              {
+                "class" : "org.batfish.datamodel.routing_policy.statement.SetDefaultPolicy",
+                "defaultPolicy" : "~DEFAULT_BGP_IMPORT_POLICY~"
+              },
+              {
+                "class" : "org.batfish.datamodel.routing_policy.statement.Statements$StaticStatement",
+                "type" : "SetDefaultActionAccept"
+              },
+              {
+                "class" : "org.batfish.datamodel.routing_policy.statement.If",
+                "falseStatements" : [
+                  {
+                    "class" : "org.batfish.datamodel.routing_policy.statement.Statements$StaticStatement",
+                    "type" : "ExitReject"
+                  }
+                ],
+                "guard" : {
+                  "class" : "org.batfish.datamodel.routing_policy.expr.FirstMatchChain"
+                },
+                "trueStatements" : [
+                  {
+                    "class" : "org.batfish.datamodel.routing_policy.statement.Statements$StaticStatement",
+                    "type" : "ExitAccept"
+                  }
+                ]
+              }
+            ]
+          },
           "~DEFAULT_BGP_EXPORT_POLICY~" : {
             "name" : "~DEFAULT_BGP_EXPORT_POLICY~",
             "statements" : [
@@ -114212,98 +114488,6 @@
                   {
                     "class" : "org.batfish.datamodel.routing_policy.statement.Statements$StaticStatement",
                     "type" : "ReturnTrue"
-                  }
-                ]
-              }
-            ]
-          },
-          "~PEER_EXPORT_POLICY:1.1.1.1/32~" : {
-            "name" : "~PEER_EXPORT_POLICY:1.1.1.1/32~",
-            "statements" : [
-              {
-                "class" : "org.batfish.datamodel.routing_policy.statement.SetDefaultPolicy",
-                "defaultPolicy" : "~DEFAULT_BGP_EXPORT_POLICY~"
-              },
-              {
-                "class" : "org.batfish.datamodel.routing_policy.statement.If",
-                "guard" : {
-                  "class" : "org.batfish.datamodel.routing_policy.expr.MatchProtocol",
-                  "protocols" : [
-                    "local"
-                  ]
-                },
-                "trueStatements" : [
-                  {
-                    "class" : "org.batfish.datamodel.routing_policy.statement.Statements$StaticStatement",
-                    "type" : "ExitReject"
-                  }
-                ]
-              },
-              {
-                "class" : "org.batfish.datamodel.routing_policy.statement.If",
-                "falseStatements" : [
-                  {
-                    "class" : "org.batfish.datamodel.routing_policy.statement.SetOrigin",
-                    "originType" : {
-                      "class" : "org.batfish.datamodel.routing_policy.expr.LiteralOrigin",
-                      "originType" : "igp"
-                    }
-                  }
-                ],
-                "guard" : {
-                  "class" : "org.batfish.datamodel.routing_policy.expr.MatchProtocol",
-                  "protocols" : [
-                    "bgp",
-                    "ibgp"
-                  ]
-                }
-              },
-              {
-                "class" : "org.batfish.datamodel.routing_policy.statement.If",
-                "falseStatements" : [
-                  {
-                    "class" : "org.batfish.datamodel.routing_policy.statement.Statements$StaticStatement",
-                    "type" : "ExitReject"
-                  }
-                ],
-                "guard" : {
-                  "class" : "org.batfish.datamodel.routing_policy.expr.FirstMatchChain"
-                },
-                "trueStatements" : [
-                  {
-                    "class" : "org.batfish.datamodel.routing_policy.statement.Statements$StaticStatement",
-                    "type" : "ExitAccept"
-                  }
-                ]
-              }
-            ]
-          },
-          "~PEER_IMPORT_POLICY:1.1.1.1/32~" : {
-            "name" : "~PEER_IMPORT_POLICY:1.1.1.1/32~",
-            "statements" : [
-              {
-                "class" : "org.batfish.datamodel.routing_policy.statement.SetDefaultPolicy",
-                "defaultPolicy" : "~DEFAULT_BGP_IMPORT_POLICY~"
-              },
-              {
-                "class" : "org.batfish.datamodel.routing_policy.statement.Statements$StaticStatement",
-                "type" : "SetDefaultActionAccept"
-              },
-              {
-                "class" : "org.batfish.datamodel.routing_policy.statement.If",
-                "falseStatements" : [
-                  {
-                    "class" : "org.batfish.datamodel.routing_policy.statement.Statements$StaticStatement",
-                    "type" : "ExitReject"
-                  }
-                ],
-                "guard" : {
-                  "class" : "org.batfish.datamodel.routing_policy.expr.FirstMatchChain"
-                },
-                "trueStatements" : [
-                  {
-                    "class" : "org.batfish.datamodel.routing_policy.statement.Statements$StaticStatement",
-                    "type" : "ExitAccept"
                   }
                 ]
               }
@@ -129259,6 +129443,668 @@
               }
             ]
           },
+          "~BGP_PEER_EXPORT_POLICY:default:172.16.3.2/32~" : {
+            "name" : "~BGP_PEER_EXPORT_POLICY:default:172.16.3.2/32~",
+            "statements" : [
+              {
+                "class" : "org.batfish.datamodel.routing_policy.statement.SetDefaultPolicy",
+                "defaultPolicy" : "~DEFAULT_BGP_EXPORT_POLICY~"
+              },
+              {
+                "class" : "org.batfish.datamodel.routing_policy.statement.If",
+                "guard" : {
+                  "class" : "org.batfish.datamodel.routing_policy.expr.MatchProtocol",
+                  "protocols" : [
+                    "local"
+                  ]
+                },
+                "trueStatements" : [
+                  {
+                    "class" : "org.batfish.datamodel.routing_policy.statement.Statements$StaticStatement",
+                    "type" : "ExitReject"
+                  }
+                ]
+              },
+              {
+                "class" : "org.batfish.datamodel.routing_policy.statement.If",
+                "falseStatements" : [
+                  {
+                    "class" : "org.batfish.datamodel.routing_policy.statement.SetOrigin",
+                    "originType" : {
+                      "class" : "org.batfish.datamodel.routing_policy.expr.LiteralOrigin",
+                      "originType" : "igp"
+                    }
+                  }
+                ],
+                "guard" : {
+                  "class" : "org.batfish.datamodel.routing_policy.expr.MatchProtocol",
+                  "protocols" : [
+                    "bgp",
+                    "ibgp"
+                  ]
+                }
+              },
+              {
+                "class" : "org.batfish.datamodel.routing_policy.statement.If",
+                "falseStatements" : [
+                  {
+                    "class" : "org.batfish.datamodel.routing_policy.statement.Statements$StaticStatement",
+                    "type" : "ExitReject"
+                  }
+                ],
+                "guard" : {
+                  "class" : "org.batfish.datamodel.routing_policy.expr.FirstMatchChain",
+                  "subroutines" : [
+                    {
+                      "class" : "org.batfish.datamodel.routing_policy.expr.CallExpr",
+                      "calledPolicyName" : "export-loopback"
+                    }
+                  ]
+                },
+                "trueStatements" : [
+                  {
+                    "class" : "org.batfish.datamodel.routing_policy.statement.Statements$StaticStatement",
+                    "type" : "ExitAccept"
+                  }
+                ]
+              }
+            ]
+          },
+          "~BGP_PEER_EXPORT_POLICY:default:172.16.5.2/32~" : {
+            "name" : "~BGP_PEER_EXPORT_POLICY:default:172.16.5.2/32~",
+            "statements" : [
+              {
+                "class" : "org.batfish.datamodel.routing_policy.statement.SetDefaultPolicy",
+                "defaultPolicy" : "~DEFAULT_BGP_EXPORT_POLICY~"
+              },
+              {
+                "class" : "org.batfish.datamodel.routing_policy.statement.If",
+                "guard" : {
+                  "class" : "org.batfish.datamodel.routing_policy.expr.MatchProtocol",
+                  "protocols" : [
+                    "local"
+                  ]
+                },
+                "trueStatements" : [
+                  {
+                    "class" : "org.batfish.datamodel.routing_policy.statement.Statements$StaticStatement",
+                    "type" : "ExitReject"
+                  }
+                ]
+              },
+              {
+                "class" : "org.batfish.datamodel.routing_policy.statement.If",
+                "falseStatements" : [
+                  {
+                    "class" : "org.batfish.datamodel.routing_policy.statement.SetOrigin",
+                    "originType" : {
+                      "class" : "org.batfish.datamodel.routing_policy.expr.LiteralOrigin",
+                      "originType" : "igp"
+                    }
+                  }
+                ],
+                "guard" : {
+                  "class" : "org.batfish.datamodel.routing_policy.expr.MatchProtocol",
+                  "protocols" : [
+                    "bgp",
+                    "ibgp"
+                  ]
+                }
+              },
+              {
+                "class" : "org.batfish.datamodel.routing_policy.statement.If",
+                "falseStatements" : [
+                  {
+                    "class" : "org.batfish.datamodel.routing_policy.statement.Statements$StaticStatement",
+                    "type" : "ExitReject"
+                  }
+                ],
+                "guard" : {
+                  "class" : "org.batfish.datamodel.routing_policy.expr.FirstMatchChain",
+                  "subroutines" : [
+                    {
+                      "class" : "org.batfish.datamodel.routing_policy.expr.CallExpr",
+                      "calledPolicyName" : "export-loopback"
+                    }
+                  ]
+                },
+                "trueStatements" : [
+                  {
+                    "class" : "org.batfish.datamodel.routing_policy.statement.Statements$StaticStatement",
+                    "type" : "ExitAccept"
+                  }
+                ]
+              }
+            ]
+          },
+          "~BGP_PEER_EXPORT_POLICY:default:172.16.7.2/32~" : {
+            "name" : "~BGP_PEER_EXPORT_POLICY:default:172.16.7.2/32~",
+            "statements" : [
+              {
+                "class" : "org.batfish.datamodel.routing_policy.statement.SetDefaultPolicy",
+                "defaultPolicy" : "~DEFAULT_BGP_EXPORT_POLICY~"
+              },
+              {
+                "class" : "org.batfish.datamodel.routing_policy.statement.If",
+                "guard" : {
+                  "class" : "org.batfish.datamodel.routing_policy.expr.MatchProtocol",
+                  "protocols" : [
+                    "local"
+                  ]
+                },
+                "trueStatements" : [
+                  {
+                    "class" : "org.batfish.datamodel.routing_policy.statement.Statements$StaticStatement",
+                    "type" : "ExitReject"
+                  }
+                ]
+              },
+              {
+                "class" : "org.batfish.datamodel.routing_policy.statement.If",
+                "falseStatements" : [
+                  {
+                    "class" : "org.batfish.datamodel.routing_policy.statement.SetOrigin",
+                    "originType" : {
+                      "class" : "org.batfish.datamodel.routing_policy.expr.LiteralOrigin",
+                      "originType" : "igp"
+                    }
+                  }
+                ],
+                "guard" : {
+                  "class" : "org.batfish.datamodel.routing_policy.expr.MatchProtocol",
+                  "protocols" : [
+                    "bgp",
+                    "ibgp"
+                  ]
+                }
+              },
+              {
+                "class" : "org.batfish.datamodel.routing_policy.statement.If",
+                "falseStatements" : [
+                  {
+                    "class" : "org.batfish.datamodel.routing_policy.statement.Statements$StaticStatement",
+                    "type" : "ExitReject"
+                  }
+                ],
+                "guard" : {
+                  "class" : "org.batfish.datamodel.routing_policy.expr.FirstMatchChain",
+                  "subroutines" : [
+                    {
+                      "class" : "org.batfish.datamodel.routing_policy.expr.CallExpr",
+                      "calledPolicyName" : "export-loopback"
+                    }
+                  ]
+                },
+                "trueStatements" : [
+                  {
+                    "class" : "org.batfish.datamodel.routing_policy.statement.Statements$StaticStatement",
+                    "type" : "ExitAccept"
+                  }
+                ]
+              }
+            ]
+          },
+          "~BGP_PEER_EXPORT_POLICY:default:192.168.1.1/32~" : {
+            "name" : "~BGP_PEER_EXPORT_POLICY:default:192.168.1.1/32~",
+            "statements" : [
+              {
+                "class" : "org.batfish.datamodel.routing_policy.statement.SetDefaultPolicy",
+                "defaultPolicy" : "~DEFAULT_BGP_EXPORT_POLICY~"
+              },
+              {
+                "class" : "org.batfish.datamodel.routing_policy.statement.If",
+                "guard" : {
+                  "class" : "org.batfish.datamodel.routing_policy.expr.MatchProtocol",
+                  "protocols" : [
+                    "local"
+                  ]
+                },
+                "trueStatements" : [
+                  {
+                    "class" : "org.batfish.datamodel.routing_policy.statement.Statements$StaticStatement",
+                    "type" : "ExitReject"
+                  }
+                ]
+              },
+              {
+                "class" : "org.batfish.datamodel.routing_policy.statement.If",
+                "falseStatements" : [
+                  {
+                    "class" : "org.batfish.datamodel.routing_policy.statement.SetOrigin",
+                    "originType" : {
+                      "class" : "org.batfish.datamodel.routing_policy.expr.LiteralOrigin",
+                      "originType" : "igp"
+                    }
+                  }
+                ],
+                "guard" : {
+                  "class" : "org.batfish.datamodel.routing_policy.expr.MatchProtocol",
+                  "protocols" : [
+                    "bgp",
+                    "ibgp"
+                  ]
+                }
+              },
+              {
+                "class" : "org.batfish.datamodel.routing_policy.statement.If",
+                "falseStatements" : [
+                  {
+                    "class" : "org.batfish.datamodel.routing_policy.statement.Statements$StaticStatement",
+                    "type" : "ExitReject"
+                  }
+                ],
+                "guard" : {
+                  "class" : "org.batfish.datamodel.routing_policy.expr.FirstMatchChain"
+                },
+                "trueStatements" : [
+                  {
+                    "class" : "org.batfish.datamodel.routing_policy.statement.Statements$StaticStatement",
+                    "type" : "ExitAccept"
+                  }
+                ]
+              }
+            ]
+          },
+          "~BGP_PEER_EXPORT_POLICY:default:192.168.1.3/32~" : {
+            "name" : "~BGP_PEER_EXPORT_POLICY:default:192.168.1.3/32~",
+            "statements" : [
+              {
+                "class" : "org.batfish.datamodel.routing_policy.statement.SetDefaultPolicy",
+                "defaultPolicy" : "~DEFAULT_BGP_EXPORT_POLICY~"
+              },
+              {
+                "class" : "org.batfish.datamodel.routing_policy.statement.If",
+                "guard" : {
+                  "class" : "org.batfish.datamodel.routing_policy.expr.MatchProtocol",
+                  "protocols" : [
+                    "local"
+                  ]
+                },
+                "trueStatements" : [
+                  {
+                    "class" : "org.batfish.datamodel.routing_policy.statement.Statements$StaticStatement",
+                    "type" : "ExitReject"
+                  }
+                ]
+              },
+              {
+                "class" : "org.batfish.datamodel.routing_policy.statement.If",
+                "falseStatements" : [
+                  {
+                    "class" : "org.batfish.datamodel.routing_policy.statement.SetOrigin",
+                    "originType" : {
+                      "class" : "org.batfish.datamodel.routing_policy.expr.LiteralOrigin",
+                      "originType" : "igp"
+                    }
+                  }
+                ],
+                "guard" : {
+                  "class" : "org.batfish.datamodel.routing_policy.expr.MatchProtocol",
+                  "protocols" : [
+                    "bgp",
+                    "ibgp"
+                  ]
+                }
+              },
+              {
+                "class" : "org.batfish.datamodel.routing_policy.statement.If",
+                "falseStatements" : [
+                  {
+                    "class" : "org.batfish.datamodel.routing_policy.statement.Statements$StaticStatement",
+                    "type" : "ExitReject"
+                  }
+                ],
+                "guard" : {
+                  "class" : "org.batfish.datamodel.routing_policy.expr.FirstMatchChain"
+                },
+                "trueStatements" : [
+                  {
+                    "class" : "org.batfish.datamodel.routing_policy.statement.Statements$StaticStatement",
+                    "type" : "ExitAccept"
+                  }
+                ]
+              }
+            ]
+          },
+          "~BGP_PEER_EXPORT_POLICY:default:192.168.1.44/32~" : {
+            "name" : "~BGP_PEER_EXPORT_POLICY:default:192.168.1.44/32~",
+            "statements" : [
+              {
+                "class" : "org.batfish.datamodel.routing_policy.statement.SetDefaultPolicy",
+                "defaultPolicy" : "~DEFAULT_BGP_EXPORT_POLICY~"
+              },
+              {
+                "class" : "org.batfish.datamodel.routing_policy.statement.If",
+                "guard" : {
+                  "class" : "org.batfish.datamodel.routing_policy.expr.MatchProtocol",
+                  "protocols" : [
+                    "local"
+                  ]
+                },
+                "trueStatements" : [
+                  {
+                    "class" : "org.batfish.datamodel.routing_policy.statement.Statements$StaticStatement",
+                    "type" : "ExitReject"
+                  }
+                ]
+              },
+              {
+                "class" : "org.batfish.datamodel.routing_policy.statement.If",
+                "falseStatements" : [
+                  {
+                    "class" : "org.batfish.datamodel.routing_policy.statement.SetOrigin",
+                    "originType" : {
+                      "class" : "org.batfish.datamodel.routing_policy.expr.LiteralOrigin",
+                      "originType" : "igp"
+                    }
+                  }
+                ],
+                "guard" : {
+                  "class" : "org.batfish.datamodel.routing_policy.expr.MatchProtocol",
+                  "protocols" : [
+                    "bgp",
+                    "ibgp"
+                  ]
+                }
+              },
+              {
+                "class" : "org.batfish.datamodel.routing_policy.statement.If",
+                "falseStatements" : [
+                  {
+                    "class" : "org.batfish.datamodel.routing_policy.statement.Statements$StaticStatement",
+                    "type" : "ExitReject"
+                  }
+                ],
+                "guard" : {
+                  "class" : "org.batfish.datamodel.routing_policy.expr.FirstMatchChain"
+                },
+                "trueStatements" : [
+                  {
+                    "class" : "org.batfish.datamodel.routing_policy.statement.Statements$StaticStatement",
+                    "type" : "ExitAccept"
+                  }
+                ]
+              }
+            ]
+          },
+          "~BGP_PEER_EXPORT_POLICY:default:192.168.1.5/32~" : {
+            "name" : "~BGP_PEER_EXPORT_POLICY:default:192.168.1.5/32~",
+            "statements" : [
+              {
+                "class" : "org.batfish.datamodel.routing_policy.statement.SetDefaultPolicy",
+                "defaultPolicy" : "~DEFAULT_BGP_EXPORT_POLICY~"
+              },
+              {
+                "class" : "org.batfish.datamodel.routing_policy.statement.If",
+                "guard" : {
+                  "class" : "org.batfish.datamodel.routing_policy.expr.MatchProtocol",
+                  "protocols" : [
+                    "local"
+                  ]
+                },
+                "trueStatements" : [
+                  {
+                    "class" : "org.batfish.datamodel.routing_policy.statement.Statements$StaticStatement",
+                    "type" : "ExitReject"
+                  }
+                ]
+              },
+              {
+                "class" : "org.batfish.datamodel.routing_policy.statement.If",
+                "falseStatements" : [
+                  {
+                    "class" : "org.batfish.datamodel.routing_policy.statement.SetOrigin",
+                    "originType" : {
+                      "class" : "org.batfish.datamodel.routing_policy.expr.LiteralOrigin",
+                      "originType" : "igp"
+                    }
+                  }
+                ],
+                "guard" : {
+                  "class" : "org.batfish.datamodel.routing_policy.expr.MatchProtocol",
+                  "protocols" : [
+                    "bgp",
+                    "ibgp"
+                  ]
+                }
+              },
+              {
+                "class" : "org.batfish.datamodel.routing_policy.statement.If",
+                "falseStatements" : [
+                  {
+                    "class" : "org.batfish.datamodel.routing_policy.statement.Statements$StaticStatement",
+                    "type" : "ExitReject"
+                  }
+                ],
+                "guard" : {
+                  "class" : "org.batfish.datamodel.routing_policy.expr.FirstMatchChain"
+                },
+                "trueStatements" : [
+                  {
+                    "class" : "org.batfish.datamodel.routing_policy.statement.Statements$StaticStatement",
+                    "type" : "ExitAccept"
+                  }
+                ]
+              }
+            ]
+          },
+          "~BGP_PEER_IMPORT_POLICY:default:172.16.3.2/32~" : {
+            "name" : "~BGP_PEER_IMPORT_POLICY:default:172.16.3.2/32~",
+            "statements" : [
+              {
+                "class" : "org.batfish.datamodel.routing_policy.statement.SetDefaultPolicy",
+                "defaultPolicy" : "~DEFAULT_BGP_IMPORT_POLICY~"
+              },
+              {
+                "class" : "org.batfish.datamodel.routing_policy.statement.Statements$StaticStatement",
+                "type" : "SetDefaultActionAccept"
+              },
+              {
+                "class" : "org.batfish.datamodel.routing_policy.statement.If",
+                "falseStatements" : [
+                  {
+                    "class" : "org.batfish.datamodel.routing_policy.statement.Statements$StaticStatement",
+                    "type" : "ExitReject"
+                  }
+                ],
+                "guard" : {
+                  "class" : "org.batfish.datamodel.routing_policy.expr.FirstMatchChain"
+                },
+                "trueStatements" : [
+                  {
+                    "class" : "org.batfish.datamodel.routing_policy.statement.Statements$StaticStatement",
+                    "type" : "ExitAccept"
+                  }
+                ]
+              }
+            ]
+          },
+          "~BGP_PEER_IMPORT_POLICY:default:172.16.5.2/32~" : {
+            "name" : "~BGP_PEER_IMPORT_POLICY:default:172.16.5.2/32~",
+            "statements" : [
+              {
+                "class" : "org.batfish.datamodel.routing_policy.statement.SetDefaultPolicy",
+                "defaultPolicy" : "~DEFAULT_BGP_IMPORT_POLICY~"
+              },
+              {
+                "class" : "org.batfish.datamodel.routing_policy.statement.Statements$StaticStatement",
+                "type" : "SetDefaultActionAccept"
+              },
+              {
+                "class" : "org.batfish.datamodel.routing_policy.statement.If",
+                "falseStatements" : [
+                  {
+                    "class" : "org.batfish.datamodel.routing_policy.statement.Statements$StaticStatement",
+                    "type" : "ExitReject"
+                  }
+                ],
+                "guard" : {
+                  "class" : "org.batfish.datamodel.routing_policy.expr.FirstMatchChain"
+                },
+                "trueStatements" : [
+                  {
+                    "class" : "org.batfish.datamodel.routing_policy.statement.Statements$StaticStatement",
+                    "type" : "ExitAccept"
+                  }
+                ]
+              }
+            ]
+          },
+          "~BGP_PEER_IMPORT_POLICY:default:172.16.7.2/32~" : {
+            "name" : "~BGP_PEER_IMPORT_POLICY:default:172.16.7.2/32~",
+            "statements" : [
+              {
+                "class" : "org.batfish.datamodel.routing_policy.statement.SetDefaultPolicy",
+                "defaultPolicy" : "~DEFAULT_BGP_IMPORT_POLICY~"
+              },
+              {
+                "class" : "org.batfish.datamodel.routing_policy.statement.Statements$StaticStatement",
+                "type" : "SetDefaultActionAccept"
+              },
+              {
+                "class" : "org.batfish.datamodel.routing_policy.statement.If",
+                "falseStatements" : [
+                  {
+                    "class" : "org.batfish.datamodel.routing_policy.statement.Statements$StaticStatement",
+                    "type" : "ExitReject"
+                  }
+                ],
+                "guard" : {
+                  "class" : "org.batfish.datamodel.routing_policy.expr.FirstMatchChain"
+                },
+                "trueStatements" : [
+                  {
+                    "class" : "org.batfish.datamodel.routing_policy.statement.Statements$StaticStatement",
+                    "type" : "ExitAccept"
+                  }
+                ]
+              }
+            ]
+          },
+          "~BGP_PEER_IMPORT_POLICY:default:192.168.1.1/32~" : {
+            "name" : "~BGP_PEER_IMPORT_POLICY:default:192.168.1.1/32~",
+            "statements" : [
+              {
+                "class" : "org.batfish.datamodel.routing_policy.statement.SetDefaultPolicy",
+                "defaultPolicy" : "~DEFAULT_BGP_IMPORT_POLICY~"
+              },
+              {
+                "class" : "org.batfish.datamodel.routing_policy.statement.Statements$StaticStatement",
+                "type" : "SetDefaultActionAccept"
+              },
+              {
+                "class" : "org.batfish.datamodel.routing_policy.statement.If",
+                "falseStatements" : [
+                  {
+                    "class" : "org.batfish.datamodel.routing_policy.statement.Statements$StaticStatement",
+                    "type" : "ExitReject"
+                  }
+                ],
+                "guard" : {
+                  "class" : "org.batfish.datamodel.routing_policy.expr.FirstMatchChain"
+                },
+                "trueStatements" : [
+                  {
+                    "class" : "org.batfish.datamodel.routing_policy.statement.Statements$StaticStatement",
+                    "type" : "ExitAccept"
+                  }
+                ]
+              }
+            ]
+          },
+          "~BGP_PEER_IMPORT_POLICY:default:192.168.1.3/32~" : {
+            "name" : "~BGP_PEER_IMPORT_POLICY:default:192.168.1.3/32~",
+            "statements" : [
+              {
+                "class" : "org.batfish.datamodel.routing_policy.statement.SetDefaultPolicy",
+                "defaultPolicy" : "~DEFAULT_BGP_IMPORT_POLICY~"
+              },
+              {
+                "class" : "org.batfish.datamodel.routing_policy.statement.Statements$StaticStatement",
+                "type" : "SetDefaultActionAccept"
+              },
+              {
+                "class" : "org.batfish.datamodel.routing_policy.statement.If",
+                "falseStatements" : [
+                  {
+                    "class" : "org.batfish.datamodel.routing_policy.statement.Statements$StaticStatement",
+                    "type" : "ExitReject"
+                  }
+                ],
+                "guard" : {
+                  "class" : "org.batfish.datamodel.routing_policy.expr.FirstMatchChain"
+                },
+                "trueStatements" : [
+                  {
+                    "class" : "org.batfish.datamodel.routing_policy.statement.Statements$StaticStatement",
+                    "type" : "ExitAccept"
+                  }
+                ]
+              }
+            ]
+          },
+          "~BGP_PEER_IMPORT_POLICY:default:192.168.1.44/32~" : {
+            "name" : "~BGP_PEER_IMPORT_POLICY:default:192.168.1.44/32~",
+            "statements" : [
+              {
+                "class" : "org.batfish.datamodel.routing_policy.statement.SetDefaultPolicy",
+                "defaultPolicy" : "~DEFAULT_BGP_IMPORT_POLICY~"
+              },
+              {
+                "class" : "org.batfish.datamodel.routing_policy.statement.Statements$StaticStatement",
+                "type" : "SetDefaultActionAccept"
+              },
+              {
+                "class" : "org.batfish.datamodel.routing_policy.statement.If",
+                "falseStatements" : [
+                  {
+                    "class" : "org.batfish.datamodel.routing_policy.statement.Statements$StaticStatement",
+                    "type" : "ExitReject"
+                  }
+                ],
+                "guard" : {
+                  "class" : "org.batfish.datamodel.routing_policy.expr.FirstMatchChain"
+                },
+                "trueStatements" : [
+                  {
+                    "class" : "org.batfish.datamodel.routing_policy.statement.Statements$StaticStatement",
+                    "type" : "ExitAccept"
+                  }
+                ]
+              }
+            ]
+          },
+          "~BGP_PEER_IMPORT_POLICY:default:192.168.1.5/32~" : {
+            "name" : "~BGP_PEER_IMPORT_POLICY:default:192.168.1.5/32~",
+            "statements" : [
+              {
+                "class" : "org.batfish.datamodel.routing_policy.statement.SetDefaultPolicy",
+                "defaultPolicy" : "~DEFAULT_BGP_IMPORT_POLICY~"
+              },
+              {
+                "class" : "org.batfish.datamodel.routing_policy.statement.Statements$StaticStatement",
+                "type" : "SetDefaultActionAccept"
+              },
+              {
+                "class" : "org.batfish.datamodel.routing_policy.statement.If",
+                "falseStatements" : [
+                  {
+                    "class" : "org.batfish.datamodel.routing_policy.statement.Statements$StaticStatement",
+                    "type" : "ExitReject"
+                  }
+                ],
+                "guard" : {
+                  "class" : "org.batfish.datamodel.routing_policy.expr.FirstMatchChain"
+                },
+                "trueStatements" : [
+                  {
+                    "class" : "org.batfish.datamodel.routing_policy.statement.Statements$StaticStatement",
+                    "type" : "ExitAccept"
+                  }
+                ]
+              }
+            ]
+          },
           "~DEFAULT_BGP_EXPORT_POLICY~" : {
             "name" : "~DEFAULT_BGP_EXPORT_POLICY~",
             "statements" : [
@@ -129335,668 +130181,6 @@
                   {
                     "class" : "org.batfish.datamodel.routing_policy.statement.Statements$StaticStatement",
                     "type" : "ReturnTrue"
-                  }
-                ]
-              }
-            ]
-          },
-          "~PEER_EXPORT_POLICY:172.16.3.2/32~" : {
-            "name" : "~PEER_EXPORT_POLICY:172.16.3.2/32~",
-            "statements" : [
-              {
-                "class" : "org.batfish.datamodel.routing_policy.statement.SetDefaultPolicy",
-                "defaultPolicy" : "~DEFAULT_BGP_EXPORT_POLICY~"
-              },
-              {
-                "class" : "org.batfish.datamodel.routing_policy.statement.If",
-                "guard" : {
-                  "class" : "org.batfish.datamodel.routing_policy.expr.MatchProtocol",
-                  "protocols" : [
-                    "local"
-                  ]
-                },
-                "trueStatements" : [
-                  {
-                    "class" : "org.batfish.datamodel.routing_policy.statement.Statements$StaticStatement",
-                    "type" : "ExitReject"
-                  }
-                ]
-              },
-              {
-                "class" : "org.batfish.datamodel.routing_policy.statement.If",
-                "falseStatements" : [
-                  {
-                    "class" : "org.batfish.datamodel.routing_policy.statement.SetOrigin",
-                    "originType" : {
-                      "class" : "org.batfish.datamodel.routing_policy.expr.LiteralOrigin",
-                      "originType" : "igp"
-                    }
-                  }
-                ],
-                "guard" : {
-                  "class" : "org.batfish.datamodel.routing_policy.expr.MatchProtocol",
-                  "protocols" : [
-                    "bgp",
-                    "ibgp"
-                  ]
-                }
-              },
-              {
-                "class" : "org.batfish.datamodel.routing_policy.statement.If",
-                "falseStatements" : [
-                  {
-                    "class" : "org.batfish.datamodel.routing_policy.statement.Statements$StaticStatement",
-                    "type" : "ExitReject"
-                  }
-                ],
-                "guard" : {
-                  "class" : "org.batfish.datamodel.routing_policy.expr.FirstMatchChain",
-                  "subroutines" : [
-                    {
-                      "class" : "org.batfish.datamodel.routing_policy.expr.CallExpr",
-                      "calledPolicyName" : "export-loopback"
-                    }
-                  ]
-                },
-                "trueStatements" : [
-                  {
-                    "class" : "org.batfish.datamodel.routing_policy.statement.Statements$StaticStatement",
-                    "type" : "ExitAccept"
-                  }
-                ]
-              }
-            ]
-          },
-          "~PEER_EXPORT_POLICY:172.16.5.2/32~" : {
-            "name" : "~PEER_EXPORT_POLICY:172.16.5.2/32~",
-            "statements" : [
-              {
-                "class" : "org.batfish.datamodel.routing_policy.statement.SetDefaultPolicy",
-                "defaultPolicy" : "~DEFAULT_BGP_EXPORT_POLICY~"
-              },
-              {
-                "class" : "org.batfish.datamodel.routing_policy.statement.If",
-                "guard" : {
-                  "class" : "org.batfish.datamodel.routing_policy.expr.MatchProtocol",
-                  "protocols" : [
-                    "local"
-                  ]
-                },
-                "trueStatements" : [
-                  {
-                    "class" : "org.batfish.datamodel.routing_policy.statement.Statements$StaticStatement",
-                    "type" : "ExitReject"
-                  }
-                ]
-              },
-              {
-                "class" : "org.batfish.datamodel.routing_policy.statement.If",
-                "falseStatements" : [
-                  {
-                    "class" : "org.batfish.datamodel.routing_policy.statement.SetOrigin",
-                    "originType" : {
-                      "class" : "org.batfish.datamodel.routing_policy.expr.LiteralOrigin",
-                      "originType" : "igp"
-                    }
-                  }
-                ],
-                "guard" : {
-                  "class" : "org.batfish.datamodel.routing_policy.expr.MatchProtocol",
-                  "protocols" : [
-                    "bgp",
-                    "ibgp"
-                  ]
-                }
-              },
-              {
-                "class" : "org.batfish.datamodel.routing_policy.statement.If",
-                "falseStatements" : [
-                  {
-                    "class" : "org.batfish.datamodel.routing_policy.statement.Statements$StaticStatement",
-                    "type" : "ExitReject"
-                  }
-                ],
-                "guard" : {
-                  "class" : "org.batfish.datamodel.routing_policy.expr.FirstMatchChain",
-                  "subroutines" : [
-                    {
-                      "class" : "org.batfish.datamodel.routing_policy.expr.CallExpr",
-                      "calledPolicyName" : "export-loopback"
-                    }
-                  ]
-                },
-                "trueStatements" : [
-                  {
-                    "class" : "org.batfish.datamodel.routing_policy.statement.Statements$StaticStatement",
-                    "type" : "ExitAccept"
-                  }
-                ]
-              }
-            ]
-          },
-          "~PEER_EXPORT_POLICY:172.16.7.2/32~" : {
-            "name" : "~PEER_EXPORT_POLICY:172.16.7.2/32~",
-            "statements" : [
-              {
-                "class" : "org.batfish.datamodel.routing_policy.statement.SetDefaultPolicy",
-                "defaultPolicy" : "~DEFAULT_BGP_EXPORT_POLICY~"
-              },
-              {
-                "class" : "org.batfish.datamodel.routing_policy.statement.If",
-                "guard" : {
-                  "class" : "org.batfish.datamodel.routing_policy.expr.MatchProtocol",
-                  "protocols" : [
-                    "local"
-                  ]
-                },
-                "trueStatements" : [
-                  {
-                    "class" : "org.batfish.datamodel.routing_policy.statement.Statements$StaticStatement",
-                    "type" : "ExitReject"
-                  }
-                ]
-              },
-              {
-                "class" : "org.batfish.datamodel.routing_policy.statement.If",
-                "falseStatements" : [
-                  {
-                    "class" : "org.batfish.datamodel.routing_policy.statement.SetOrigin",
-                    "originType" : {
-                      "class" : "org.batfish.datamodel.routing_policy.expr.LiteralOrigin",
-                      "originType" : "igp"
-                    }
-                  }
-                ],
-                "guard" : {
-                  "class" : "org.batfish.datamodel.routing_policy.expr.MatchProtocol",
-                  "protocols" : [
-                    "bgp",
-                    "ibgp"
-                  ]
-                }
-              },
-              {
-                "class" : "org.batfish.datamodel.routing_policy.statement.If",
-                "falseStatements" : [
-                  {
-                    "class" : "org.batfish.datamodel.routing_policy.statement.Statements$StaticStatement",
-                    "type" : "ExitReject"
-                  }
-                ],
-                "guard" : {
-                  "class" : "org.batfish.datamodel.routing_policy.expr.FirstMatchChain",
-                  "subroutines" : [
-                    {
-                      "class" : "org.batfish.datamodel.routing_policy.expr.CallExpr",
-                      "calledPolicyName" : "export-loopback"
-                    }
-                  ]
-                },
-                "trueStatements" : [
-                  {
-                    "class" : "org.batfish.datamodel.routing_policy.statement.Statements$StaticStatement",
-                    "type" : "ExitAccept"
-                  }
-                ]
-              }
-            ]
-          },
-          "~PEER_EXPORT_POLICY:192.168.1.1/32~" : {
-            "name" : "~PEER_EXPORT_POLICY:192.168.1.1/32~",
-            "statements" : [
-              {
-                "class" : "org.batfish.datamodel.routing_policy.statement.SetDefaultPolicy",
-                "defaultPolicy" : "~DEFAULT_BGP_EXPORT_POLICY~"
-              },
-              {
-                "class" : "org.batfish.datamodel.routing_policy.statement.If",
-                "guard" : {
-                  "class" : "org.batfish.datamodel.routing_policy.expr.MatchProtocol",
-                  "protocols" : [
-                    "local"
-                  ]
-                },
-                "trueStatements" : [
-                  {
-                    "class" : "org.batfish.datamodel.routing_policy.statement.Statements$StaticStatement",
-                    "type" : "ExitReject"
-                  }
-                ]
-              },
-              {
-                "class" : "org.batfish.datamodel.routing_policy.statement.If",
-                "falseStatements" : [
-                  {
-                    "class" : "org.batfish.datamodel.routing_policy.statement.SetOrigin",
-                    "originType" : {
-                      "class" : "org.batfish.datamodel.routing_policy.expr.LiteralOrigin",
-                      "originType" : "igp"
-                    }
-                  }
-                ],
-                "guard" : {
-                  "class" : "org.batfish.datamodel.routing_policy.expr.MatchProtocol",
-                  "protocols" : [
-                    "bgp",
-                    "ibgp"
-                  ]
-                }
-              },
-              {
-                "class" : "org.batfish.datamodel.routing_policy.statement.If",
-                "falseStatements" : [
-                  {
-                    "class" : "org.batfish.datamodel.routing_policy.statement.Statements$StaticStatement",
-                    "type" : "ExitReject"
-                  }
-                ],
-                "guard" : {
-                  "class" : "org.batfish.datamodel.routing_policy.expr.FirstMatchChain"
-                },
-                "trueStatements" : [
-                  {
-                    "class" : "org.batfish.datamodel.routing_policy.statement.Statements$StaticStatement",
-                    "type" : "ExitAccept"
-                  }
-                ]
-              }
-            ]
-          },
-          "~PEER_EXPORT_POLICY:192.168.1.3/32~" : {
-            "name" : "~PEER_EXPORT_POLICY:192.168.1.3/32~",
-            "statements" : [
-              {
-                "class" : "org.batfish.datamodel.routing_policy.statement.SetDefaultPolicy",
-                "defaultPolicy" : "~DEFAULT_BGP_EXPORT_POLICY~"
-              },
-              {
-                "class" : "org.batfish.datamodel.routing_policy.statement.If",
-                "guard" : {
-                  "class" : "org.batfish.datamodel.routing_policy.expr.MatchProtocol",
-                  "protocols" : [
-                    "local"
-                  ]
-                },
-                "trueStatements" : [
-                  {
-                    "class" : "org.batfish.datamodel.routing_policy.statement.Statements$StaticStatement",
-                    "type" : "ExitReject"
-                  }
-                ]
-              },
-              {
-                "class" : "org.batfish.datamodel.routing_policy.statement.If",
-                "falseStatements" : [
-                  {
-                    "class" : "org.batfish.datamodel.routing_policy.statement.SetOrigin",
-                    "originType" : {
-                      "class" : "org.batfish.datamodel.routing_policy.expr.LiteralOrigin",
-                      "originType" : "igp"
-                    }
-                  }
-                ],
-                "guard" : {
-                  "class" : "org.batfish.datamodel.routing_policy.expr.MatchProtocol",
-                  "protocols" : [
-                    "bgp",
-                    "ibgp"
-                  ]
-                }
-              },
-              {
-                "class" : "org.batfish.datamodel.routing_policy.statement.If",
-                "falseStatements" : [
-                  {
-                    "class" : "org.batfish.datamodel.routing_policy.statement.Statements$StaticStatement",
-                    "type" : "ExitReject"
-                  }
-                ],
-                "guard" : {
-                  "class" : "org.batfish.datamodel.routing_policy.expr.FirstMatchChain"
-                },
-                "trueStatements" : [
-                  {
-                    "class" : "org.batfish.datamodel.routing_policy.statement.Statements$StaticStatement",
-                    "type" : "ExitAccept"
-                  }
-                ]
-              }
-            ]
-          },
-          "~PEER_EXPORT_POLICY:192.168.1.44/32~" : {
-            "name" : "~PEER_EXPORT_POLICY:192.168.1.44/32~",
-            "statements" : [
-              {
-                "class" : "org.batfish.datamodel.routing_policy.statement.SetDefaultPolicy",
-                "defaultPolicy" : "~DEFAULT_BGP_EXPORT_POLICY~"
-              },
-              {
-                "class" : "org.batfish.datamodel.routing_policy.statement.If",
-                "guard" : {
-                  "class" : "org.batfish.datamodel.routing_policy.expr.MatchProtocol",
-                  "protocols" : [
-                    "local"
-                  ]
-                },
-                "trueStatements" : [
-                  {
-                    "class" : "org.batfish.datamodel.routing_policy.statement.Statements$StaticStatement",
-                    "type" : "ExitReject"
-                  }
-                ]
-              },
-              {
-                "class" : "org.batfish.datamodel.routing_policy.statement.If",
-                "falseStatements" : [
-                  {
-                    "class" : "org.batfish.datamodel.routing_policy.statement.SetOrigin",
-                    "originType" : {
-                      "class" : "org.batfish.datamodel.routing_policy.expr.LiteralOrigin",
-                      "originType" : "igp"
-                    }
-                  }
-                ],
-                "guard" : {
-                  "class" : "org.batfish.datamodel.routing_policy.expr.MatchProtocol",
-                  "protocols" : [
-                    "bgp",
-                    "ibgp"
-                  ]
-                }
-              },
-              {
-                "class" : "org.batfish.datamodel.routing_policy.statement.If",
-                "falseStatements" : [
-                  {
-                    "class" : "org.batfish.datamodel.routing_policy.statement.Statements$StaticStatement",
-                    "type" : "ExitReject"
-                  }
-                ],
-                "guard" : {
-                  "class" : "org.batfish.datamodel.routing_policy.expr.FirstMatchChain"
-                },
-                "trueStatements" : [
-                  {
-                    "class" : "org.batfish.datamodel.routing_policy.statement.Statements$StaticStatement",
-                    "type" : "ExitAccept"
-                  }
-                ]
-              }
-            ]
-          },
-          "~PEER_EXPORT_POLICY:192.168.1.5/32~" : {
-            "name" : "~PEER_EXPORT_POLICY:192.168.1.5/32~",
-            "statements" : [
-              {
-                "class" : "org.batfish.datamodel.routing_policy.statement.SetDefaultPolicy",
-                "defaultPolicy" : "~DEFAULT_BGP_EXPORT_POLICY~"
-              },
-              {
-                "class" : "org.batfish.datamodel.routing_policy.statement.If",
-                "guard" : {
-                  "class" : "org.batfish.datamodel.routing_policy.expr.MatchProtocol",
-                  "protocols" : [
-                    "local"
-                  ]
-                },
-                "trueStatements" : [
-                  {
-                    "class" : "org.batfish.datamodel.routing_policy.statement.Statements$StaticStatement",
-                    "type" : "ExitReject"
-                  }
-                ]
-              },
-              {
-                "class" : "org.batfish.datamodel.routing_policy.statement.If",
-                "falseStatements" : [
-                  {
-                    "class" : "org.batfish.datamodel.routing_policy.statement.SetOrigin",
-                    "originType" : {
-                      "class" : "org.batfish.datamodel.routing_policy.expr.LiteralOrigin",
-                      "originType" : "igp"
-                    }
-                  }
-                ],
-                "guard" : {
-                  "class" : "org.batfish.datamodel.routing_policy.expr.MatchProtocol",
-                  "protocols" : [
-                    "bgp",
-                    "ibgp"
-                  ]
-                }
-              },
-              {
-                "class" : "org.batfish.datamodel.routing_policy.statement.If",
-                "falseStatements" : [
-                  {
-                    "class" : "org.batfish.datamodel.routing_policy.statement.Statements$StaticStatement",
-                    "type" : "ExitReject"
-                  }
-                ],
-                "guard" : {
-                  "class" : "org.batfish.datamodel.routing_policy.expr.FirstMatchChain"
-                },
-                "trueStatements" : [
-                  {
-                    "class" : "org.batfish.datamodel.routing_policy.statement.Statements$StaticStatement",
-                    "type" : "ExitAccept"
-                  }
-                ]
-              }
-            ]
-          },
-          "~PEER_IMPORT_POLICY:172.16.3.2/32~" : {
-            "name" : "~PEER_IMPORT_POLICY:172.16.3.2/32~",
-            "statements" : [
-              {
-                "class" : "org.batfish.datamodel.routing_policy.statement.SetDefaultPolicy",
-                "defaultPolicy" : "~DEFAULT_BGP_IMPORT_POLICY~"
-              },
-              {
-                "class" : "org.batfish.datamodel.routing_policy.statement.Statements$StaticStatement",
-                "type" : "SetDefaultActionAccept"
-              },
-              {
-                "class" : "org.batfish.datamodel.routing_policy.statement.If",
-                "falseStatements" : [
-                  {
-                    "class" : "org.batfish.datamodel.routing_policy.statement.Statements$StaticStatement",
-                    "type" : "ExitReject"
-                  }
-                ],
-                "guard" : {
-                  "class" : "org.batfish.datamodel.routing_policy.expr.FirstMatchChain"
-                },
-                "trueStatements" : [
-                  {
-                    "class" : "org.batfish.datamodel.routing_policy.statement.Statements$StaticStatement",
-                    "type" : "ExitAccept"
-                  }
-                ]
-              }
-            ]
-          },
-          "~PEER_IMPORT_POLICY:172.16.5.2/32~" : {
-            "name" : "~PEER_IMPORT_POLICY:172.16.5.2/32~",
-            "statements" : [
-              {
-                "class" : "org.batfish.datamodel.routing_policy.statement.SetDefaultPolicy",
-                "defaultPolicy" : "~DEFAULT_BGP_IMPORT_POLICY~"
-              },
-              {
-                "class" : "org.batfish.datamodel.routing_policy.statement.Statements$StaticStatement",
-                "type" : "SetDefaultActionAccept"
-              },
-              {
-                "class" : "org.batfish.datamodel.routing_policy.statement.If",
-                "falseStatements" : [
-                  {
-                    "class" : "org.batfish.datamodel.routing_policy.statement.Statements$StaticStatement",
-                    "type" : "ExitReject"
-                  }
-                ],
-                "guard" : {
-                  "class" : "org.batfish.datamodel.routing_policy.expr.FirstMatchChain"
-                },
-                "trueStatements" : [
-                  {
-                    "class" : "org.batfish.datamodel.routing_policy.statement.Statements$StaticStatement",
-                    "type" : "ExitAccept"
-                  }
-                ]
-              }
-            ]
-          },
-          "~PEER_IMPORT_POLICY:172.16.7.2/32~" : {
-            "name" : "~PEER_IMPORT_POLICY:172.16.7.2/32~",
-            "statements" : [
-              {
-                "class" : "org.batfish.datamodel.routing_policy.statement.SetDefaultPolicy",
-                "defaultPolicy" : "~DEFAULT_BGP_IMPORT_POLICY~"
-              },
-              {
-                "class" : "org.batfish.datamodel.routing_policy.statement.Statements$StaticStatement",
-                "type" : "SetDefaultActionAccept"
-              },
-              {
-                "class" : "org.batfish.datamodel.routing_policy.statement.If",
-                "falseStatements" : [
-                  {
-                    "class" : "org.batfish.datamodel.routing_policy.statement.Statements$StaticStatement",
-                    "type" : "ExitReject"
-                  }
-                ],
-                "guard" : {
-                  "class" : "org.batfish.datamodel.routing_policy.expr.FirstMatchChain"
-                },
-                "trueStatements" : [
-                  {
-                    "class" : "org.batfish.datamodel.routing_policy.statement.Statements$StaticStatement",
-                    "type" : "ExitAccept"
-                  }
-                ]
-              }
-            ]
-          },
-          "~PEER_IMPORT_POLICY:192.168.1.1/32~" : {
-            "name" : "~PEER_IMPORT_POLICY:192.168.1.1/32~",
-            "statements" : [
-              {
-                "class" : "org.batfish.datamodel.routing_policy.statement.SetDefaultPolicy",
-                "defaultPolicy" : "~DEFAULT_BGP_IMPORT_POLICY~"
-              },
-              {
-                "class" : "org.batfish.datamodel.routing_policy.statement.Statements$StaticStatement",
-                "type" : "SetDefaultActionAccept"
-              },
-              {
-                "class" : "org.batfish.datamodel.routing_policy.statement.If",
-                "falseStatements" : [
-                  {
-                    "class" : "org.batfish.datamodel.routing_policy.statement.Statements$StaticStatement",
-                    "type" : "ExitReject"
-                  }
-                ],
-                "guard" : {
-                  "class" : "org.batfish.datamodel.routing_policy.expr.FirstMatchChain"
-                },
-                "trueStatements" : [
-                  {
-                    "class" : "org.batfish.datamodel.routing_policy.statement.Statements$StaticStatement",
-                    "type" : "ExitAccept"
-                  }
-                ]
-              }
-            ]
-          },
-          "~PEER_IMPORT_POLICY:192.168.1.3/32~" : {
-            "name" : "~PEER_IMPORT_POLICY:192.168.1.3/32~",
-            "statements" : [
-              {
-                "class" : "org.batfish.datamodel.routing_policy.statement.SetDefaultPolicy",
-                "defaultPolicy" : "~DEFAULT_BGP_IMPORT_POLICY~"
-              },
-              {
-                "class" : "org.batfish.datamodel.routing_policy.statement.Statements$StaticStatement",
-                "type" : "SetDefaultActionAccept"
-              },
-              {
-                "class" : "org.batfish.datamodel.routing_policy.statement.If",
-                "falseStatements" : [
-                  {
-                    "class" : "org.batfish.datamodel.routing_policy.statement.Statements$StaticStatement",
-                    "type" : "ExitReject"
-                  }
-                ],
-                "guard" : {
-                  "class" : "org.batfish.datamodel.routing_policy.expr.FirstMatchChain"
-                },
-                "trueStatements" : [
-                  {
-                    "class" : "org.batfish.datamodel.routing_policy.statement.Statements$StaticStatement",
-                    "type" : "ExitAccept"
-                  }
-                ]
-              }
-            ]
-          },
-          "~PEER_IMPORT_POLICY:192.168.1.44/32~" : {
-            "name" : "~PEER_IMPORT_POLICY:192.168.1.44/32~",
-            "statements" : [
-              {
-                "class" : "org.batfish.datamodel.routing_policy.statement.SetDefaultPolicy",
-                "defaultPolicy" : "~DEFAULT_BGP_IMPORT_POLICY~"
-              },
-              {
-                "class" : "org.batfish.datamodel.routing_policy.statement.Statements$StaticStatement",
-                "type" : "SetDefaultActionAccept"
-              },
-              {
-                "class" : "org.batfish.datamodel.routing_policy.statement.If",
-                "falseStatements" : [
-                  {
-                    "class" : "org.batfish.datamodel.routing_policy.statement.Statements$StaticStatement",
-                    "type" : "ExitReject"
-                  }
-                ],
-                "guard" : {
-                  "class" : "org.batfish.datamodel.routing_policy.expr.FirstMatchChain"
-                },
-                "trueStatements" : [
-                  {
-                    "class" : "org.batfish.datamodel.routing_policy.statement.Statements$StaticStatement",
-                    "type" : "ExitAccept"
-                  }
-                ]
-              }
-            ]
-          },
-          "~PEER_IMPORT_POLICY:192.168.1.5/32~" : {
-            "name" : "~PEER_IMPORT_POLICY:192.168.1.5/32~",
-            "statements" : [
-              {
-                "class" : "org.batfish.datamodel.routing_policy.statement.SetDefaultPolicy",
-                "defaultPolicy" : "~DEFAULT_BGP_IMPORT_POLICY~"
-              },
-              {
-                "class" : "org.batfish.datamodel.routing_policy.statement.Statements$StaticStatement",
-                "type" : "SetDefaultActionAccept"
-              },
-              {
-                "class" : "org.batfish.datamodel.routing_policy.statement.If",
-                "falseStatements" : [
-                  {
-                    "class" : "org.batfish.datamodel.routing_policy.statement.Statements$StaticStatement",
-                    "type" : "ExitReject"
-                  }
-                ],
-                "guard" : {
-                  "class" : "org.batfish.datamodel.routing_policy.expr.FirstMatchChain"
-                },
-                "trueStatements" : [
-                  {
-                    "class" : "org.batfish.datamodel.routing_policy.statement.Statements$StaticStatement",
-                    "type" : "ExitAccept"
                   }
                 ]
               }
@@ -130087,11 +130271,11 @@
                       "sendCommunity" : true,
                       "sendExtendedCommunity" : true
                     },
-                    "exportPolicy" : "~PEER_EXPORT_POLICY:172.16.3.2/32~",
+                    "exportPolicy" : "~BGP_PEER_EXPORT_POLICY:default:172.16.3.2/32~",
                     "exportPolicySources" : [
                       "export-loopback"
                     ],
-                    "importPolicy" : "~PEER_IMPORT_POLICY:172.16.3.2/32~",
+                    "importPolicy" : "~BGP_PEER_IMPORT_POLICY:default:172.16.3.2/32~",
                     "routeReflectorClient" : false
                   },
                   "localAs" : 65002,
@@ -130122,11 +130306,11 @@
                       "sendCommunity" : true,
                       "sendExtendedCommunity" : true
                     },
-                    "exportPolicy" : "~PEER_EXPORT_POLICY:172.16.5.2/32~",
+                    "exportPolicy" : "~BGP_PEER_EXPORT_POLICY:default:172.16.5.2/32~",
                     "exportPolicySources" : [
                       "export-loopback"
                     ],
-                    "importPolicy" : "~PEER_IMPORT_POLICY:172.16.5.2/32~",
+                    "importPolicy" : "~BGP_PEER_IMPORT_POLICY:default:172.16.5.2/32~",
                     "routeReflectorClient" : false
                   },
                   "localAs" : 65002,
@@ -130157,11 +130341,11 @@
                       "sendCommunity" : true,
                       "sendExtendedCommunity" : true
                     },
-                    "exportPolicy" : "~PEER_EXPORT_POLICY:172.16.7.2/32~",
+                    "exportPolicy" : "~BGP_PEER_EXPORT_POLICY:default:172.16.7.2/32~",
                     "exportPolicySources" : [
                       "export-loopback"
                     ],
-                    "importPolicy" : "~PEER_IMPORT_POLICY:172.16.7.2/32~",
+                    "importPolicy" : "~BGP_PEER_IMPORT_POLICY:default:172.16.7.2/32~",
                     "routeReflectorClient" : false
                   },
                   "localAs" : 65002,
@@ -130192,8 +130376,8 @@
                       "sendCommunity" : true,
                       "sendExtendedCommunity" : true
                     },
-                    "exportPolicy" : "~PEER_EXPORT_POLICY:192.168.1.1/32~",
-                    "importPolicy" : "~PEER_IMPORT_POLICY:192.168.1.1/32~",
+                    "exportPolicy" : "~BGP_PEER_EXPORT_POLICY:default:192.168.1.1/32~",
+                    "importPolicy" : "~BGP_PEER_IMPORT_POLICY:default:192.168.1.1/32~",
                     "routeReflectorClient" : false
                   },
                   "localAs" : 65500,
@@ -130225,8 +130409,8 @@
                       "sendCommunity" : true,
                       "sendExtendedCommunity" : true
                     },
-                    "exportPolicy" : "~PEER_EXPORT_POLICY:192.168.1.3/32~",
-                    "importPolicy" : "~PEER_IMPORT_POLICY:192.168.1.3/32~",
+                    "exportPolicy" : "~BGP_PEER_EXPORT_POLICY:default:192.168.1.3/32~",
+                    "importPolicy" : "~BGP_PEER_IMPORT_POLICY:default:192.168.1.3/32~",
                     "routeReflectorClient" : false
                   },
                   "localAs" : 65500,
@@ -130258,8 +130442,8 @@
                       "sendCommunity" : true,
                       "sendExtendedCommunity" : true
                     },
-                    "exportPolicy" : "~PEER_EXPORT_POLICY:192.168.1.5/32~",
-                    "importPolicy" : "~PEER_IMPORT_POLICY:192.168.1.5/32~",
+                    "exportPolicy" : "~BGP_PEER_EXPORT_POLICY:default:192.168.1.5/32~",
+                    "importPolicy" : "~BGP_PEER_IMPORT_POLICY:default:192.168.1.5/32~",
                     "routeReflectorClient" : false
                   },
                   "localAs" : 65500,
@@ -130291,8 +130475,8 @@
                       "sendCommunity" : true,
                       "sendExtendedCommunity" : true
                     },
-                    "exportPolicy" : "~PEER_EXPORT_POLICY:192.168.1.44/32~",
-                    "importPolicy" : "~PEER_IMPORT_POLICY:192.168.1.44/32~",
+                    "exportPolicy" : "~BGP_PEER_EXPORT_POLICY:default:192.168.1.44/32~",
+                    "importPolicy" : "~BGP_PEER_IMPORT_POLICY:default:192.168.1.44/32~",
                     "routeReflectorClient" : false
                   },
                   "localAs" : 65500,

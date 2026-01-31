@@ -19,6 +19,7 @@ import static org.batfish.representation.juniper.JuniperStructureType.AS_PATH_GR
 import static org.batfish.representation.juniper.JuniperStructureType.AUTHENTICATION_KEY_CHAIN;
 import static org.batfish.representation.juniper.JuniperStructureType.BGP_GROUP;
 import static org.batfish.representation.juniper.JuniperStructureType.BRIDGE_DOMAIN;
+import static org.batfish.representation.juniper.JuniperStructureType.BUILT_IN_STRUCTURES;
 import static org.batfish.representation.juniper.JuniperStructureType.CLASS_OF_SERVICE_CLASSIFIER;
 import static org.batfish.representation.juniper.JuniperStructureType.CLASS_OF_SERVICE_DSCP_CODE_POINT_ALIAS;
 import static org.batfish.representation.juniper.JuniperStructureType.CLASS_OF_SERVICE_DSCP_IPV6_CODE_POINT_ALIAS;
@@ -36,6 +37,7 @@ import static org.batfish.representation.juniper.JuniperStructureType.FIREWALL_F
 import static org.batfish.representation.juniper.JuniperStructureType.FIREWALL_FILTER_TERM;
 import static org.batfish.representation.juniper.JuniperStructureType.FIREWALL_INET6_FILTER;
 import static org.batfish.representation.juniper.JuniperStructureType.FIREWALL_INTERFACE_SET;
+import static org.batfish.representation.juniper.JuniperStructureType.FIREWALL_POLICER;
 import static org.batfish.representation.juniper.JuniperStructureType.IKE_GATEWAY;
 import static org.batfish.representation.juniper.JuniperStructureType.IKE_POLICY;
 import static org.batfish.representation.juniper.JuniperStructureType.IKE_PROPOSAL;
@@ -125,6 +127,7 @@ import static org.batfish.representation.juniper.JuniperStructureUsage.FIREWALL_
 import static org.batfish.representation.juniper.JuniperStructureUsage.FIREWALL_FILTER_TERM_DEFINITION;
 import static org.batfish.representation.juniper.JuniperStructureUsage.FIREWALL_FILTER_TERM_FROM_INTERFACE;
 import static org.batfish.representation.juniper.JuniperStructureUsage.FIREWALL_FILTER_TERM_FROM_INTERFACE_SET;
+import static org.batfish.representation.juniper.JuniperStructureUsage.FIREWALL_FILTER_THEN_POLICER;
 import static org.batfish.representation.juniper.JuniperStructureUsage.FIREWALL_FILTER_THEN_ROUTING_INSTANCE;
 import static org.batfish.representation.juniper.JuniperStructureUsage.FIREWALL_INTERFACE_SET_MEMBER;
 import static org.batfish.representation.juniper.JuniperStructureUsage.FORWARDING_OPTIONS_DHCP_RELAY_GROUP_INTERFACE;
@@ -310,6 +313,7 @@ import org.batfish.grammar.flatjuniper.FlatJuniperParser.B_authentication_key_ch
 import org.batfish.grammar.flatjuniper.FlatJuniperParser.B_clusterContext;
 import org.batfish.grammar.flatjuniper.FlatJuniperParser.B_descriptionContext;
 import org.batfish.grammar.flatjuniper.FlatJuniperParser.B_disableContext;
+import org.batfish.grammar.flatjuniper.FlatJuniperParser.B_drop_path_attributesContext;
 import org.batfish.grammar.flatjuniper.FlatJuniperParser.B_enableContext;
 import org.batfish.grammar.flatjuniper.FlatJuniperParser.B_enforce_first_asContext;
 import org.batfish.grammar.flatjuniper.FlatJuniperParser.B_exportContext;
@@ -363,6 +367,7 @@ import org.batfish.grammar.flatjuniper.FlatJuniperParser.Evo_vrf_targetContext;
 import org.batfish.grammar.flatjuniper.FlatJuniperParser.Exp_code_pointContext;
 import org.batfish.grammar.flatjuniper.FlatJuniperParser.F_familyContext;
 import org.batfish.grammar.flatjuniper.FlatJuniperParser.F_filterContext;
+import org.batfish.grammar.flatjuniper.FlatJuniperParser.F_policerContext;
 import org.batfish.grammar.flatjuniper.FlatJuniperParser.Ff_termContext;
 import org.batfish.grammar.flatjuniper.FlatJuniperParser.Fftf_addressContext;
 import org.batfish.grammar.flatjuniper.FlatJuniperParser.Fftf_destination_addressContext;
@@ -393,6 +398,8 @@ import org.batfish.grammar.flatjuniper.FlatJuniperParser.Fftf_source_prefix_list
 import org.batfish.grammar.flatjuniper.FlatJuniperParser.Fftf_tcp_establishedContext;
 import org.batfish.grammar.flatjuniper.FlatJuniperParser.Fftf_tcp_flagsContext;
 import org.batfish.grammar.flatjuniper.FlatJuniperParser.Fftf_tcp_initialContext;
+import org.batfish.grammar.flatjuniper.FlatJuniperParser.Fftf_ttlContext;
+import org.batfish.grammar.flatjuniper.FlatJuniperParser.Fftf_ttl_exceptContext;
 import org.batfish.grammar.flatjuniper.FlatJuniperParser.Fftfa_address_mask_prefixContext;
 import org.batfish.grammar.flatjuniper.FlatJuniperParser.Fftt_acceptContext;
 import org.batfish.grammar.flatjuniper.FlatJuniperParser.Fftt_decapsulateContext;
@@ -400,6 +407,7 @@ import org.batfish.grammar.flatjuniper.FlatJuniperParser.Fftt_discardContext;
 import org.batfish.grammar.flatjuniper.FlatJuniperParser.Fftt_next_ipContext;
 import org.batfish.grammar.flatjuniper.FlatJuniperParser.Fftt_next_termContext;
 import org.batfish.grammar.flatjuniper.FlatJuniperParser.Fftt_nopContext;
+import org.batfish.grammar.flatjuniper.FlatJuniperParser.Fftt_policerContext;
 import org.batfish.grammar.flatjuniper.FlatJuniperParser.Fftt_rejectContext;
 import org.batfish.grammar.flatjuniper.FlatJuniperParser.Fftt_routing_instanceContext;
 import org.batfish.grammar.flatjuniper.FlatJuniperParser.FilterContext;
@@ -412,6 +420,10 @@ import org.batfish.grammar.flatjuniper.FlatJuniperParser.Fod_groupContext;
 import org.batfish.grammar.flatjuniper.FlatJuniperParser.Fod_server_groupContext;
 import org.batfish.grammar.flatjuniper.FlatJuniperParser.Fodg_interfaceContext;
 import org.batfish.grammar.flatjuniper.FlatJuniperParser.Fods_addressContext;
+import org.batfish.grammar.flatjuniper.FlatJuniperParser.Fp_if_exceedingContext;
+import org.batfish.grammar.flatjuniper.FlatJuniperParser.Fpie_bandwidth_limitContext;
+import org.batfish.grammar.flatjuniper.FlatJuniperParser.Fpie_burst_size_limitContext;
+import org.batfish.grammar.flatjuniper.FlatJuniperParser.Fpt_discardContext;
 import org.batfish.grammar.flatjuniper.FlatJuniperParser.Fragment_offsetContext;
 import org.batfish.grammar.flatjuniper.FlatJuniperParser.Fragment_offset_rangeContext;
 import org.batfish.grammar.flatjuniper.FlatJuniperParser.Hello_authentication_typeContext;
@@ -618,6 +630,7 @@ import org.batfish.grammar.flatjuniper.FlatJuniperParser.Popsfrf_thenContext;
 import org.batfish.grammar.flatjuniper.FlatJuniperParser.Popsfrf_throughContext;
 import org.batfish.grammar.flatjuniper.FlatJuniperParser.Popsfrf_uptoContext;
 import org.batfish.grammar.flatjuniper.FlatJuniperParser.Popst_acceptContext;
+import org.batfish.grammar.flatjuniper.FlatJuniperParser.Popst_aigp_originateContext;
 import org.batfish.grammar.flatjuniper.FlatJuniperParser.Popst_as_path_expandContext;
 import org.batfish.grammar.flatjuniper.FlatJuniperParser.Popst_as_path_prependContext;
 import org.batfish.grammar.flatjuniper.FlatJuniperParser.Popst_bgp_output_queue_priorityContext;
@@ -978,10 +991,8 @@ import org.batfish.representation.juniper.ConcreteFirewallFilter;
 import org.batfish.representation.juniper.Condition;
 import org.batfish.representation.juniper.DhcpRelayGroup;
 import org.batfish.representation.juniper.DhcpRelayServerGroup;
-import org.batfish.representation.juniper.DscpUtil;
 import org.batfish.representation.juniper.Evpn;
 import org.batfish.representation.juniper.EvpnEncapsulation;
-import org.batfish.representation.juniper.ExpUtil;
 import org.batfish.representation.juniper.Family;
 import org.batfish.representation.juniper.FirewallFilter;
 import org.batfish.representation.juniper.FwFrom;
@@ -1015,22 +1026,22 @@ import org.batfish.representation.juniper.FwFromSourcePort;
 import org.batfish.representation.juniper.FwFromSourcePrefixList;
 import org.batfish.representation.juniper.FwFromSourcePrefixListExcept;
 import org.batfish.representation.juniper.FwFromTcpFlags;
+import org.batfish.representation.juniper.FwFromTtl;
 import org.batfish.representation.juniper.FwTerm;
 import org.batfish.representation.juniper.FwThenAccept;
 import org.batfish.representation.juniper.FwThenDiscard;
 import org.batfish.representation.juniper.FwThenNextIp;
 import org.batfish.representation.juniper.FwThenNextTerm;
 import org.batfish.representation.juniper.FwThenNop;
+import org.batfish.representation.juniper.FwThenPolicer;
 import org.batfish.representation.juniper.FwThenRoutingInstance;
 import org.batfish.representation.juniper.GeneratedRoute;
 import org.batfish.representation.juniper.HostProtocol;
 import org.batfish.representation.juniper.HostSystemService;
 import org.batfish.representation.juniper.IcmpLarge;
-import org.batfish.representation.juniper.Ieee8021pUtil;
 import org.batfish.representation.juniper.IkeGateway;
 import org.batfish.representation.juniper.IkePolicy;
 import org.batfish.representation.juniper.IkeProposal;
-import org.batfish.representation.juniper.InetPrecedenceUtil;
 import org.batfish.representation.juniper.Interface;
 import org.batfish.representation.juniper.Interface.VlanTaggingMode;
 import org.batfish.representation.juniper.InterfaceOspfNeighbor;
@@ -1089,6 +1100,9 @@ import org.batfish.representation.juniper.OspfInterfaceSettings;
 import org.batfish.representation.juniper.OspfInterfaceSettings.OspfInterfaceType;
 import org.batfish.representation.juniper.PatPool;
 import org.batfish.representation.juniper.PathSelectionMode;
+import org.batfish.representation.juniper.Policer;
+import org.batfish.representation.juniper.PolicerIfExceeding;
+import org.batfish.representation.juniper.PolicerThen;
 import org.batfish.representation.juniper.PolicyStatement;
 import org.batfish.representation.juniper.PrefixList;
 import org.batfish.representation.juniper.PsFromAsPath;
@@ -1121,6 +1135,7 @@ import org.batfish.representation.juniper.PsFroms;
 import org.batfish.representation.juniper.PsTerm;
 import org.batfish.representation.juniper.PsThen;
 import org.batfish.representation.juniper.PsThenAccept;
+import org.batfish.representation.juniper.PsThenAigpOriginate;
 import org.batfish.representation.juniper.PsThenAsPathExpand;
 import org.batfish.representation.juniper.PsThenAsPathExpandAsList;
 import org.batfish.representation.juniper.PsThenAsPathExpandLastAs;
@@ -1226,6 +1241,20 @@ public class ConfigurationBuilder extends FlatJuniperParserBaseListener
   /** Return original line number for the specified token */
   private int getLine(Token t) {
     return _parser.getLine(t);
+  }
+
+  /**
+   * Reference a structure that may be built-in. If the name is a built-in for the given structure
+   * type, also create a definition at line 0 to prevent undefined structure warnings.
+   */
+  private void referenceBuiltIn(
+      Junos_nameContext nameCtx, JuniperStructureType type, JuniperStructureUsage usage) {
+    String name = toString(nameCtx);
+    int line = getLine(nameCtx.getStart());
+    _configuration.referenceStructure(type, name, usage, line);
+    if (BUILT_IN_STRUCTURES.containsEntry(type, name)) {
+      _configuration.defineSingleLineStructure(type, name, 0);
+    }
   }
 
   public static @Nonnull NamedPort getNamedPort(Named_portContext ctx) {
@@ -2404,6 +2433,10 @@ public class ConfigurationBuilder extends FlatJuniperParserBaseListener
 
   private FwTerm _currentFwTerm;
 
+  private Policer _currentPolicer;
+
+  private PolicerIfExceeding _currentPolicerIfExceeding;
+
   private GeneratedRoute _currentGeneratedRoute;
 
   private Screen _currentScreen;
@@ -2803,6 +2836,59 @@ public class ConfigurationBuilder extends FlatJuniperParserBaseListener
       assert ctx.iface_wildcard != null;
       warn(ctx, "Interface wildcards are not yet supported in interface-set");
     }
+  }
+
+  @Override
+  public void enterF_policer(F_policerContext ctx) {
+    String name = toString(ctx.name);
+    _currentPolicer = _currentLogicalSystem.getPolicers().computeIfAbsent(name, Policer::new);
+    _configuration.defineFlattenedStructure(FIREWALL_POLICER, name, ctx, _parser);
+  }
+
+  @Override
+  public void exitF_policer(F_policerContext ctx) {
+    _currentPolicer = null;
+  }
+
+  @Override
+  public void enterFp_if_exceeding(Fp_if_exceedingContext ctx) {
+    // Reuse existing if-exceeding or create new one
+    _currentPolicerIfExceeding = _currentPolicer.getIfExceeding();
+    if (_currentPolicerIfExceeding == null) {
+      _currentPolicerIfExceeding = new PolicerIfExceeding();
+      _currentPolicer.setIfExceeding(_currentPolicerIfExceeding);
+    }
+  }
+
+  @Override
+  public void exitFp_if_exceeding(Fp_if_exceedingContext ctx) {
+    _currentPolicerIfExceeding = null;
+  }
+
+  @Override
+  public void exitFpie_bandwidth_limit(Fpie_bandwidth_limitContext ctx) {
+    _currentPolicerIfExceeding.setBandwidthLimit(toBandwidth(ctx.bw_limit));
+  }
+
+  @Override
+  public void exitFpie_burst_size_limit(Fpie_burst_size_limitContext ctx) {
+    long base = toLong(ctx.size.base);
+    long burstSize;
+    if (ctx.size.K() != null) {
+      burstSize = base * 1000L;
+    } else if (ctx.size.M() != null) {
+      burstSize = base * 1000000L;
+    } else if (ctx.size.G() != null) {
+      burstSize = base * 1000000000L;
+    } else {
+      burstSize = base;
+    }
+    _currentPolicerIfExceeding.setBurstSizeLimit(burstSize);
+  }
+
+  @Override
+  public void exitFpt_discard(Fpt_discardContext ctx) {
+    _currentPolicer.setThen(PolicerThen.DISCARD);
   }
 
   @Override
@@ -4544,6 +4630,14 @@ public class ConfigurationBuilder extends FlatJuniperParserBaseListener
   }
 
   @Override
+  public void exitB_drop_path_attributes(B_drop_path_attributesContext ctx) {
+    SubRange range = toSubRange(ctx.attr);
+    IntegerSpace updatedSpace =
+        _currentBgpGroup.getDropPathAttributes().union(IntegerSpace.of(range));
+    _currentBgpGroup.setDropPathAttributes(updatedSpace);
+  }
+
+  @Override
   public void exitB_enable(B_enableContext ctx) {
     _currentBgpGroup.setDisable(false);
   }
@@ -4795,16 +4889,7 @@ public class ConfigurationBuilder extends FlatJuniperParserBaseListener
     Integer value = Ints.tryParse(dscpSpec);
     if (value == null) {
       // not a number, so must be an alias
-      // if it is not a builtin alias or it has been overridden, we add a reference
-      // TODO: this is not quite right because the builtin override could happen later
-      if (!DscpUtil.defaultValue(dscpSpec).isPresent()
-          || _currentLogicalSystem.getDscpAliases().containsKey(dscpSpec)) {
-        _configuration.referenceStructure(
-            CLASS_OF_SERVICE_DSCP_CODE_POINT_ALIAS,
-            dscpSpec,
-            FIREWALL_FILTER_DSCP,
-            getLine(ctx.name.getStart()));
-      }
+      referenceBuiltIn(ctx.name, CLASS_OF_SERVICE_DSCP_CODE_POINT_ALIAS, FIREWALL_FILTER_DSCP);
     }
     _currentFwTerm.getFroms().add(from);
   }
@@ -5107,6 +5192,20 @@ public class ConfigurationBuilder extends FlatJuniperParserBaseListener
   }
 
   @Override
+  public void exitFftf_ttl(Fftf_ttlContext ctx) {
+    SubRange range = toSubRange(ctx.uint8_range());
+    FwFrom from = new FwFromTtl(range, false);
+    _currentFwTerm.getFroms().add(from);
+  }
+
+  @Override
+  public void exitFftf_ttl_except(Fftf_ttl_exceptContext ctx) {
+    SubRange range = toSubRange(ctx.uint8_range());
+    FwFrom from = new FwFromTtl(range, true);
+    _currentFwTerm.getFroms().add(from);
+  }
+
+  @Override
   public void exitFftt_accept(Fftt_acceptContext ctx) {
     _currentFwTerm.getThens().add(FwThenAccept.INSTANCE);
   }
@@ -5133,6 +5232,14 @@ public class ConfigurationBuilder extends FlatJuniperParserBaseListener
   @Override
   public void exitFftt_nop(Fftt_nopContext ctx) {
     _currentFwTerm.getThens().add(FwThenNop.INSTANCE);
+  }
+
+  @Override
+  public void exitFftt_policer(Fftt_policerContext ctx) {
+    String name = toString(ctx.name);
+    _currentFwTerm.getThens().add(new FwThenPolicer(name));
+    _configuration.referenceStructure(
+        FIREWALL_POLICER, name, FIREWALL_FILTER_THEN_POLICER, getLine(ctx.getStart()));
   }
 
   @Override
@@ -6268,6 +6375,13 @@ public class ConfigurationBuilder extends FlatJuniperParserBaseListener
   }
 
   @Override
+  public void exitPopst_aigp_originate(Popst_aigp_originateContext ctx) {
+    todo(ctx);
+    Long distance = ctx.distance != null ? toLong(ctx.distance) : null;
+    addPsThen(new PsThenAigpOriginate(distance), ctx);
+  }
+
+  @Override
   public void exitPopst_as_path_prepend(Popst_as_path_prependContext ctx) {
     List<Long> asPaths =
         ctx.bgp_asn().stream().map(this::toAsNum).collect(ImmutableList.toImmutableList());
@@ -7136,16 +7250,10 @@ public class ConfigurationBuilder extends FlatJuniperParserBaseListener
     if (ctx.code.code != null) {
       return;
     }
-    String aliasName = toString(ctx.code.alias);
-    if (DscpUtil.defaultValue(aliasName).isPresent()
-        && !_currentLogicalSystem.getDscpAliases().containsKey(aliasName)) {
-      return;
-    }
-    _configuration.referenceStructure(
+    referenceBuiltIn(
+        ctx.code.alias,
         CLASS_OF_SERVICE_DSCP_CODE_POINT_ALIAS,
-        aliasName,
-        CLASS_OF_SERVICE_CLASSIFIERS_DSCP_CODE_POINTS,
-        getLine(ctx.code.alias.getStart()));
+        CLASS_OF_SERVICE_CLASSIFIERS_DSCP_CODE_POINTS);
   }
 
   @Override
@@ -7153,16 +7261,10 @@ public class ConfigurationBuilder extends FlatJuniperParserBaseListener
     if (ctx.code.code != null) {
       return;
     }
-    String aliasName = toString(ctx.code.alias);
-    if (DscpUtil.defaultValue(aliasName).isPresent()
-        && !_currentLogicalSystem.getDscpAliases().containsKey(aliasName)) {
-      return;
-    }
-    _configuration.referenceStructure(
+    referenceBuiltIn(
+        ctx.code.alias,
         CLASS_OF_SERVICE_DSCP_CODE_POINT_ALIAS,
-        aliasName,
-        CLASS_OF_SERVICE_CLASSIFIERS_DSCP_IPV6_CODE_POINTS,
-        getLine(ctx.code.alias.getStart()));
+        CLASS_OF_SERVICE_CLASSIFIERS_DSCP_IPV6_CODE_POINTS);
   }
 
   @Override
@@ -7170,16 +7272,10 @@ public class ConfigurationBuilder extends FlatJuniperParserBaseListener
     if (ctx.code.code != null) {
       return;
     }
-    String aliasName = toString(ctx.code.alias);
-    if (ExpUtil.defaultValue(aliasName).isPresent()
-        && !_currentLogicalSystem.getExpAliases().containsKey(aliasName)) {
-      return;
-    }
-    _configuration.referenceStructure(
+    referenceBuiltIn(
+        ctx.code.alias,
         CLASS_OF_SERVICE_EXP_CODE_POINT_ALIAS,
-        aliasName,
-        CLASS_OF_SERVICE_CLASSIFIERS_EXP_CODE_POINTS,
-        getLine(ctx.code.alias.getStart()));
+        CLASS_OF_SERVICE_CLASSIFIERS_EXP_CODE_POINTS);
   }
 
   @Override
@@ -7187,16 +7283,10 @@ public class ConfigurationBuilder extends FlatJuniperParserBaseListener
     if (ctx.code.code != null) {
       return;
     }
-    String aliasName = toString(ctx.code.alias);
-    if (Ieee8021pUtil.defaultValue(aliasName).isPresent()
-        && !_currentLogicalSystem.getIeee8021pAliases().containsKey(aliasName)) {
-      return;
-    }
-    _configuration.referenceStructure(
+    referenceBuiltIn(
+        ctx.code.alias,
         CLASS_OF_SERVICE_IEEE_802_1_CODE_POINT_ALIAS,
-        aliasName,
-        CLASS_OF_SERVICE_CLASSIFIERS_IEEE_802_1_CODE_POINTS,
-        getLine(ctx.code.alias.getStart()));
+        CLASS_OF_SERVICE_CLASSIFIERS_IEEE_802_1_CODE_POINTS);
   }
 
   @Override
@@ -7204,16 +7294,10 @@ public class ConfigurationBuilder extends FlatJuniperParserBaseListener
     if (ctx.code.code != null) {
       return;
     }
-    String aliasName = toString(ctx.code.alias);
-    if (InetPrecedenceUtil.defaultValue(aliasName).isPresent()
-        && !_currentLogicalSystem.getInetPrecedenceAliases().containsKey(aliasName)) {
-      return;
-    }
-    _configuration.referenceStructure(
+    referenceBuiltIn(
+        ctx.code.alias,
         CLASS_OF_SERVICE_INET_PRECEDENCE_CODE_POINT_ALIAS,
-        aliasName,
-        CLASS_OF_SERVICE_CLASSIFIERS_INET_PRECEDENCE_CODE_POINTS,
-        getLine(ctx.code.alias.getStart()));
+        CLASS_OF_SERVICE_CLASSIFIERS_INET_PRECEDENCE_CODE_POINTS);
   }
 
   @Override
@@ -7221,16 +7305,10 @@ public class ConfigurationBuilder extends FlatJuniperParserBaseListener
     if (ctx.code.code != null) {
       return;
     }
-    String aliasName = toString(ctx.code.alias);
-    if (DscpUtil.defaultValue(aliasName).isPresent()
-        && !_currentLogicalSystem.getDscpAliases().containsKey(aliasName)) {
-      return;
-    }
-    _configuration.referenceStructure(
+    referenceBuiltIn(
+        ctx.code.alias,
         CLASS_OF_SERVICE_DSCP_CODE_POINT_ALIAS,
-        aliasName,
-        CLASS_OF_SERVICE_REWRITE_RULES_DSCP_CODE_POINT,
-        getLine(ctx.code.alias.getStart()));
+        CLASS_OF_SERVICE_REWRITE_RULES_DSCP_CODE_POINT);
   }
 
   @Override
@@ -7238,16 +7316,10 @@ public class ConfigurationBuilder extends FlatJuniperParserBaseListener
     if (ctx.code.code != null) {
       return;
     }
-    String aliasName = toString(ctx.code.alias);
-    if (DscpUtil.defaultValue(aliasName).isPresent()
-        && !_currentLogicalSystem.getDscpAliases().containsKey(aliasName)) {
-      return;
-    }
-    _configuration.referenceStructure(
+    referenceBuiltIn(
+        ctx.code.alias,
         CLASS_OF_SERVICE_DSCP_CODE_POINT_ALIAS,
-        aliasName,
-        CLASS_OF_SERVICE_REWRITE_RULES_DSCP_IPV6_CODE_POINT,
-        getLine(ctx.code.alias.getStart()));
+        CLASS_OF_SERVICE_REWRITE_RULES_DSCP_IPV6_CODE_POINT);
   }
 
   @Override
@@ -7255,16 +7327,10 @@ public class ConfigurationBuilder extends FlatJuniperParserBaseListener
     if (ctx.code.code != null) {
       return;
     }
-    String aliasName = toString(ctx.code.alias);
-    if (ExpUtil.defaultValue(aliasName).isPresent()
-        && !_currentLogicalSystem.getExpAliases().containsKey(aliasName)) {
-      return;
-    }
-    _configuration.referenceStructure(
+    referenceBuiltIn(
+        ctx.code.alias,
         CLASS_OF_SERVICE_EXP_CODE_POINT_ALIAS,
-        aliasName,
-        CLASS_OF_SERVICE_REWRITE_RULES_EXP_CODE_POINT,
-        getLine(ctx.code.alias.getStart()));
+        CLASS_OF_SERVICE_REWRITE_RULES_EXP_CODE_POINT);
   }
 
   @Override
@@ -7272,16 +7338,10 @@ public class ConfigurationBuilder extends FlatJuniperParserBaseListener
     if (ctx.code.code != null) {
       return;
     }
-    String aliasName = toString(ctx.code.alias);
-    if (Ieee8021pUtil.defaultValue(aliasName).isPresent()
-        && !_currentLogicalSystem.getIeee8021pAliases().containsKey(aliasName)) {
-      return;
-    }
-    _configuration.referenceStructure(
+    referenceBuiltIn(
+        ctx.code.alias,
         CLASS_OF_SERVICE_IEEE_802_1_CODE_POINT_ALIAS,
-        aliasName,
-        CLASS_OF_SERVICE_REWRITE_RULES_IEEE_802_1_CODE_POINT,
-        getLine(ctx.code.alias.getStart()));
+        CLASS_OF_SERVICE_REWRITE_RULES_IEEE_802_1_CODE_POINT);
   }
 
   @Override
@@ -7289,16 +7349,10 @@ public class ConfigurationBuilder extends FlatJuniperParserBaseListener
     if (ctx.code.code != null) {
       return;
     }
-    String aliasName = toString(ctx.code.alias);
-    if (InetPrecedenceUtil.defaultValue(aliasName).isPresent()
-        && !_currentLogicalSystem.getInetPrecedenceAliases().containsKey(aliasName)) {
-      return;
-    }
-    _configuration.referenceStructure(
+    referenceBuiltIn(
+        ctx.code.alias,
         CLASS_OF_SERVICE_INET_PRECEDENCE_CODE_POINT_ALIAS,
-        aliasName,
-        CLASS_OF_SERVICE_REWRITE_RULES_INET_PRECEDENCE_CODE_POINT,
-        getLine(ctx.code.alias.getStart()));
+        CLASS_OF_SERVICE_REWRITE_RULES_INET_PRECEDENCE_CODE_POINT);
   }
 
   @Override
@@ -7417,47 +7471,38 @@ public class ConfigurationBuilder extends FlatJuniperParserBaseListener
 
   @Override
   public void exitScosiiu_dscp(Scosiiu_dscpContext ctx) {
-    _configuration.referenceStructure(
-        CLASS_OF_SERVICE_CLASSIFIER,
-        toString(ctx.name),
-        CLASS_OF_SERVICE_INTERFACES_UNIT_CLASSIFIERS_DSCP,
-        getLine(ctx.name.getStart()));
+    referenceBuiltIn(
+        ctx.name, CLASS_OF_SERVICE_CLASSIFIER, CLASS_OF_SERVICE_INTERFACES_UNIT_CLASSIFIERS_DSCP);
   }
 
   @Override
   public void exitScosiiu_dscp_ipv6(Scosiiu_dscp_ipv6Context ctx) {
-    _configuration.referenceStructure(
+    referenceBuiltIn(
+        ctx.name,
         CLASS_OF_SERVICE_CLASSIFIER,
-        toString(ctx.name),
-        CLASS_OF_SERVICE_INTERFACES_UNIT_CLASSIFIERS_DSCP_IPV6,
-        getLine(ctx.name.getStart()));
+        CLASS_OF_SERVICE_INTERFACES_UNIT_CLASSIFIERS_DSCP_IPV6);
   }
 
   @Override
   public void exitScosiiu_exp(Scosiiu_expContext ctx) {
-    _configuration.referenceStructure(
-        CLASS_OF_SERVICE_CLASSIFIER,
-        toString(ctx.name),
-        CLASS_OF_SERVICE_INTERFACES_UNIT_CLASSIFIERS_EXP,
-        getLine(ctx.name.getStart()));
+    referenceBuiltIn(
+        ctx.name, CLASS_OF_SERVICE_CLASSIFIER, CLASS_OF_SERVICE_INTERFACES_UNIT_CLASSIFIERS_EXP);
   }
 
   @Override
   public void exitScosiiu_ieee_802_1(Scosiiu_ieee_802_1Context ctx) {
-    _configuration.referenceStructure(
+    referenceBuiltIn(
+        ctx.name,
         CLASS_OF_SERVICE_CLASSIFIER,
-        toString(ctx.name),
-        CLASS_OF_SERVICE_INTERFACES_UNIT_CLASSIFIERS_IEEE_802_1,
-        getLine(ctx.name.getStart()));
+        CLASS_OF_SERVICE_INTERFACES_UNIT_CLASSIFIERS_IEEE_802_1);
   }
 
   @Override
   public void exitScosiiu_inet_precedence(Scosiiu_inet_precedenceContext ctx) {
-    _configuration.referenceStructure(
+    referenceBuiltIn(
+        ctx.name,
         CLASS_OF_SERVICE_CLASSIFIER,
-        toString(ctx.name),
-        CLASS_OF_SERVICE_INTERFACES_UNIT_CLASSIFIERS_INET_PRECEDENCE,
-        getLine(ctx.name.getStart()));
+        CLASS_OF_SERVICE_INTERFACES_UNIT_CLASSIFIERS_INET_PRECEDENCE);
   }
 
   @Override
@@ -7471,173 +7516,152 @@ public class ConfigurationBuilder extends FlatJuniperParserBaseListener
 
   @Override
   public void exitScosiiu_dscp_rw(Scosiiu_dscp_rwContext ctx) {
-    _configuration.referenceStructure(
+    referenceBuiltIn(
+        ctx.name,
         CLASS_OF_SERVICE_REWRITE_RULE,
-        toString(ctx.name),
-        CLASS_OF_SERVICE_INTERFACES_UNIT_REWRITE_RULES_DSCP,
-        getLine(ctx.name.getStart()));
+        CLASS_OF_SERVICE_INTERFACES_UNIT_REWRITE_RULES_DSCP);
   }
 
   @Override
   public void exitScosiiu_dscp_ipv6_rw(Scosiiu_dscp_ipv6_rwContext ctx) {
-    _configuration.referenceStructure(
+    referenceBuiltIn(
+        ctx.name,
         CLASS_OF_SERVICE_REWRITE_RULE,
-        toString(ctx.name),
-        CLASS_OF_SERVICE_INTERFACES_UNIT_REWRITE_RULES_DSCP_IPV6,
-        getLine(ctx.name.getStart()));
+        CLASS_OF_SERVICE_INTERFACES_UNIT_REWRITE_RULES_DSCP_IPV6);
   }
 
   @Override
   public void exitScosiiu_exp_rw(Scosiiu_exp_rwContext ctx) {
-    _configuration.referenceStructure(
+    referenceBuiltIn(
+        ctx.name,
         CLASS_OF_SERVICE_REWRITE_RULE,
-        toString(ctx.name),
-        CLASS_OF_SERVICE_INTERFACES_UNIT_REWRITE_RULES_EXP,
-        getLine(ctx.name.getStart()));
+        CLASS_OF_SERVICE_INTERFACES_UNIT_REWRITE_RULES_EXP);
   }
 
   @Override
   public void exitScosiiu_ieee_802_1_rw(Scosiiu_ieee_802_1_rwContext ctx) {
-    _configuration.referenceStructure(
+    referenceBuiltIn(
+        ctx.name,
         CLASS_OF_SERVICE_REWRITE_RULE,
-        toString(ctx.name),
-        CLASS_OF_SERVICE_INTERFACES_UNIT_REWRITE_RULES_IEEE_802_1,
-        getLine(ctx.name.getStart()));
+        CLASS_OF_SERVICE_INTERFACES_UNIT_REWRITE_RULES_IEEE_802_1);
   }
 
   @Override
   public void exitScosiiu_inet_precedence_rw(Scosiiu_inet_precedence_rwContext ctx) {
-    _configuration.referenceStructure(
+    referenceBuiltIn(
+        ctx.name,
         CLASS_OF_SERVICE_REWRITE_RULE,
-        toString(ctx.name),
-        CLASS_OF_SERVICE_INTERFACES_UNIT_REWRITE_RULES_INET_PRECEDENCE,
-        getLine(ctx.name.getStart()));
+        CLASS_OF_SERVICE_INTERFACES_UNIT_REWRITE_RULES_INET_PRECEDENCE);
   }
 
   @Override
   public void exitScosii_forwarding_class(Scosii_forwarding_classContext ctx) {
-    _configuration.referenceStructure(
-        CLASS_OF_SERVICE_FORWARDING_CLASS,
-        toString(ctx.name),
-        CLASS_OF_SERVICE_INTERFACES_FORWARDING_CLASS,
-        getLine(ctx.name.getStart()));
+    referenceBuiltIn(
+        ctx.name, CLASS_OF_SERVICE_FORWARDING_CLASS, CLASS_OF_SERVICE_INTERFACES_FORWARDING_CLASS);
   }
 
   @Override
   public void exitScosiiu_forwarding_class(Scosiiu_forwarding_classContext ctx) {
-    _configuration.referenceStructure(
+    referenceBuiltIn(
+        ctx.name,
         CLASS_OF_SERVICE_FORWARDING_CLASS,
-        toString(ctx.name),
-        CLASS_OF_SERVICE_INTERFACES_UNIT_FORWARDING_CLASS,
-        getLine(ctx.name.getStart()));
+        CLASS_OF_SERVICE_INTERFACES_UNIT_FORWARDING_CLASS);
   }
 
   @Override
   public void exitScoshob_forwarding_class(Scoshob_forwarding_classContext ctx) {
-    _configuration.referenceStructure(
+    referenceBuiltIn(
+        ctx.name,
         CLASS_OF_SERVICE_FORWARDING_CLASS,
-        toString(ctx.name),
-        CLASS_OF_SERVICE_HOST_OUTBOUND_TRAFFIC_FORWARDING_CLASS,
-        getLine(ctx.name.getStart()));
+        CLASS_OF_SERVICE_HOST_OUTBOUND_TRAFFIC_FORWARDING_CLASS);
   }
 
   @Override
   public void exitScoscld_forwarding_class(Scoscld_forwarding_classContext ctx) {
-    _configuration.referenceStructure(
+    referenceBuiltIn(
+        ctx.fc,
         CLASS_OF_SERVICE_FORWARDING_CLASS,
-        toString(ctx.fc),
-        CLASS_OF_SERVICE_CLASSIFIERS_DSCP_FORWARDING_CLASS,
-        getLine(ctx.fc.getStart()));
+        CLASS_OF_SERVICE_CLASSIFIERS_DSCP_FORWARDING_CLASS);
   }
 
   @Override
   public void exitScoscld6_forwarding_class(Scoscld6_forwarding_classContext ctx) {
-    _configuration.referenceStructure(
+    referenceBuiltIn(
+        ctx.fc,
         CLASS_OF_SERVICE_FORWARDING_CLASS,
-        toString(ctx.fc),
-        CLASS_OF_SERVICE_CLASSIFIERS_DSCP_IPV6_FORWARDING_CLASS,
-        getLine(ctx.fc.getStart()));
+        CLASS_OF_SERVICE_CLASSIFIERS_DSCP_IPV6_FORWARDING_CLASS);
   }
 
   @Override
   public void exitScoscle_forwarding_class(Scoscle_forwarding_classContext ctx) {
-    _configuration.referenceStructure(
+    referenceBuiltIn(
+        ctx.fc,
         CLASS_OF_SERVICE_FORWARDING_CLASS,
-        toString(ctx.fc),
-        CLASS_OF_SERVICE_CLASSIFIERS_EXP_FORWARDING_CLASS,
-        getLine(ctx.fc.getStart()));
+        CLASS_OF_SERVICE_CLASSIFIERS_EXP_FORWARDING_CLASS);
   }
 
   @Override
   public void exitScoscli_forwarding_class(Scoscli_forwarding_classContext ctx) {
-    _configuration.referenceStructure(
+    referenceBuiltIn(
+        ctx.fc,
         CLASS_OF_SERVICE_FORWARDING_CLASS,
-        toString(ctx.fc),
-        CLASS_OF_SERVICE_CLASSIFIERS_IEEE_802_1_FORWARDING_CLASS,
-        getLine(ctx.fc.getStart()));
+        CLASS_OF_SERVICE_CLASSIFIERS_IEEE_802_1_FORWARDING_CLASS);
   }
 
   @Override
   public void exitScosclip_forwarding_class(Scosclip_forwarding_classContext ctx) {
-    _configuration.referenceStructure(
+    referenceBuiltIn(
+        ctx.fc,
         CLASS_OF_SERVICE_FORWARDING_CLASS,
-        toString(ctx.fc),
-        CLASS_OF_SERVICE_CLASSIFIERS_INET_PRECEDENCE_FORWARDING_CLASS,
-        getLine(ctx.fc.getStart()));
+        CLASS_OF_SERVICE_CLASSIFIERS_INET_PRECEDENCE_FORWARDING_CLASS);
   }
 
   @Override
   public void exitScosrrd_forwarding_class(Scosrrd_forwarding_classContext ctx) {
-    _configuration.referenceStructure(
+    referenceBuiltIn(
+        ctx.fc,
         CLASS_OF_SERVICE_FORWARDING_CLASS,
-        toString(ctx.fc),
-        CLASS_OF_SERVICE_REWRITE_RULES_DSCP_FORWARDING_CLASS,
-        getLine(ctx.fc.getStart()));
+        CLASS_OF_SERVICE_REWRITE_RULES_DSCP_FORWARDING_CLASS);
   }
 
   @Override
   public void exitScosrrd6_forwarding_class(Scosrrd6_forwarding_classContext ctx) {
-    _configuration.referenceStructure(
+    referenceBuiltIn(
+        ctx.fc,
         CLASS_OF_SERVICE_FORWARDING_CLASS,
-        toString(ctx.fc),
-        CLASS_OF_SERVICE_REWRITE_RULES_DSCP_IPV6_FORWARDING_CLASS,
-        getLine(ctx.fc.getStart()));
+        CLASS_OF_SERVICE_REWRITE_RULES_DSCP_IPV6_FORWARDING_CLASS);
   }
 
   @Override
   public void exitScosrre_forwarding_class(Scosrre_forwarding_classContext ctx) {
-    _configuration.referenceStructure(
+    referenceBuiltIn(
+        ctx.fc,
         CLASS_OF_SERVICE_FORWARDING_CLASS,
-        toString(ctx.fc),
-        CLASS_OF_SERVICE_REWRITE_RULES_EXP_FORWARDING_CLASS,
-        getLine(ctx.fc.getStart()));
+        CLASS_OF_SERVICE_REWRITE_RULES_EXP_FORWARDING_CLASS);
   }
 
   @Override
   public void exitScosrri_forwarding_class(Scosrri_forwarding_classContext ctx) {
-    _configuration.referenceStructure(
+    referenceBuiltIn(
+        ctx.fc,
         CLASS_OF_SERVICE_FORWARDING_CLASS,
-        toString(ctx.fc),
-        CLASS_OF_SERVICE_REWRITE_RULES_IEEE_802_1_FORWARDING_CLASS,
-        getLine(ctx.fc.getStart()));
+        CLASS_OF_SERVICE_REWRITE_RULES_IEEE_802_1_FORWARDING_CLASS);
   }
 
   @Override
   public void exitScosrrip_forwarding_class(Scosrrip_forwarding_classContext ctx) {
-    _configuration.referenceStructure(
+    referenceBuiltIn(
+        ctx.fc,
         CLASS_OF_SERVICE_FORWARDING_CLASS,
-        toString(ctx.fc),
-        CLASS_OF_SERVICE_REWRITE_RULES_INET_PRECEDENCE_FORWARDING_CLASS,
-        getLine(ctx.fc.getStart()));
+        CLASS_OF_SERVICE_REWRITE_RULES_INET_PRECEDENCE_FORWARDING_CLASS);
   }
 
   @Override
   public void exitScossm_forwarding_class(Scossm_forwarding_classContext ctx) {
-    _configuration.referenceStructure(
+    referenceBuiltIn(
+        ctx.fc,
         CLASS_OF_SERVICE_FORWARDING_CLASS,
-        toString(ctx.fc),
-        CLASS_OF_SERVICE_SCHEDULER_MAPS_FORWARDING_CLASS,
-        getLine(ctx.fc.getStart()));
+        CLASS_OF_SERVICE_SCHEDULER_MAPS_FORWARDING_CLASS);
     _configuration.referenceStructure(
         CLASS_OF_SERVICE_SCHEDULER,
         toString(ctx.sched),

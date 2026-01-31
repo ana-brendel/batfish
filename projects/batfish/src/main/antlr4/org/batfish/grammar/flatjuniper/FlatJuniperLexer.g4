@@ -169,6 +169,7 @@ AH: 'ah';
 
 AH_HEADER: 'AH-header';
 AGING_TIMER: 'aging-timer';
+AIGP_ORIGINATE: 'aigp-originate';
 ALARM_WITHOUT_DROP: 'alarm-without-drop';
 
 ALARM_THRESHOLD: 'alarm-threshold';
@@ -331,7 +332,7 @@ BAD_OPTION: 'bad-option';
 BACKUP_ROUTER: 'backup-router';
 
 BANDWIDTH: 'bandwidth' -> pushMode ( M_Bandwidth );
-
+BANDWIDTH_LIMIT: 'bandwidth-limit' -> pushMode(M_Bandwidth);
 BASIC: 'basic';
 
 BEFORE: 'before';
@@ -356,25 +357,18 @@ BLOCK_FRAG: 'block-frag';
 BMP: 'bmp';
 
 BOOT_SERVER: 'boot-server';
-
 BOOTP: 'bootp';
-
 BOOTP_SUPPORT: 'bootp-support';
-
 BOOTPC: 'bootpc';
-
 BOOTPS: 'bootps';
-
+BOTH: 'both';
 BRIDGE: 'bridge';
-
 BRIDGE_DOMAINS: 'bridge-domains' -> pushMode(M_Name);
-
 BROADCAST_CLIENT: 'broadcast-client';
-
+BUFFER_DYNAMIC_THRESHOLD: 'buffer-dynamic-threshold';
 BUFFER_SIZE: 'buffer-size';
-
 BUNDLE: 'bundle';
-
+BURST_SIZE_LIMIT: 'burst-size-limit' -> pushMode(M_Bandwidth);
 C: 'c';
 
 CALIPSO_OPTION: 'CALIPSO-option';
@@ -526,6 +520,7 @@ DEFAULT_METRIC: 'default-metric';
 DEFAULT_POLICY: 'default-policy';
 
 DEFAULTS: 'defaults';
+DELAY: 'delay';
 DELEGATE_PROCESSING: 'delegate-processing';
 DELETE
 :
@@ -621,10 +616,10 @@ DOMAIN_SEARCH: 'domain-search';
 DOMAIN_TYPE: 'domain-type';
 DROP: 'drop';
 DROP_AND_LOG: 'drop-and-log';
-DROP_PATH_ATTRIBUTES: 'drop-path-attributes';
-
+DROP_PATH_ATTRIBUTES: 'drop-path-attributes' -> pushMode(M_SubRange);
+DROP_PROFILE: 'drop-profile' -> pushMode(M_Name);
+DROP_PROFILE_MAP: 'drop-profile-map';
 DROP_PROFILES: 'drop-profiles' -> pushMode(M_Name);
-
 DSA_SIGNATURES: 'dsa-signatures';
 
 DSCP
@@ -720,17 +715,12 @@ EVENT_OPTIONS: 'event-options';
 EVPN: 'evpn';
 
 EXACT: 'exact';
-
 EXCEPT: 'except';
-
+EXCESS_RATE: 'excess-rate';
 EXCLUDE: 'exclude';
-
 EXCLUDE_NON_ELIGIBLE: 'exclude-non-eligible';
-
 EXCLUDE_NON_FEASIBLE: 'exclude-non-feasible';
-
 EXEC: 'exec';
-
 EXP
 :
   'exp'
@@ -742,11 +732,9 @@ EXP
     }
   }
 ;
-
 EXPEDITED: 'expedited';
-
+EXPLICIT_NULL: 'explicit-null';
 EXPLICIT_PRIORITY: 'explicit-priority';
-
 EXPORT
 :
   'export'
@@ -757,31 +745,20 @@ EXPORT
     }
   }
 ;
-
 EXPORT_RIB: 'export-rib' -> pushMode(M_Name);
-
 EXPRESSION: 'expression';
-
 EXTENDED_NEXTHOP_TUNNEL: 'extended-nexthop-tunnel';
 EXTENDED_VNI_LIST: 'extended-vni-list' -> pushMode(M_ExtendedVniList);
-
 EXTENSIBLE_SUBSCRIBER: 'extensible-subscriber';
-
 EXTENSION_SERVICE: 'extension-service';
-
 EXTERNAL: 'external';
-
 EXTERNAL_INTERFACE
 :
    'external-interface' -> pushMode ( M_Interface )
 ;
-
 EXTERNAL_PREFERENCE: 'external-preference';
-
 EXTERNAL_ROUTER_ID: 'external-router-id';
-
 EXTENSION_HEADER: 'extension-header';
-
 EXTENSIONS: 'extensions';
 
 FABRIC: 'fabric';
@@ -991,12 +968,10 @@ ICMP: 'icmp';
 
 ICMP_CODE: 'icmp-code' -> pushMode(M_IcmpCodeOrType);
 ICMP_CODE_EXCEPT: 'icmp-code-except' -> pushMode(M_IcmpCodeOrType);
-
+ICMP_TUNNELING: 'icmp-tunneling';
 ICMP_TYPE: 'icmp-type' -> pushMode(M_IcmpCodeOrType);
 ICMP_TYPE_EXCEPT: 'icmp-type-except' -> pushMode(M_IcmpCodeOrType);
-
 ICMP6: 'icmp6';
-
 ICMP6_CODE: 'icmp6-code';
 
 ICMPV6_MALFORMED: 'icmpv6-malformed';
@@ -1012,7 +987,7 @@ IDENT_RESET: 'ident-reset';
 IDLE_TIMEOUT: 'idle-timeout';
 
 IDS_OPTION: 'ids-option' -> pushMode(M_Name);
-
+IF_EXCEEDING: 'if-exceeding';
 IF_ROUTE_EXISTS: 'if-route-exists';
 
 IGMP: 'igmp';
@@ -1236,6 +1211,7 @@ IPSEC_POLICY: 'ipsec-policy' -> pushMode(M_Name);
 IPSEC_VPN: 'ipsec-vpn' -> pushMode(M_Name);
 
 IPV6: 'ipv6';
+IPV6_TUNNELING: 'ipv6-tunneling';
 
 IPV6_EXTENSION_HEADER: 'ipv6-extension-header';
 
@@ -1798,17 +1774,12 @@ LOCAL_PREFERENCE: 'local-preference';
 LOCATION: 'location';
 
 LOG: 'log';
-
+LOG_LSP_HISTORY: 'log-lsp-history';
 LOG_OUT_ON_DISCONNECT: 'log-out-on-disconnect';
-
 LOG_PREFIX: 'log-prefix';
-
 LOG_UPDOWN: 'log-updown';
-
 LOGICAL_SYSTEM: 'logical-system' -> pushMode(M_Name);
-
 LOGICAL_SYSTEMS: 'logical-systems' -> pushMode(M_Name);
-
 LOGIN: 'login';
 
 LONGER: 'longer';
@@ -1968,7 +1939,7 @@ MSTP: 'mstp';
 MTU: 'mtu';
 
 MTU_DISCOVERY: 'mtu-discovery';
-
+MTU_SIGNALING: 'mtu-signaling';
 MULTI_CHASSIS: 'multi-chassis';
 
 MULTICAST: 'multicast';
@@ -2148,6 +2119,8 @@ OAM: 'oam';
 OFF: 'off';
 
 OFFSET: 'offset';
+OPTIMIZE_ADAPTIVE_TEARDOWN: 'optimize-adaptive-teardown';
+OPTIMIZE_AGGRESSIVE: 'optimize-aggressive';
 OPTIMIZE_HOLD_DEAD_DELAY: 'optimize-hold-dead-delay';
 OPTIMIZE_TIMER: 'optimize-timer';
 OPTIMIZED: 'optimized';
@@ -2201,25 +2174,17 @@ PATH
 ;
 
 PATH_COUNT: 'path-count';
-
+PATH_MTU: 'path-mtu';
 PATH_SELECTION: 'path-selection';
 PATH_SELECTION_MODE: 'path-selection-mode';
 PAYLOAD_PROTOCOL: 'payload-protocol';
-
 PEER_ADDRESS: 'peer-address';
-
 PEER_AS: 'peer-as' -> pushMode(M_BgpAsn);
-
 PEER_UNIT: 'peer-unit';
-
 PER_PACKET: 'per-packet';
-
 PER_UNIT_SCHEDULER: 'per-unit-scheduler';
-
 PERCENT: 'percent';
-
 PERFECT_FORWARD_SECRECY: 'perfect-forward-secrecy';
-
 PERMIT: 'permit';
 
 PERMIT_ALL: 'permit-all';
@@ -2237,11 +2202,8 @@ PING_DEATH: 'ping-death';
 POE: 'poe';
 
 POINT_TO_POINT: 'point-to-point';
-
-POLICER: 'policer';
-
+POLICER: 'policer' -> pushMode(M_Name);
 POLICIES: 'policies';
-
 POLICY
 :
   'policy'
@@ -2448,6 +2410,7 @@ READ_WRITE: 'read-write';
 READVERTISE: 'readvertise';
 
 RECEIVE: 'receive';
+RECORD: 'record';
 
 RECORD_LIFETIME: 'record-lifetime';
 RECORD_ROUTE_OPTION: 'record-route-option';
@@ -2749,28 +2712,21 @@ SFLOW: 'sflow';
 SFM_DPD_OPTION: 'SFM-DPD-option';
 
 SHA_256: 'sha-256';
-
 SHA_384: 'sha-384';
-
 SHA1: 'sha1';
-
+SHAPING_RATE: 'shaping-rate';
 SHARED_BUFFER: 'shared-buffer';
-
 SHARED_IKE_ID: 'shared-ike-id';
-
 SHIM6_HEADER: 'shim6-header';
-
 SHORTCUTS: 'shortcuts';
 SHUTDOWN: 'shutdown';
 SIGNALING: 'signaling';
-
 SIMPLE: 'simple';
-
 SINGLE_CONNECTION: 'single-connection';
-
 SIP: 'sip';
 
 SMTP: 'smtp';
+SMART_OPTIMIZE_TIMER: 'smart-optimize-timer';
 
 SNMP: 'snmp';
 
@@ -2870,6 +2826,8 @@ STATION_ADDRESS: 'station-address';
 
 STATION_PORT: 'station-port';
 
+STATISTICS: 'statistics';
+
 STATISTICS_TIMEOUT: 'statistics-timeout';
 
 STATS_CACHE_LIFETIME: 'stats-cache-lifetime';
@@ -2881,13 +2839,10 @@ STORM_CONTROL_PROFILES: 'storm-control-profiles';
 STP: 'stp';
 
 STREAM_ID: 'stream-id';
-
 STREAM_OPTION: 'stream-option';
-
+STRICT_HIGH: 'strict-high';
 STRICT_SOURCE_ROUTE: 'strict-source-route';
-
 STRICT_SOURCE_ROUTE_OPTION: 'strict-source-route-option';
-
 STRUCTURED_DATA: 'structured-data';
 
 STUB: 'stub';
@@ -2953,36 +2908,24 @@ TARGETED_BROADCAST: 'targeted-broadcast';
 TARGETS: 'targets';
 
 TCP: 'tcp';
-
 TCP_ESTABLISHED: 'tcp-established';
-
 TCP_FLAGS
 :
    'tcp-flags' -> pushMode ( M_TcpFlags )
 ;
-
 TCP_FORWARDING: 'tcp-forwarding';
-
 TCP_INITIAL: 'tcp-initial';
-
 TCP_MSS: 'tcp-mss';
-
 TCP_NO_FLAG: 'tcp-no-flag';
-
 TCP_RST: 'tcp-rst';
-
 TCP_SWEEP: 'tcp-sweep';
 
 TE_METRIC: 'te-metric';
-
-TEARDOWN: 'teardown';
-
 TEAR_DROP: 'tear-drop';
-
-TEREDO: 'teredo';
-
+TEARDOWN: 'teardown';
 TELNET: 'telnet';
-
+TEMPORAL: 'temporal' -> pushMode(M_Bandwidth);
+TEREDO: 'teredo';
 TERM: 'term' -> pushMode(M_Name);
 
 TFTP: 'tftp';
@@ -2990,60 +2933,35 @@ TFTP: 'tftp';
 TFTP_SERVER: 'tftp-server';
 
 THEN: 'then';
-
 THREEDES_CBC: '3des-cbc';
-
 THRESHOLD: 'threshold';
-
 THROUGH: 'through';
 
-TIME_FORMAT: 'time-format';
-
 TIME_EXCEEDED: 'time-exceeded';
-
+TIME_FORMAT: 'time-format';
 TIME_ZONE: 'time-zone' -> pushMode(M_RestOfLine);
-
 TIMED: 'timed';
-
 TIMEOUT: 'timeout';
-
 TIMESTAMP: 'timestamp';
-
 TIMESTAMP_OPTION: 'timestamp-option';
-
 TIMESTAMP_REPLY: 'timestamp-reply';
 
 TO: 'to';
-
-TOLERANCE: 'tolerance';
 TO_ZONE: 'to-zone' -> pushMode(M_Zone);
-
+TOLERANCE: 'tolerance';
 TRACE: 'trace';
-
 TRACE_OPTIONS: 'trace-options';
-
 TRACEOPTIONS: 'traceoptions';
-
 TRACEROUTE: 'traceroute';
-
 TRACK: 'track';
-
 TRAFFIC_CONTROL_PROFILES: 'traffic-control-profiles' -> pushMode(M_Name);
-
 TRAFFIC_ENGINEERING: 'traffic-engineering';
-
 TRANSLATION_TABLE: 'translation-table';
-
-TRANSMIT_RATE: 'transmit-rate';
-
-TRAP_DESTINATIONS: 'trap-destinations';
-
+TRANSMIT_RATE: 'transmit-rate' -> pushMode(M_TransmitRate);
 TRAP: 'trap';
-
+TRAP_DESTINATIONS: 'trap-destinations';
 TRAP_GROUP: 'trap-group' -> pushMode(M_Name);
-
 TRAP_OPTIONS: 'trap-options';
-
 TRAPS: 'traps';
 
 TRI_COLOR: 'tri-color';
@@ -3052,11 +2970,10 @@ TRUNK: 'trunk';
 
 TRUST: 'trust';
 
-TTL: 'ttl';
-
+TTL: 'ttl' -> pushMode(M_SubRange);
 TTL_EQ_ZERO_DURING_REASSEMBLY: 'ttl-eq-zero-during-reassembly';
-
 TTL_EQ_ZERO_DURING_TRANSIT: 'ttl-eq-zero-during-transit';
+TTL_EXCEPT: 'ttl-except' -> pushMode(M_SubRange);
 
 TUNNEL: 'tunnel';
 
@@ -4370,6 +4287,53 @@ M_Bandwidth_WS
    F_WhitespaceChar+ -> channel ( HIDDEN )
 ;
 
+mode M_TransmitRate;
+
+M_TransmitRate_DEC
+:
+  F_Digit+ -> type ( DEC )
+;
+
+M_TransmitRate_C
+:
+  'c' -> type ( C ) , popMode
+;
+
+M_TransmitRate_G
+:
+  'g' -> type ( G ) , popMode
+;
+
+M_TransmitRate_K
+:
+  'k' -> type ( K ) , popMode
+;
+
+M_TransmitRate_M
+:
+  'm' -> type ( M ) , popMode
+;
+
+M_TransmitRate_PERCENT
+:
+  'percent' -> type ( PERCENT )
+;
+
+M_TransmitRate_REMAINDER
+:
+  'remainder' -> type ( REMAINDER )
+;
+
+M_TransmitRate_NEWLINE
+:
+  F_NewlineChar+ -> type ( NEWLINE ) , popMode
+;
+
+M_TransmitRate_WS
+:
+   F_WhitespaceChar+ -> channel ( HIDDEN )
+;
+
 mode M_RoutingInstanceName;
 
 M_RoutingInstanceName_NAME: F_RoutingInstanceName -> type ( NAME ) , popMode;
@@ -4653,6 +4617,11 @@ M_VrfTarget_PERIOD
 M_VrfTarget_TARGET
 :
    'target' -> type ( TARGET )
+;
+
+M_VrfTarget_AUTO
+:
+   'auto' -> type ( AUTO ), popMode
 ;
 
 M_VrfTarget_WS

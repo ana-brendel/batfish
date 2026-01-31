@@ -5,6 +5,8 @@ import static java.util.stream.Collectors.groupingBy;
 import static org.batfish.datamodel.BgpPeerConfig.ALL_AS_NUMBERS;
 import static org.batfish.datamodel.BumTransportMethod.UNICAST_FLOOD_GROUP;
 import static org.batfish.datamodel.Names.escapeNameIfNeeded;
+import static org.batfish.datamodel.Names.generatedBgpPeerExportPolicyName;
+import static org.batfish.datamodel.Names.generatedBgpPeerImportPolicyName;
 import static org.batfish.datamodel.Names.zoneToZoneFilter;
 import static org.batfish.datamodel.acl.AclLineMatchExprs.and;
 import static org.batfish.datamodel.acl.AclLineMatchExprs.matchSrcInterface;
@@ -710,7 +712,9 @@ public final class JuniperConfiguration extends VendorConfiguration {
       neighbor.setGroup(ig.getGroupName());
 
       // import policies
-      String peerImportPolicyName = computePeerImportPolicyName(ig.getRemoteAddress());
+      String peerImportPolicyName =
+          generatedBgpPeerImportPolicyName(
+              routingInstance.getName(), ig.getRemoteAddress().toString());
       ipv4AfBuilder.setImportPolicy(peerImportPolicyName);
       RoutingPolicy peerImportPolicy = new RoutingPolicy(peerImportPolicyName, _c);
       _c.getRoutingPolicies().put(peerImportPolicyName, peerImportPolicy);
@@ -745,7 +749,8 @@ public final class JuniperConfiguration extends VendorConfiguration {
           .add(Statements.ExitReject.toStaticStatement());
 
       // Apply rib groups
-      if (ig.getRibGroup() != null) {
+      if (ig.getRibGroup() != null
+          && _masterLogicalSystem.getRibGroups().containsKey(ig.getRibGroup())) {
         neighbor.setAppliedRibGroup(
             toRibGroup(
                 _masterLogicalSystem.getRibGroups().get(ig.getRibGroup()),
@@ -756,7 +761,9 @@ public final class JuniperConfiguration extends VendorConfiguration {
       }
 
       // export policies
-      String peerExportPolicyName = computePeerExportPolicyName(ig.getRemoteAddress());
+      String peerExportPolicyName =
+          generatedBgpPeerExportPolicyName(
+              routingInstance.getName(), ig.getRemoteAddress().toString());
       ipv4AfBuilder.setExportPolicy(peerExportPolicyName);
       RoutingPolicy peerExportPolicy = new RoutingPolicy(peerExportPolicyName, _c);
       _c.getRoutingPolicies().put(peerExportPolicyName, peerExportPolicy);
@@ -1010,14 +1017,6 @@ public final class JuniperConfiguration extends VendorConfiguration {
                           new LiteralCommunitySet(CommunitySet.of(route.getCommunities())))));
             })
         .collect(ImmutableList.toImmutableList());
-  }
-
-  public static String computePeerExportPolicyName(Prefix remoteAddress) {
-    return "~PEER_EXPORT_POLICY:" + remoteAddress + "~";
-  }
-
-  public static String computePeerImportPolicyName(Prefix remoteAddress) {
-    return "~PEER_IMPORT_POLICY:" + remoteAddress + "~";
   }
 
   private void convertNamedCommunities() {
@@ -3063,6 +3062,7 @@ public final class JuniperConfiguration extends VendorConfiguration {
                     case ICMP_TYPE_EXCEPT:
                     case PACKET_LENGTH_EXCEPT:
                     case SOURCE_EXCEPT:
+                    case TTL_EXCEPT:
                       // FOO_EXCEPT is already compiled to a list of (Not(MatchFoo),
                       // so combining them needs an AND.
                       return and(inner);
@@ -3818,6 +3818,8 @@ public final class JuniperConfiguration extends VendorConfiguration {
       }
       vrf.setAppliedRibGroups(
           ri.getAppliedRibGroups().entrySet().stream()
+              .filter(
+                  rgEntry -> _masterLogicalSystem.getRibGroups().containsKey(rgEntry.getValue()))
               .collect(
                   ImmutableMap.toImmutableMap(
                       Entry::getKey, // protocol

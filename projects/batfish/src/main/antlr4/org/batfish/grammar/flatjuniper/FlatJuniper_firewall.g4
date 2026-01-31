@@ -9,7 +9,8 @@ options {
 f_common
 :
    f_filter
-   | f_null
+   | f_policer
+   | f_service_filter_null
 ;
 
 f_family
@@ -44,12 +45,50 @@ f_filter
    )
 ;
 
-f_null
+f_policer
 :
+   POLICER name = junos_name
    (
-      POLICER
-      | SERVICE_FILTER
-   ) null_filler
+      fp_if_exceeding
+      | fp_then
+   )
+;
+
+fp_if_exceeding
+:
+   IF_EXCEEDING
+   (
+      fpie_bandwidth_limit
+      | fpie_burst_size_limit
+   )+
+;
+
+fpie_bandwidth_limit
+:
+   BANDWIDTH_LIMIT bw_limit = bandwidth
+;
+
+fpie_burst_size_limit
+:
+   BURST_SIZE_LIMIT size = burst_size_limit
+;
+
+fp_then
+:
+   THEN
+   (
+      fpt_discard
+   )
+;
+
+fpt_discard
+:
+   DISCARD
+;
+
+f_service_filter_null
+:
+   SERVICE_FILTER null_filler
 ;
 
 ff_interface_specific
@@ -112,6 +151,8 @@ fft_from
       | fftf_tcp_established
       | fftf_tcp_flags
       | fftf_tcp_initial
+      | fftf_ttl
+      | fftf_ttl_except
       | fftf_vlan
    )
 ;
@@ -127,6 +168,7 @@ fft_then
       | fftt_next_ip
       | fftt_next_term
       | fftt_nop
+      | fftt_policer
       | fftt_port_mirror
       | fftt_reject
       | fftt_routing_instance
@@ -372,6 +414,16 @@ fftf_tcp_initial
    TCP_INITIAL
 ;
 
+fftf_ttl
+:
+   TTL uint8_range
+;
+
+fftf_ttl_except
+:
+   TTL_EXCEPT uint8_range
+;
+
 fftf_vlan
 :
    VLAN name = junos_name
@@ -421,10 +473,14 @@ fftt_nop
       | FORWARDING_CLASS
       | LOG
       | NEXT_IP6
-      | POLICER
       | SAMPLE
       | SYSLOG
    ) null_filler
+;
+
+fftt_policer
+:
+   POLICER name = junos_name
 ;
 
 fftt_port_mirror

@@ -92,7 +92,7 @@ public class LivenessAnswerer extends Answerer {
         Map<String, Configuration> configs = context.getConfigs();
         ConfigAtomicPredicates configAPs = getConfigAtomicPredicates(_communityRegexes,_asPathRegexes,configs.values());
         TransferBDD tbdd = new TransferBDD(configAPs);
-        NetworkInfo info = new NetworkInfo(tbdd,configs,_readable);
+        NetworkInfo info = new NetworkInfo(tbdd,configs);
         _assumptions.forEach(info::addAssumption);
 
         if (_targets.entrySet().stream().findFirst().isEmpty())

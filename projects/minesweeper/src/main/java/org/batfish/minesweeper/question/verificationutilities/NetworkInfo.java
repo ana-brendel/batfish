@@ -32,7 +32,6 @@ import static java.util.Objects.nonNull;
 import static org.batfish.minesweeper.question.verificationutilities.Setup.metadata_locations;
 
 public class NetworkInfo {
-    public final BDDString.Shortcuts shortcuts;
     public final TransferBDD tbdd;
 
     private final Map<Ip, Node> nodes = new HashMap<>();
@@ -82,10 +81,9 @@ public class NetworkInfo {
         }
     }
 
-    public NetworkInfo(@Nonnull TransferBDD tbdd, @Nonnull Map<String, Configuration> configs, boolean readable) {
+    public NetworkInfo(@Nonnull TransferBDD tbdd, @Nonnull Map<String, Configuration> configs) {
         this.tbdd = tbdd;
         processConfigs(configs);
-        shortcuts = BDDString.Shortcuts.ofConfigs(readable ? configs.values() : Set.of());
         // default assumption of True for incoming edges
         for (Location location : locations) {
             if (location instanceof Edge edge) {
@@ -163,7 +161,7 @@ public class NetworkInfo {
 
     public Infer toInfer() {
         Path.Context context = new Path.Context(this.tbdd,this.assumptions,this.imports,this.exports);
-        return new Infer(context,this.shortcuts,this.nodes,this.locations);
+        return new Infer(context,this.nodes,this.locations);
     }
 
     public PathAnalyzer toPathAnalyzer(PrefixSpace prefix, Location location, Invariant target) {
@@ -176,7 +174,7 @@ public class NetworkInfo {
                 edgesByDestination.get(dst).add(edge);
             }
         }
-        return new PathAnalyzer(context,this.shortcuts,prefix,location,target, this.nodes, edgesByDestination);
+        return new PathAnalyzer(context,prefix,location,target, this.nodes, edgesByDestination);
     }
 
     public InterferenceCheck toInterferenceCheck(PrefixSpace prefix, Location location, Invariant target) {
@@ -189,7 +187,7 @@ public class NetworkInfo {
                 edgesByDestination.get(dst).add(edge);
             }
         }
-        return new InterferenceCheck(context,this.shortcuts,prefix,location,target, this.nodes, edgesByDestination);
+        return new InterferenceCheck(context,prefix,location,target, this.nodes, edgesByDestination);
     }
 
     public TableAnswerElement getAnswerElement() {

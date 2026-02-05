@@ -7,7 +7,6 @@ import org.batfish.datamodel.Ip;
 import org.batfish.datamodel.PrefixSpace;
 import org.batfish.datamodel.routing_policy.RoutingPolicy;
 import org.batfish.minesweeper.bdd.ModelGeneration;
-import org.batfish.minesweeper.question.verificationutilities.BDDString;
 import org.batfish.minesweeper.question.verificationutilities.Edge;
 import org.batfish.minesweeper.question.verificationutilities.Invariant;
 import org.batfish.minesweeper.question.verificationutilities.Location;
@@ -23,7 +22,6 @@ import java.util.Queue;
 import java.util.Set;
 
 public class InterferenceCheck {
-    public final BDDString.Shortcuts shortcuts;
     private final Path.Context context;
 
     private final PrefixSpace prefix;
@@ -36,11 +34,10 @@ public class InterferenceCheck {
     private final Queue<Location> working = new LinkedList<>();
     private final Map<Location, Invariant> inferred = new Hashtable<>();
 
-    public InterferenceCheck(@Nonnull Path.Context context, BDDString.Shortcuts shortcuts,
+    public InterferenceCheck(@Nonnull Path.Context context,
                         @Nonnull PrefixSpace prefix, @Nonnull Location location, @Nonnull Invariant target,
                         @Nonnull Map<Ip, Node> nodes, @Nonnull Map<Node,Set<Edge>> edgesByDestination) {
         this.context = context;
-        this.shortcuts = shortcuts;
         this.prefix = prefix;
         this.location = location;
         this.target = target;

@@ -74,16 +74,16 @@ public final class SafetyAnswerer extends Answerer {
                          Map<Location,Invariant> targets, Refine.Result refinement) {
         /// Gather the answer element needed for a question return
         public TableAnswerElement getAnswerElement(boolean readable) {
-            Map<Location,Invariant> results = refinement.refined();
+            Map<Location,Invariant> results = refinement.refined;
             Map<Location,String> result_str = new HashMap<>(results.size());
             Map<BDD,String> cache = new HashMap<>();
             if (readable) {
-                results.forEach((l, i) -> result_str.put(l, i.toString(refinementOccurred,info.shortcuts, cache)));
+                results.forEach((l, i) -> result_str.put(l, i.toString(refinementOccurred, cache)));
             } else {
                 // we only get strings for the targets and assumptions, or if true or false (saves time)
                 results.forEach((l, i) -> {
                     if (targets.containsKey(l) || info.getAssumptions().containsKey(l) || i.isFalse() || i.isTrue())
-                        result_str.put(l, i.toString(refinementOccurred,info.shortcuts, cache));
+                        result_str.put(l, i.toString(refinementOccurred, cache));
                     else
                         result_str.put(l,"...");
                 });
@@ -93,12 +93,12 @@ public final class SafetyAnswerer extends Answerer {
                     .forEach(loc -> tae.addRow(Row.builder()
                             .put(Setup.LOCATION_COL, loc.toString())
                             .put(Setup.ASSUMPTION_COL, info.getAssumptions().containsKey(loc) ?
-                                    info.getAssumptions().get(loc).toString(refinementOccurred,info.shortcuts,cache) : "-")
+                                    info.getAssumptions().get(loc).toString(refinementOccurred,cache) : "-")
                             .put(Setup.TARGET_COL, targets.containsKey(loc) ?
-                                    targets.get(loc).toString(refinementOccurred,info.shortcuts,cache) : "-")
+                                    targets.get(loc).toString(refinementOccurred,cache) : "-")
                             .put(Setup.INFERRED_INVARIANTS_COL, result_str.containsKey(loc) && result_str.get(loc).isEmpty() ?
                                     "STRING OF BDD ERROR" : result_str.get(loc))
-                            .put(Setup.OVERALL_VERIFICATION_COL, refinement.verified())
+                            .put(Setup.OVERALL_VERIFICATION_COL, refinement.verified)
                             .put(Setup.LOCAL_VERIFICATION_COL, checks.containsKey(loc) ? checks.get(loc).isEmpty() : "")
                             .put(Setup.ASSUMPTION_VIOLATION_COL, checks.containsKey(loc) && checks.get(loc).isPresent()
                                     ? nonDefaultRoute(checks.get(loc).get()) : "").build()));
@@ -119,7 +119,7 @@ public final class SafetyAnswerer extends Answerer {
         Refine.Result refined;
         boolean refinementOccurred = true;
         // we only want to refine if the inference did not yield any falses, or if the refinement flag is set
-        if (result.counter().isPresent() || !refine) {
+        if (result.counter.isPresent() || !refine) {
             LOGGER.info("No invariant refinement.");
             refinementOccurred = false;
             refined = inference.refiner().noRefinement();
@@ -129,10 +129,10 @@ public final class SafetyAnswerer extends Answerer {
             LOGGER.info("Finished refining invariants.");
         }
 
-        if (result.verified() != refined.verified())
+        if (result.verified != refined.verified)
             throw new BatfishException("SafetyAnswerer.run() - Inference and refinement final verification results inconsistent.");
 
-        return new Result(info,refinementOccurred,result.checks(),Map.of(location,target),refined);
+        return new Result(info,refinementOccurred,result.checks,Map.of(location,target),refined);
     }
 
     @Override
@@ -144,7 +144,7 @@ public final class SafetyAnswerer extends Answerer {
         Map<String, Configuration> configs = context.getConfigs();
         ConfigAtomicPredicates configAPs = getConfigAtomicPredicates(_communityRegexes,_asPathRegexes,configs.values());
         TransferBDD tbdd = new TransferBDD(configAPs);
-        NetworkInfo info = new NetworkInfo(tbdd,configs,_readable);
+        NetworkInfo info = new NetworkInfo(tbdd,configs);
         _assumptions.forEach(info::addAssumption);
         LOGGER.info(info.displayNodes());
 

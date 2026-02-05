@@ -46,7 +46,7 @@ public class TestConfigConstructionUtils {
             return result;
         }
         public NetworkInfo getInfo() {
-            return new NetworkInfo(this.tbdd(), configInput(),true);
+            return new NetworkInfo(this.tbdd(), configInput());
         }
     }
 
@@ -59,7 +59,7 @@ public class TestConfigConstructionUtils {
             return result;
         }
         public NetworkInfo getInfo() {
-            return new NetworkInfo(this.tbdd(), configInput(),true);
+            return new NetworkInfo(this.tbdd(), configInput());
         }
     }
 

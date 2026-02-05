@@ -10,7 +10,6 @@ import org.batfish.datamodel.routing_policy.RoutingPolicy;
 import org.batfish.minesweeper.bdd.ModelGeneration;
 import org.batfish.minesweeper.bdd.TransferBDD;
 import org.batfish.minesweeper.question.liveness.Path;
-import org.batfish.minesweeper.question.verificationutilities.BDDString;
 import org.batfish.minesweeper.question.verificationutilities.Edge;
 import org.batfish.minesweeper.question.verificationutilities.Invariant;
 import org.batfish.minesweeper.question.verificationutilities.Lightyear;
@@ -32,7 +31,6 @@ import static org.batfish.minesweeper.question.verificationutilities.Invariant.s
 
 public class Infer {
     private static final Logger LOGGER = LogManager.getLogger(Infer.class);
-    public final BDDString.Shortcuts shortcuts;
     private final TransferBDD tbdd;
 
     private final Map<Ip, Node> nodes = new HashMap<>();
@@ -50,27 +48,35 @@ public class Infer {
             Invariant post,
             Location cause) { }
 
-    public record Result(
-            boolean verified,
-            Map<Location, Invariant> invariants,
-            Optional<CounterExample> counter,
-            Map<Location,Optional<Bgpv4Route>> checks) {
+    public class Result {
+        public final boolean verified;
+        public final Map<Location, Invariant> invariants;
+        public final Optional<CounterExample> counter;
+        public final Map<Location,Optional<Bgpv4Route>> checks;
+        public final Map<BDD,String> cache = new HashMap<>();
+
+        public Result(boolean verified, Map<Location, Invariant> invariants,
+                Optional<CounterExample> counter, Map<Location,Optional<Bgpv4Route>> checks) {
+            this.verified = verified;
+            this.invariants = invariants;
+            this.counter = counter;
+            this.checks = checks;
+        }
         public boolean inferredTrue() {
-            if (counter().isEmpty()) {
+            if (counter.isEmpty()) {
                 return invariants.values().stream().anyMatch(Invariant::isTrue);
             }
             return false;
         }
         public Map<Location,String> strings(Infer infer) {
             Map<Location,String> strings = new HashMap<>();
-            invariants.forEach((loc,inv) -> strings.put(loc,inv.toString(false,infer.shortcuts)));
+            invariants.forEach((loc,inv) -> strings.put(loc,inv.toString(false,this.cache)));
             return strings;
         }
     }
 
-    public Infer(@Nonnull Path.Context context, BDDString.Shortcuts shortcuts, @Nonnull Map<Ip, Node> nodes, @Nonnull Set<Location> locations) {
+    public Infer(@Nonnull Path.Context context, @Nonnull Map<Ip, Node> nodes, @Nonnull Set<Location> locations) {
         this.tbdd = context.tbdd();
-        this.shortcuts = shortcuts;
         this.nodes.putAll(nodes);
         this.locations.addAll(locations);
         this.imports.putAll(context.imports());

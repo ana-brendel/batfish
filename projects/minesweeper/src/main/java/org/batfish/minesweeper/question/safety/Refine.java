@@ -7,7 +7,6 @@ import org.batfish.common.BatfishException;
 import org.batfish.datamodel.Ip;
 import org.batfish.datamodel.routing_policy.RoutingPolicy;
 import org.batfish.minesweeper.bdd.TransferBDD;
-import org.batfish.minesweeper.question.verificationutilities.BDDString;
 import org.batfish.minesweeper.question.verificationutilities.Edge;
 import org.batfish.minesweeper.question.verificationutilities.Invariant;
 import org.batfish.minesweeper.question.verificationutilities.Location;
@@ -21,7 +20,6 @@ import java.util.Set;
 import java.util.stream.Collectors;
 
 import static org.batfish.minesweeper.bdd.TransferBDDUtils.interpolate;
-
 
 public class Refine {
     private static final Logger LOGGER = LogManager.getLogger(Refine.class);
@@ -103,21 +101,35 @@ public class Refine {
         return new Builder(tbdd);
     }
 
-    public record Result(boolean verified,
-            Map<Location, Invariant> initial, Map<Location, Invariant> interpolants, Map<Location, Invariant> refined) {
-        public Map<Location,String> displayInitial(BDDString.Shortcuts shortcuts) {
+    public class Result {
+        public final boolean verified;
+        public final Map<Location, Invariant> initial;
+        public final Map<Location, Invariant> interpolants;
+        public final Map<Location, Invariant> refined;
+        public final Map<BDD,String> cache = new HashMap<>();
+
+        public Result(boolean verified, Map<Location, Invariant> initial,
+                      Map<Location, Invariant> interpolants, Map<Location, Invariant> refined) {
+            this.verified = verified;
+            this.initial = initial;
+            this.interpolants = interpolants;
+            this.refined = refined;
+        }
+
+        public Map<Location,String> displayInitial() {
             Map<Location,String> strings = new HashMap<>();
-            initial.forEach((loc,inv) -> strings.put(loc,inv.toString(true,shortcuts)));
+
+            initial.forEach((loc,inv) -> strings.put(loc, inv.toString(true, this.cache)));
             return strings;
         }
-        public Map<Location,String> displayRefinement(BDDString.Shortcuts shortcuts) {
+        public Map<Location,String> displayRefinement() {
             Map<Location,String> strings = new HashMap<>();
-            refined.forEach((loc,inv) -> strings.put(loc,inv.toString(true,shortcuts)));
+            refined.forEach((loc,inv) -> strings.put(loc,inv.toString(true,this.cache)));
             return strings;
         }
-        public Map<Location,String> displayInterpolants(BDDString.Shortcuts shortcuts) {
+        public Map<Location,String> displayInterpolants() {
             Map<Location,String> strings = new HashMap<>();
-            interpolants.forEach((loc,inv) -> strings.put(loc,inv.toString(true,shortcuts)));
+            interpolants.forEach((loc,inv) -> strings.put(loc,inv.toString(true,this.cache)));
             return strings;
         }
     }

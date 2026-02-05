@@ -87,19 +87,21 @@ public class Invariant {
         return new Invariant(tbdd,bdd.not(),"false");
     }
 
-    public String toString(boolean refinementOccurred, BDDString.Shortcuts shortcuts) {
+    public String toString(boolean refinementOccurred) {
         if (this.isFalse()) return refinementOccurred ? "no traffic" : "false";
         if (this.isTrue()) return "true";
-        String returned = Objects.requireNonNullElseGet(this.str, () -> BDDString.get(this.tbdd, this.bdd,shortcuts));
+        String returned = Objects.requireNonNullElseGet(this.str, () -> BDDString.get(this.tbdd, this.bdd));
         assert !returned.trim().isEmpty();
         return returned;
     }
 
-    public String toString(boolean refinementOccurred, BDDString.Shortcuts shortcuts, Map<BDD,String> cache) {
-        if (cache != null && cache.containsKey(this.bdd)) {
+    public String toString(boolean refinementOccurred, @Nonnull Map<BDD,String> cache) {
+        if (cache.containsKey(this.bdd)) {
             return cache.get(this.bdd);
         } else {
-            return this.toString(refinementOccurred, shortcuts);
+            String result = this.toString(refinementOccurred);
+            cache.put(this.bdd,result);
+            return result;
         }
     }
 

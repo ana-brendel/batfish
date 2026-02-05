@@ -38,6 +38,7 @@ import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import java.util.stream.Stream;
 
@@ -637,12 +638,12 @@ public class RefineTest {
 
         Refine.Result refiner = verifier.refiner().refine();
 
-        Map<Location,String> initials = refiner.displayInitial(verifier.shortcuts);
-        Map<Location,String> refinements = refiner.displayRefinement(verifier.shortcuts);
+        Map<Location,String> initials = refiner.displayInitial();
+        Map<Location,String> refinements = refiner.displayRefinement();
 
-        assertTrue(lightyear.check(refiner.initial()));
-        assertTrue(lightyear.check(refiner.refined()));
-        assertFalse(result.verified());
+        assertTrue(lightyear.check(refiner.initial).isEmpty());
+        assertTrue(lightyear.check(refiner.refined).isEmpty());
+        assertFalse(result.verified);
         assertTrue(result.inferredTrue());
     }
     @Test
@@ -668,12 +669,12 @@ public class RefineTest {
 
         Refine.Result refiner = verifier.refiner().refine();
 
-        Map<Location,String> initials = refiner.displayInitial(verifier.shortcuts);
-        Map<Location,String> refinements = refiner.displayRefinement(verifier.shortcuts);
+        Map<Location,String> initials = refiner.displayInitial();
+        Map<Location,String> refinements = refiner.displayRefinement();
 
-        assertTrue(lightyear.check(refiner.initial()));
-        assertTrue(lightyear.check(refiner.refined()));
-        assertFalse(result.verified());
+        assertTrue(lightyear.check(refiner.initial).isEmpty());
+        assertTrue(lightyear.check(refiner.refined).isEmpty());
+        assertFalse(result.verified);
         assertTrue(result.inferredTrue());
     }
     @Test
@@ -699,12 +700,12 @@ public class RefineTest {
 
         Refine.Result refiner = verifier.refiner().refine();
 
-        Map<Location,String> initials = refiner.displayInitial(verifier.shortcuts);
-        Map<Location,String> refinements = refiner.displayRefinement(verifier.shortcuts);
+        Map<Location,String> initials = refiner.displayInitial();
+        Map<Location,String> refinements = refiner.displayRefinement();
 
-        assertTrue(lightyear.check(refiner.initial()));
-        assertTrue(lightyear.check(refiner.refined()));
-        assertFalse(result.verified());
+        assertTrue(lightyear.check(refiner.initial).isEmpty());
+        assertTrue(lightyear.check(refiner.refined).isEmpty());
+        assertFalse(result.verified);
         assertTrue(result.inferredTrue());
     }
     @Test
@@ -730,13 +731,13 @@ public class RefineTest {
 
         Refine.Result refiner = verifier.refiner().refine();
 
-        Map<Location,String> initials = refiner.displayInitial(verifier.shortcuts);
-        Map<Location,String> refinements = refiner.displayRefinement(verifier.shortcuts);
-        Map<Location,String> interpolants = refiner.displayInterpolants(verifier.shortcuts);
+        Map<Location,String> initials = refiner.displayInitial();
+        Map<Location,String> refinements = refiner.displayRefinement();
+        Map<Location,String> interpolants = refiner.displayInterpolants();
 
-        assertTrue(lightyear.check(refiner.initial()));
-        assertTrue(lightyear.check(refiner.refined()));
-        assertFalse(result.verified());
+        assertTrue(lightyear.check(refiner.initial).isEmpty());
+        assertTrue(lightyear.check(refiner.refined).isEmpty());
+        assertFalse(result.verified);
         assertTrue(result.inferredTrue());
     }
     @Test
@@ -761,12 +762,12 @@ public class RefineTest {
 
         Refine.Result refiner = verifier.refiner().refine();
 
-        Map<Location,String> initials = refiner.displayInitial(verifier.shortcuts);
-        Map<Location,String> refinements = refiner.displayRefinement(verifier.shortcuts);
+        Map<Location,String> initials = refiner.displayInitial();
+        Map<Location,String> refinements = refiner.displayRefinement();
 
-        assertTrue(lightyear.check(refiner.initial()));
-        assertTrue(lightyear.check(refiner.refined()));
-        assertTrue(result.verified());
+        assertTrue(lightyear.check(refiner.initial).isEmpty());
+        assertTrue(lightyear.check(refiner.refined).isEmpty());
+        assertTrue(result.verified);
         assertTrue(result.inferredTrue());
     }
     @Test
@@ -791,12 +792,12 @@ public class RefineTest {
 
         Refine.Result refiner = verifier.refiner().refine();
 
-        Map<Location,String> initials = refiner.displayInitial(verifier.shortcuts);
-        Map<Location,String> refinements = refiner.displayRefinement(verifier.shortcuts);
+        Map<Location,String> initials = refiner.displayInitial();
+        Map<Location,String> refinements = refiner.displayRefinement();
 
-        assertTrue(lightyear.check(refiner.initial()));
-        assertTrue(lightyear.check(refiner.refined()));
-        assertTrue(result.verified());
+        assertTrue(lightyear.check(refiner.initial).isEmpty());
+        assertTrue(lightyear.check(refiner.refined).isEmpty());
+        assertTrue(result.verified);
         assertTrue(result.inferredTrue());
     }
     @Test
@@ -821,12 +822,12 @@ public class RefineTest {
 
         Refine.Result refiner = verifier.refiner().refine();
 
-        Map<Location,String> initials = refiner.displayInitial(verifier.shortcuts);
-        Map<Location,String> refinements = refiner.displayRefinement(verifier.shortcuts);
+        Map<Location,String> initials = refiner.displayInitial();
+        Map<Location,String> refinements = refiner.displayRefinement();
 
-        assertTrue(lightyear.check(refiner.initial()));
-        assertTrue(lightyear.check(refiner.refined()));
-        assertTrue(result.verified());
+        assertTrue(lightyear.check(refiner.initial).isEmpty());
+        assertTrue(lightyear.check(refiner.refined).isEmpty());
+        assertTrue(result.verified);
         assertTrue(result.inferredTrue());
     }
     @Test
@@ -853,13 +854,14 @@ public class RefineTest {
 
         Refine.Result refiner = verifier.refiner().refine();
 
-        Map<Location,String> initials = refiner.displayInitial(verifier.shortcuts);
-        // buggy
-//        Map<Location,String> refinements = refiner.displayRefinement(verifier.shortcuts);
+        Map<Location,String> initials = refiner.displayInitial();
+        Map<Location,String> refinements = refiner.displayRefinement();
 
-        assertTrue(lightyear.check(refiner.initial()));
-        assertTrue(lightyear.check(refiner.refined()));
-        assertFalse(result.verified());
+        Optional<Map.Entry<Location, Location>> counter = lightyear.check(refiner.initial);
+
+        assertTrue(lightyear.check(refiner.initial).isEmpty());
+        assertTrue(lightyear.check(refiner.refined).isEmpty());
+        assertFalse(result.verified);
         assertTrue(result.inferredTrue());
     }
     @Test
@@ -886,13 +888,13 @@ public class RefineTest {
 
         Refine.Result refiner = verifier.refiner().refine();
 
-        Map<Location,String> initials = refiner.displayInitial(verifier.shortcuts);
-        Map<Location,String> refinements = refiner.displayRefinement(verifier.shortcuts);
-        Map<Location,String> interpolants = refiner.displayInterpolants(verifier.shortcuts);
+        Map<Location,String> initials = refiner.displayInitial();
+        Map<Location,String> refinements = refiner.displayRefinement();
+        Map<Location,String> interpolants = refiner.displayInterpolants();
 
-        assertTrue(lightyear.check(refiner.initial()));
-        assertTrue(lightyear.check(refiner.refined()));
-        assertFalse(result.verified());
+        assertTrue(lightyear.check(refiner.initial).isEmpty());
+        assertTrue(lightyear.check(refiner.refined).isEmpty());
+        assertFalse(result.verified);
         assertTrue(result.inferredTrue());
     }
 }

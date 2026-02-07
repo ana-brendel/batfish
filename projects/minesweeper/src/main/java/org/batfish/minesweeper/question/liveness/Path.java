@@ -31,6 +31,8 @@ public class Path {
     private final @Nonnull Location[] steps;
     private final @Nonnull Invariant[] properties;
 
+    /// Note, the only way to build a path is through a Path.Builder. This guarantees that
+    /// the path is connected and invariants are inferred.
     private Path(Location[] steps, Invariant[] properties, @Nonnull Context context) {
         this.steps = steps == null ? new Location[0] : steps;
         this.properties = properties == null ? new Invariant[0] : properties;
@@ -40,6 +42,7 @@ public class Path {
                     " locations on the path and " + this.properties.length + " properties provided.");
     }
 
+    /// Network context needed
     public record Context(@Nonnull TransferBDD tbdd, @Nonnull Map<Location, Invariant> assumptions,
                           @Nonnull Map<Edge, RoutingPolicy> imports, @Nonnull Map<Edge, RoutingPolicy> exports) {
         public BDD prefixSpaceToBDD(PrefixSpace space) {
@@ -54,23 +57,17 @@ public class Path {
         }
     }
 
+    /// Return a path builder according to this network's context
     public static Builder builder(@Nonnull Context ctx) { return new Builder(ctx.tbdd(),ctx.imports(),ctx.exports(),ctx.assumptions()); }
 
-    /// Returns this if it is a valid path supported by the assumptions, otherwise returns empty.
+    /// Returns this path if the incoming assumption satisfies the needed incoming invariant
     public Optional<Path> isGoodPath() {
         Invariant initialAssumption = context.assumptions().getOrDefault(steps[steps.length-1],new Invariant(context.tbdd()));
         // returns this path if the assumption implies the condition needed to have a live path reach the target location
         return properties[properties.length-1].impliedBy(initialAssumption) ? Optional.of(this) : Optional.empty();
     }
 
-    /// Returns this if it is an interfering path according to the assumptions, otherwise returns empty.
-//    public Optional<Path> interferingPath() {
-//        Invariant initialAssumption = context.assumptions().getOrDefault(steps[steps.length-1],new Invariant(context.tbdd()));
-//        BDD conjunction = initialAssumption.wellFormedBDD().and(properties[properties.length-1].wellFormedBDD());
-//        // returns this path if the assumption implies the condition needed to have a live path reach the target location
-//        return conjunction.isZero() ? Optional.empty() : Optional.of(this);
-//    }
-
+    /// Displays the path
     public String display() {
         StringBuilder builder = new StringBuilder();
         for (Location step : steps) {
@@ -83,11 +80,14 @@ public class Path {
         return builder.toString();
     }
 
+    /// A Path.Builder represents a path which should be connected but has not had any liveness inference performed.
+    /// This could be provided by user if we want the user to provide the path.
     @VisibleForTesting
     public static class Builder implements Comparable<Builder> {
         private final @Nonnull TransferBDD tbdd;
         private final @Nonnull Map<Edge, RoutingPolicy> imports;
         private final @Nonnull Map<Edge, RoutingPolicy> exports;
+        /// Bottom of the stack is the target location
         private final @Nonnull Stack<Location> steps;
         private final @Nonnull Map<Location, Invariant> assumptions;
 
@@ -100,6 +100,7 @@ public class Path {
             this.steps = copySteps(steps);
         }
 
+        /// Copied the steps in path to new stack
         @VisibleForTesting
         static Stack<Location> copySteps(Stack<Location> steps) {
             Stack<Location> result = new Stack<>();
@@ -112,7 +113,7 @@ public class Path {
             this(tbdd,imports,exports,assumptions,new Stack<>());
         }
 
-        // include loops for bad routes
+        /// Generates new Path.Builders corresponding to expanding this Path.Builder according to each possible step
         public Set<Builder> expand(@Nonnull Set<Edge> potentialSteps) {
             Set<Builder> result = new HashSet<>();
             for (Location step : potentialSteps) {
@@ -136,8 +137,9 @@ public class Path {
             return builder.toString();
         }
 
-        /// Adds the location to the path (going backwards from the target) if the path is valid,
-        /// returns a boolean indicating if the path was updated
+        /// Adds the location to the path (going backwards from the target) if the path is valid and loop free,
+        /// returns a boolean indicating if the path was updated. If this returns false, then the steps
+        /// have been cleared/emptied.
         public boolean addToPath(@Nonnull Location next) {
             Location previous = steps.isEmpty() ? null : steps.peek();
             if (previous == null) {
@@ -179,7 +181,8 @@ public class Path {
         }
 
         /// Builds a path object according to the builder. This includes inferring the invariants, all paths
-        /// go to the outside of the network.
+        /// go to the outside of the network. The resulting path holds the invariants that must hold at each step
+        /// in order for a path to reach the target location adhering to the target property via this path.
         public Path build(@Nonnull Location location, @Nonnull Invariant target) {
             if (steps.isEmpty()) {
                 return null;
@@ -207,8 +210,6 @@ public class Path {
                 if (policy == null) throw new BatfishException("Path.build() - No policy on record for going from " + curr + " to " + prev);
                 predicates[i] = post.weakestPrecondition(policy,false);
             }
-            Invariant initialAssumption = assumptions.getOrDefault(locations[locations.length-1],new Invariant(tbdd));
-            //return predicates[predicates.length-1].impliedBy(initialAssumption) ? new Path(locations,predicates) : null;
             return new Path(locations,predicates,new Context(tbdd,assumptions,imports,exports));
         }
 
@@ -225,6 +226,7 @@ public class Path {
             }
         }
 
+        /// Returns the previous step in path, if not empty
         public Optional<Location> previous() {
             return steps.isEmpty() ? Optional.empty() : Optional.of(steps.peek().copy());
         }
@@ -233,6 +235,7 @@ public class Path {
             return Objects.hash(steps);
         }
 
+        /// Compares path by length (intended to help sort paths in increasing order)
         @Override
         public int compareTo(Builder o) {
             return Integer.compare(this.steps.size(), o.steps.size());

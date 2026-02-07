@@ -38,6 +38,7 @@ public class PathAnalyzer {
         this.edgesByDestination = edgesByDestination;
     }
 
+    /// Based on potential paths provided, see if there is at least one which satisfies the liveness property (is a good path)
     private Optional<Path> generateGoodPaths(@Nonnull List<Path.Builder> potentialPaths) {
         if (prefix.isEmpty())
             throw new BatfishException("PathAnalyzer.generateGoodPaths() - Prefix space is empty, cannot perform liveness analysis.");
@@ -49,6 +50,7 @@ public class PathAnalyzer {
         return Optional.empty();
     }
 
+    /// Returns set of possible paths from ingress node to the target properties location
     private List<Path.Builder> generatePathBuilders() {
         Set<Path.Builder> paths = new HashSet<>();
         Queue<Path.Builder> working = new LinkedList<>();
@@ -79,6 +81,9 @@ public class PathAnalyzer {
         return paths.stream().filter(p -> p.previous().isPresent() && context.assumptions().containsKey(p.previous().get())).sorted().toList();
     }
 
+    /// Returns (if it exists) a good path that satisfies the liveness property in question. Note, this is a Path
+    /// object so the necessary invariants have been inferred, and we've checked that the ingress assumptions satisfies the
+    /// inferred ingress invariant.
     public Optional<Path> run() {
         List<Path.Builder> potentialPaths = this.generatePathBuilders();
         return this.generateGoodPaths(potentialPaths);

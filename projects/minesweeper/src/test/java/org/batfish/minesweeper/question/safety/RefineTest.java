@@ -627,7 +627,7 @@ public class RefineTest {
         TestConfigConstructionUtils.Networkv2 net = networkA(entry,exit,NODE_A,NODE_B,NODE_C,p_str);
         NetworkInfo info = net.getInfo();
         Infer verifier = info.toInfer();
-        Lightyear lightyear = verifier.checker();
+        Lightyear lightyear = info.checker();
 
         Edge target = new Edge(NODE_C.getSingleIp(),exit);
         PrefixSpace PREFIX = new PrefixSpace(PrefixRange.fromPrefix(Prefix.parse(p_str)));
@@ -658,7 +658,7 @@ public class RefineTest {
         TestConfigConstructionUtils.Networkv2 net = networkB(entry,exit,NODE_A,NODE_B,NODE_C,p_str);
         NetworkInfo info = net.getInfo();
         Infer verifier = info.toInfer();
-        Lightyear lightyear = verifier.checker();
+        Lightyear lightyear = info.checker();
 
         Edge target = new Edge(NODE_C.getSingleIp(),exit);
         PrefixSpace PREFIX = new PrefixSpace(PrefixRange.fromPrefix(Prefix.parse(p_str)));
@@ -689,7 +689,7 @@ public class RefineTest {
         TestConfigConstructionUtils.Networkv2 net = networkC(entry,exit,NODE_A,NODE_B,NODE_C,p_str);
         NetworkInfo info = net.getInfo();
         Infer verifier = info.toInfer();
-        Lightyear lightyear = verifier.checker();
+        Lightyear lightyear = info.checker();
 
         Edge target = new Edge(NODE_C.getSingleIp(),exit);
         PrefixSpace PREFIX = new PrefixSpace(PrefixRange.fromPrefix(Prefix.parse(p_str)));
@@ -720,7 +720,7 @@ public class RefineTest {
         TestConfigConstructionUtils.Networkv2 net = networkD(entry,exit,NODE_A,NODE_B,NODE_C,p_str);
         NetworkInfo info = net.getInfo();
         Infer verifier = info.toInfer();
-        Lightyear lightyear = verifier.checker();
+        Lightyear lightyear = info.checker();
 
         Edge target = new Edge(NODE_C.getSingleIp(),exit);
         PrefixSpace PREFIX = new PrefixSpace(PrefixRange.fromPrefix(Prefix.parse(p_str)));
@@ -752,7 +752,7 @@ public class RefineTest {
         TestConfigConstructionUtils.Networkv2 net = networkE(entry,exit,NODE_A,NODE_B,NODE_C,p_str);
         NetworkInfo info = net.getInfo();
         Infer verifier = info.toInfer();
-        Lightyear lightyear = verifier.checker();
+        Lightyear lightyear = info.checker();
 
         PrefixSpace PREFIX = new PrefixSpace(PrefixRange.fromPrefix(Prefix.parse(p_str)));
         Invariant property = new Invariant(net.tbdd(),Invariant.clauseBuilder().avoidPrefix(PREFIX).build(net.tbdd(),net.template()));
@@ -782,7 +782,7 @@ public class RefineTest {
         TestConfigConstructionUtils.Networkv2 net = networkF(entry,exit,NODE_A,NODE_B,NODE_C,p_str);
         NetworkInfo info = net.getInfo();
         Infer verifier = info.toInfer();
-        Lightyear lightyear = verifier.checker();
+        Lightyear lightyear = info.checker();
 
         PrefixSpace PREFIX = new PrefixSpace(PrefixRange.fromPrefix(Prefix.parse(p_str)));
         Invariant property = new Invariant(net.tbdd(),Invariant.clauseBuilder().avoidPrefix(PREFIX).build(net.tbdd(),net.template()));
@@ -812,7 +812,7 @@ public class RefineTest {
         TestConfigConstructionUtils.Networkv2 net = networkG(entry,exit,NODE_A,NODE_B,NODE_C,p_str);
         NetworkInfo info = net.getInfo();
         Infer verifier = info.toInfer();
-        Lightyear lightyear = verifier.checker();
+        Lightyear lightyear = info.checker();
 
         PrefixSpace PREFIX = new PrefixSpace(PrefixRange.fromPrefix(Prefix.parse(p_str)));
         Invariant property = new Invariant(net.tbdd(),Invariant.clauseBuilder().avoidPrefix(PREFIX).build(net.tbdd(),net.template()));
@@ -843,7 +843,7 @@ public class RefineTest {
         TestConfigConstructionUtils.Networkv2 net = networkH(entry,exit,NODE_A,NODE_B,NODE_C,p_str,q_str,true);
         NetworkInfo info = net.getInfo();
         Infer verifier = info.toInfer();
-        Lightyear lightyear = verifier.checker();
+        Lightyear lightyear = info.checker();
 
         Invariant.ClauseBuilder PREFIX_P = Invariant.clauseBuilder().matchPrefix(new PrefixSpace(PrefixRange.fromPrefix(Prefix.parse(p_str))));
         Invariant.ClauseBuilder PREFIX_Q = Invariant.clauseBuilder().matchPrefix(new PrefixSpace(PrefixRange.fromPrefix(Prefix.parse(q_str))));
@@ -877,7 +877,7 @@ public class RefineTest {
         TestConfigConstructionUtils.Networkv2 net = networkI(entry,exit,NODE_A,NODE_B,NODE_C,p_str,q_str);
         NetworkInfo info = net.getInfo();
         Infer verifier = info.toInfer();
-        Lightyear lightyear = verifier.checker();
+        Lightyear lightyear = info.checker();
 
         Invariant.ClauseBuilder PREFIX_P = Invariant.clauseBuilder().matchPrefix(new PrefixSpace(PrefixRange.fromPrefix(Prefix.parse(p_str))));
         Invariant.ClauseBuilder PREFIX_Q = Invariant.clauseBuilder().matchPrefix(new PrefixSpace(PrefixRange.fromPrefix(Prefix.parse(q_str))));

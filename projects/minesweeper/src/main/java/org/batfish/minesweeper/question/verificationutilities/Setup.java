@@ -126,6 +126,7 @@ public class Setup {
     public static final String ASSUMPTION_VIOLATION_COL = "Assumption_Violation";
     public static final String LOCATION_RELEVANCE_COL = "Location_Relevance";
     public static final String PROVIDED_INVARIANT_COL = "Provided_Invariant";
+    public static final String COUNTEREXAMPLE_COL = "Counterexample";
 
     /// TableMetadata for safety property which displays all invariants inferred across network
     public static TableMetadata metadata_safety() {
@@ -150,6 +151,7 @@ public class Setup {
                         new ColumnMetadata(LOCATION_RELEVANCE_COL, STRING, "InDev", true, false),
                         new ColumnMetadata(PROVIDED_INVARIANT_COL, STRING, "InDev", true, false),
                         new ColumnMetadata(INFERRED_INVARIANTS_COL, STRING, "InDev", true, false),
+                        new ColumnMetadata(COUNTEREXAMPLE_COL, STRING, "InDev", true, false),
                         new ColumnMetadata(OVERALL_VERIFICATION_COL, STRING, "InDev", true, false));
         return new TableMetadata(
                 columnMetadata, "Invariant Inference and Verification Results");

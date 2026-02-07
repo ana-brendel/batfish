@@ -5,7 +5,7 @@
     "location": "${location}",
     "assumption_locations": "${assumption_locations}",
     "assumptions": "${assumptions}",
-    "readable": "${readable}",
+    "show_all": "${show_all}",
     "refine": "${refine}",
     "instance": {
         "description": "...",
@@ -16,7 +16,7 @@
             "location",
             "assumption_locations",
             "assumptions",
-            "readable",
+            "show_all",
             "refine"
         ],
         "tags": [
@@ -47,8 +47,8 @@
                 "optional": true,
                 "displayName": "Assumptions"
             },
-            "readable": {
-              "description": "Flag indicating if you want to see a readable version of all variables (does not scale well)",
+            "show_all": {
+              "description": "Flag indicating if you want all of the inferred invariants displayed",
               "type": "boolean",
               "optional": true,
               "displayName": "Weak Print"

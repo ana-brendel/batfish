@@ -37,6 +37,7 @@ public class Refine {
 
     private final Queue<Location> working = new LinkedList<>();
 
+    /// Class to build Refine object, used by Infer class to get a Refine object from Infer object
     public static class Builder {
         private final TransferBDD tbdd;
         private Map<Ip,Node> nodes;
@@ -97,39 +98,35 @@ public class Refine {
         }
     }
 
+    /// Provides builder instance
     public static Builder builder(TransferBDD tbdd) {
         return new Builder(tbdd);
     }
 
+    /// Stores useful results collected during invariant refinement
     public class Result {
         public final boolean verified;
         public final Map<Location, Invariant> initial;
-        public final Map<Location, Invariant> interpolants;
         public final Map<Location, Invariant> refined;
         public final Map<BDD,String> cache = new HashMap<>();
 
-        public Result(boolean verified, Map<Location, Invariant> initial,
-                      Map<Location, Invariant> interpolants, Map<Location, Invariant> refined) {
+        public Result(boolean verified, Map<Location, Invariant> initial, Map<Location, Invariant> refined) {
             this.verified = verified;
             this.initial = initial;
-            this.interpolants = interpolants;
             this.refined = refined;
         }
 
+        /// Included for testing - displays the initial inferred invariants
         public Map<Location,String> displayInitial() {
             Map<Location,String> strings = new HashMap<>();
 
             initial.forEach((loc,inv) -> strings.put(loc, inv.toString(true, this.cache)));
             return strings;
         }
+        /// Included for testing - displays the refined inferred invariants
         public Map<Location,String> displayRefinement() {
             Map<Location,String> strings = new HashMap<>();
             refined.forEach((loc,inv) -> strings.put(loc,inv.toString(true,this.cache)));
-            return strings;
-        }
-        public Map<Location,String> displayInterpolants() {
-            Map<Location,String> strings = new HashMap<>();
-            interpolants.forEach((loc,inv) -> strings.put(loc,inv.toString(true,this.cache)));
             return strings;
         }
     }
@@ -150,8 +147,10 @@ public class Refine {
         this.inferred = inferred;
     }
 
-    ///  Assume that the working list includes the correct starting points for inference
+    ///  Performs iterative invariant refinement using the strongest postcondition, interpolation and inferred invariants
     private Map<Location, Invariant> strengtheningLoop() {
+        // we assume that the working list includes the correct starting points for refinement, that
+        // is specifically ingress edges
         Map<Location, Invariant> refinements = new HashMap<>();
         // assigning all the starting incoming edges back to their inferred invariant otherwise set false
         inferred.keySet().forEach(starter ->
@@ -188,21 +187,25 @@ public class Refine {
         return refinements;
     }
 
+    /// Returns refinement result object without performing refinement
     public Result noRefinement() {
         boolean verified = assumptions.keySet().stream().allMatch(
                 loc -> inferred.containsKey(loc) && assumptions.get(loc).implies(inferred.get(loc)));
-        return new Result(verified,inferred,new HashMap<>(),inferred);
+        return new Result(verified,inferred,inferred);
     }
 
+    /// Driving method to perform invariant refinement
     public Result refine() {
-        Map<Location, Invariant> interpolants = new HashMap<>();
         working.clear();
         // TODO determine if we want to include assumptions as ingress nodes (or maybe have option for user to specify ingress)
+        // right now we just use any edge entering the network, not including assumptions within network... maybe we should swap
+        // any inferred invariant specifically with the assumption as the assumption would be stronger (if verifcation didn't
+        // produce any counterexample)
         working.addAll(enteringNetwork);
         if (working.isEmpty()) {
             boolean verified = assumptions.keySet().stream().allMatch(
                     loc -> inferred.containsKey(loc) && assumptions.get(loc).implies(inferred.get(loc)));
-            return new Result(verified,inferred,interpolants,inferred);
+            return new Result(verified,inferred,inferred);
         }
         Map<Location, Invariant> finalized = strengtheningLoop();
         finalized.forEach((loc,inv) -> { assert inv.implies(inferred.get(loc)); });
@@ -213,6 +216,6 @@ public class Refine {
         targets.forEach((loc,i) -> { assert finalized.containsKey(loc); });
         boolean verified = assumptions.keySet().stream().allMatch(
                 loc -> finalized.containsKey(loc) && assumptions.get(loc).implies(finalized.get(loc)));
-        return new Result(verified,inferred,interpolants,finalized);
+        return new Result(verified,inferred,finalized);
     }
 }

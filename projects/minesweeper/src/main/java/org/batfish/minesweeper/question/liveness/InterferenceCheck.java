@@ -45,7 +45,11 @@ public class InterferenceCheck {
         this.edgesByDestination = edgesByDestination;
     }
 
+    /// Iteratively infer the "bad invariants" which allow for a "bad route" to reach the liveness property location. Note,
+    /// this is sound but not complete as BGP preferences, which we don't account for, might rule out some of these "bad routes."
     private void inferenceLoop() {
+        // carries out invariant inference similar to safety property, but we don't allow for denied routes to be
+        // considered in the weakest precondition computation
         while (!working.isEmpty()) {
             Location location = working.remove();
             Invariant property = inferred.get(location);
@@ -80,6 +84,7 @@ public class InterferenceCheck {
         }
     }
 
+    /// For all ingress locations, we find a counterexample if one exists
     private Map<Location,Bgpv4Route> interferenceExample() {
         Map<Location,Bgpv4Route> checks = new HashMap<>();
         for (Location assumption_location : context.assumptions().keySet()) {
@@ -100,6 +105,8 @@ public class InterferenceCheck {
         return checks;
     }
 
+    /// Checks for interference, if any counterexamples were found they are returned. (If the result is
+    /// empty, then this is interpreted as no interference detected.)
     public Optional<Map<Location,Bgpv4Route>> run() {
         inferred.clear();
         working.clear();

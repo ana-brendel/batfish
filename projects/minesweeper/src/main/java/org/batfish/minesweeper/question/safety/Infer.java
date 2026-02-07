@@ -43,11 +43,10 @@ public class Infer {
     private final Queue<Location> working = new LinkedList<>();
     private final Map<Location, Invariant> inferred = new Hashtable<>();
 
-    public record CounterExample(
-            Location location,
-            Invariant post,
-            Location cause) { }
+    /// Inference counterexample, used for when we infer false within the network
+    public record CounterExample(Location location, Invariant post, Location cause) { }
 
+    /// Stores useful results collected during invariant inference
     public class Result {
         public final boolean verified;
         public final Map<Location, Invariant> invariants;
@@ -83,19 +82,6 @@ public class Infer {
         this.exports.putAll(context.exports());
         this.assumptions.putAll(context.assumptions());
     }
-
-    public Lightyear checker() {
-        return new Lightyear(this.tbdd,this.nodes,this.imports,this.exports);
-    }
-
-    /// Added for pybatfish question development
-//    public RoutingPolicy getPolicy(Edge location, boolean getImport) {
-//        if (getImport) {
-//            return imports.getOrDefault(location,null);
-//        } else {
-//            return exports.getOrDefault(location,null);
-//        }
-//    }
 
     /**
      * Add a property to be verified at provided location. If provided a node, this will add the node
@@ -186,7 +172,8 @@ public class Infer {
     }
 
     /// Checks if verification succeed by checking assumptions.
-    /// If it fails, we find a route example which (in dev)
+    /// If it fails (i.e. the assumption does not imply the needed invariant), we find a route example which is
+    /// a counterexample that adheres to the assumption but does not satisfy the invariant
     private Map<Location,Optional<Bgpv4Route>> verificationAssumptionCheck() {
         Map<Location,Optional<Bgpv4Route>> checks = new HashMap<>();
         for (Location location : assumptions.keySet()) {
@@ -224,7 +211,7 @@ public class Infer {
         return new Result(counter.isEmpty() && checks.values().stream().allMatch(Optional::isEmpty),copyInferred(inferred),counter,checks);
     }
 
-    /// Returns a refiner object which is used to refine invariants in order to tease out key properties
+    /// Returns a Refiner object which is used to refine invariants in order to tease out key properties
     public Refine refiner() {
         return Refine.builder(this.tbdd)
                 .setNodes(this.nodes)

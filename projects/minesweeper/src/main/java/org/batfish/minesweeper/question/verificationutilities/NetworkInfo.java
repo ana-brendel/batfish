@@ -112,7 +112,7 @@ public class NetworkInfo {
         return Optional.empty();
     }
 
-    /// Returns boolean indicating if the provided edge has an policy associated with it
+    /// Returns boolean indicating if the provided edge has a policy associated with it
     public boolean containsPolicy(Edge edge) {
         return imports.containsKey(edge) || exports.containsKey(edge);
     }

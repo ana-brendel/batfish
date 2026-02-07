@@ -37,11 +37,11 @@ public class LivenessAnswerer extends Answerer {
     private final @Nonnull Map<Location.Builder, Invariant.Builder> _assumptions;
     private final @Nonnull Set<RegexConstraint> _communityRegexes;
     private final @Nonnull Set<RegexConstraint> _asPathRegexes;
-    private final boolean _readable;
+    private final boolean _showAll;
 
     public LivenessAnswerer(LivenessQuestion question, IBatfish batfish) {
         super(question, batfish);
-        _readable = question.get_readable();
+        _showAll = question.get_show_all();
         _prefix = question.get_prefix();
         _targets = question.get_targets();
 

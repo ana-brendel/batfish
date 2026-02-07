@@ -25,13 +25,13 @@ public final class LivenessQuestion extends Question {
     private static final String PROP_LOCATION = "location";
     private static final String PROP_ASSUMPTION_LOCATIONS = "assumption_locations";
     private static final String PROP_ASSUMPTIONS = "assumptions";
-    private static final String PROP_READABLE = "readable";
+    private static final String PROP_SHOW_ALL = "show_all";
 
     private final @Nonnull PrefixSpace _prefix;
     private final @Nonnull Map<Location.Builder,  Invariant.Builder> _targets = new HashMap<>();
     private final Location.Builders _assumption_locations;
     private final Invariant.Builders _assumptions;
-    private final boolean _readable;
+    private final boolean _showAll;
 
     public LivenessQuestion() { this(DEFAULT_PREFIX,null,null,null,null,false); }
 
@@ -41,14 +41,14 @@ public final class LivenessQuestion extends Question {
             @Nullable Location.Builder location,
             @Nullable Location.Builders assumptions_locations,
             @Nullable Invariant.Builders assumptions,
-            boolean readable) {
+            boolean showAll) {
         if (target != null && location != null) {
             _targets.put(location,target);
         }
         _prefix = prefix;
         _assumption_locations = assumptions_locations;
         _assumptions = assumptions;
-        _readable = readable;
+        _showAll = showAll;
     }
 
     @JsonCreator
@@ -58,10 +58,10 @@ public final class LivenessQuestion extends Question {
             @JsonProperty(PROP_LOCATION) Location.Builder location,
             @JsonProperty(PROP_ASSUMPTION_LOCATIONS) @Nullable Location.Builders assumption_locations,
             @JsonProperty(PROP_ASSUMPTIONS) @Nullable Invariant.Builders assumptions,
-            @JsonProperty(PROP_READABLE) @Nullable Boolean readable
+            @JsonProperty(PROP_SHOW_ALL) @Nullable Boolean showAll
     ) {
         // default for display is false (as it is not efficient)
-        return new LivenessQuestion(prefix,target,location,assumption_locations,assumptions, readable != null && readable);
+        return new LivenessQuestion(prefix,target,location,assumption_locations,assumptions, showAll != null && showAll);
     }
 
     @Nonnull
@@ -70,7 +70,7 @@ public final class LivenessQuestion extends Question {
     @Nonnull
     public Map<Location.Builder, Invariant.Builder> get_targets() { return _targets; }
 
-    public boolean get_readable() { return _readable; }
+    public boolean get_show_all() { return _showAll; }
 
     @Nonnull
     public Optional<Location.Builders> get_assumption_locations() {

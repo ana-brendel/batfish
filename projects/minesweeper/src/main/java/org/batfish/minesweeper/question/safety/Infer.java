@@ -12,7 +12,6 @@ import org.batfish.minesweeper.bdd.TransferBDD;
 import org.batfish.minesweeper.question.liveness.Path;
 import org.batfish.minesweeper.question.verificationutilities.Edge;
 import org.batfish.minesweeper.question.verificationutilities.Invariant;
-import org.batfish.minesweeper.question.verificationutilities.Lightyear;
 import org.batfish.minesweeper.question.verificationutilities.Location;
 import org.batfish.minesweeper.question.verificationutilities.Node;
 

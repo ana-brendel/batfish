@@ -733,7 +733,6 @@ public class RefineTest {
 
         Map<Location,String> initials = refiner.displayInitial();
         Map<Location,String> refinements = refiner.displayRefinement();
-        Map<Location,String> interpolants = refiner.displayInterpolants();
 
         assertTrue(lightyear.check(refiner.initial).isEmpty());
         assertTrue(lightyear.check(refiner.refined).isEmpty());
@@ -890,7 +889,6 @@ public class RefineTest {
 
         Map<Location,String> initials = refiner.displayInitial();
         Map<Location,String> refinements = refiner.displayRefinement();
-        Map<Location,String> interpolants = refiner.displayInterpolants();
 
         assertTrue(lightyear.check(refiner.initial).isEmpty());
         assertTrue(lightyear.check(refiner.refined).isEmpty());

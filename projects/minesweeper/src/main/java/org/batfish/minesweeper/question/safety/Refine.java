@@ -143,7 +143,7 @@ public class Refine {
         this.exports = exports;
         this.targets = targets;
         this.assumptions = assumptions;
-        this.enteringNetwork = incoming;
+        this.enteringNetwork = incoming.stream().filter(inferred::containsKey).collect(Collectors.toSet());
         this.inferred = inferred;
     }
 
@@ -160,6 +160,9 @@ public class Refine {
             LOGGER.info("Working to refine the property following: {}", lastKnown);
             if (lastKnown instanceof Edge edge && nodes.containsKey(edge.getDst())) {
                 Node toRefine = nodes.get(edge.getDst());
+                if (!inferred.containsKey(toRefine)) {
+                    throw new BatfishException("This should not happen - any reachable node should have inferred invariant");
+                }
                 Invariant weakest = inferred.get(toRefine).copy();
                 Invariant strongest = refinements.get(edge).strongestPostcondition(imports.get(edge));
                 BDD interpolant = interpolate(tbdd,strongest.wellFormedBDD(),weakest.wellFormedBDD());
@@ -172,6 +175,9 @@ public class Refine {
                 Invariant precondition = refinements.get(source);
                 for (Location neighbor : inferred.keySet()) {
                     if (neighbor instanceof Edge toRefine && toRefine.isSrc(source)) {
+                        if (!inferred.containsKey(toRefine)) {
+                            throw new BatfishException("This should not happen - any reachable edge should have inferred invariant");
+                        }
                         Invariant weakest = inferred.get(toRefine).copy();
                         Invariant strongest = precondition.strongestPostcondition(exports.get(toRefine));
                         BDD interpolant = interpolate(tbdd,strongest.wellFormedBDD(),weakest.wellFormedBDD());

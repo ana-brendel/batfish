@@ -121,14 +121,16 @@ public final class SafetyAnswerer extends Answerer {
                         .put(Setup.OVERALL_VERIFICATION_COL, refinement.verified)
                         .build());
             } else {
-                info.getAssumptions().forEach((loc, assumption) -> tae.addRow(Row.builder()
-                        .put(Setup.LOCATION_COL, info.locationStr(loc))
+                info.getAssumptions().entrySet().stream()
+                        .filter(entry -> refinement.refined.containsKey(entry.getKey()))
+                        .forEach(entry -> tae.addRow(Row.builder()
+                        .put(Setup.LOCATION_COL, info.locationStr(entry.getKey()))
                         .put(Setup.LOCATION_RELEVANCE_COL, "Assumption")
-                        .put(Setup.PROVIDED_INVARIANT_COL, assumption.toString(refinementOccurred, cache))
-                        .put(Setup.INFERRED_INVARIANTS_COL, assumption.equals(refinement.refined.get(loc)) ?
-                                "same" : refinement.refined.get(loc).toString(true, cache))
-                        .put(Setup.COUNTEREXAMPLE_COL, checks.containsKey(loc) && checks.get(loc).isPresent()
-                            ? nonDefaultRoute(checks.get(loc).get()) : "")
+                        .put(Setup.PROVIDED_INVARIANT_COL, entry.getValue().toString(refinementOccurred, cache))
+                        .put(Setup.INFERRED_INVARIANTS_COL, entry.getValue().equals(refinement.refined.get(entry.getKey())) ?
+                                "same" : refinement.refined.get(entry.getKey()).toString(true, cache))
+                        .put(Setup.COUNTEREXAMPLE_COL, checks.containsKey(entry.getKey()) && checks.get(entry.getKey()).isPresent()
+                            ? nonDefaultRoute(checks.get(entry.getKey()).get()) : "")
                         .put(Setup.OVERALL_VERIFICATION_COL, refinement.verified)
                         .build()));
             }

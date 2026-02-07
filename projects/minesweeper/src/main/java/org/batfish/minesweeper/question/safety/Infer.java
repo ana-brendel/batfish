@@ -110,16 +110,8 @@ public class Infer {
         return this;
     }
 
-    /// Initializes all invariants to true except for setting the targets
+    /// Initializes all target invariants
     private void initializeInvariants() {
-        for (Location location : locations) {
-            // add the default invariants to the inferred, and the target property
-            if (this.targets.containsKey(location)) {
-                inferred.put(location, this.targets.get(location).copy());
-            } else {
-                inferred.put(location,new Invariant(this.tbdd));
-            }
-        }
         for (Location location : targets.keySet()) {
             if (!inferred.containsKey(location)) {
                 inferred.put(location, this.targets.get(location).copy());
@@ -131,6 +123,9 @@ public class Infer {
     private Optional<CounterExample> inferenceLoop() {
         while (!working.isEmpty()) {
             Location location = working.remove();
+            if (!inferred.containsKey(location)) {
+                throw new BatfishException("Trying to get existing invariant for unvisited location: " + location);
+            }
             Invariant property = inferred.get(location);
             LOGGER.info("Working to weakest precondition for property to hold at: {}", location);
             assert !property.isFalse();
@@ -139,13 +134,14 @@ public class Infer {
                 if (exportPolicy == null)
                     throw new BatfishException("Infer.inferenceLoop() - No export policy for: " + edge);
                 Node src = nodes.get(edge.getSrc());
-                Invariant existing = inferred.get(src);
+                boolean firstVisit = !inferred.containsKey(src);
+                Invariant existing = inferred.getOrDefault(src,new Invariant(tbdd));
                 Invariant wp = property.weakestPrecondition(exportPolicy);
                 Invariant updated = strongestCommonImplicant(existing,wp);
                 inferred.put(src,updated);
                 if (updated.isFalse()) {
                     return Optional.of(new CounterExample(src.copy(),property.copy(),location.copy()));
-                } else if (!existing.equals(updated) && !working.contains(src)) {
+                } else if ((firstVisit || !existing.equals(updated)) && !working.contains(src)) {
                     working.add(src);
                 }
             } else if (location instanceof Node node) {
@@ -154,13 +150,14 @@ public class Infer {
                         RoutingPolicy importPolicy = imports.getOrDefault(edge, null);
                         if (importPolicy == null)
                             throw new BatfishException("Infer.inferenceLoop() - No import policy for: " + edge);
-                        Invariant existing = inferred.get(edge);
+                        boolean firstVisit = !inferred.containsKey(edge);
+                        Invariant existing = inferred.getOrDefault(edge,new Invariant(tbdd));
                         Invariant wp = property.weakestPrecondition(importPolicy);
                         Invariant updated = strongestCommonImplicant(existing,wp);
                         inferred.put(edge,updated);
                         if (updated.isFalse()) {
                             return Optional.of(new CounterExample(edge.copy(),property.copy(),location.copy()));
-                        } else if (!existing.equals(updated) && !working.contains(edge)) {
+                        } else if ((firstVisit || !existing.equals(updated)) && !working.contains(edge)) {
                             working.add(edge);
                         }
                     }

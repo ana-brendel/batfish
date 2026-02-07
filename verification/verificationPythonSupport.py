@@ -1,6 +1,6 @@
 # Python clauses useful for easily calling pybatfish API
 class Clause:
-    def __init__(self,communities:list[str],prefixes:list[str]):
+    def __init__(self,communities:list[str]=[],prefixes:list[str]=[]):
         self.communities = communities
         self.prefixes = prefixes
 
@@ -21,9 +21,13 @@ class LocationPropertyPair:
         return "".join(map(lambda c: c.format(),self.property))
 
 class VerificationQuery:
-    def __init__(self, target:LocationPropertyPair,assumptions:list[LocationPropertyPair]):
+    def __init__(self, target:LocationPropertyPair,assumptions:list[LocationPropertyPair],refine:bool=True):
         self.target = target
         self.assumptions = assumptions
+        self.refine = refine
+
+    def refines(self):
+        return self.refine
 
     def format(self) -> dict:
         result = { "target" : self.target.formatProperty(), "location" : self.target.location }

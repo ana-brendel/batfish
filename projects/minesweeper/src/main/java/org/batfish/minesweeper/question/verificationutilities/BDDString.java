@@ -41,7 +41,8 @@ public class BDDString {
             return "True";
         } else {
             BDDString str = new BDDString(tbdd,wf.and(bdd));
-            return str.getString();
+            String result = str.getString();
+            return result.trim().equals("+") ? "LIMIT (Complex BDD)" : result;
         }
     }
 

@@ -201,7 +201,7 @@ public class InferTest {
         TestConfigConstructionUtils.Network net = originalExample(ALPHANODE,BETANODE,GAMMANODE,DELTANODE);
 
         NetworkInfo info_1 = net.getInfo();
-        info_1.addAnchor(ALPHANODE);
+        info_1.anyRouteAllowedAt(ALPHANODE);
         Infer verifier_1 = info_1.toInfer();
         Invariant property_1 = new Invariant(net.tbdd(),
                 Invariant.clauseBuilder().avoidPrefix(PREFIX).build(net.tbdd(), net.imports().get(DELTANODE)));
@@ -210,7 +210,7 @@ public class InferTest {
         assertTrue(result_1.verified);
 
         NetworkInfo info_2 = net.getInfo();
-        info_2.addAnchor(new Edge(ALPHANODE,BETANODE));
+        info_2.anyRouteAllowedAt(new Edge(ALPHANODE,BETANODE));
         Infer verifier_2 = info_2.toInfer();
         Invariant property_2 = new Invariant(net.tbdd(),Invariant.clauseBuilder().avoidPrefix(PREFIX).build(net.tbdd(),net.imports().get(DELTANODE)));
         verifier_2.addProperty(DELTANODE,property_2);
@@ -218,7 +218,7 @@ public class InferTest {
         assertFalse(result_2.verified);
 
         NetworkInfo info_3 = net.getInfo();
-        info_3.addAnchor(ALPHANODE);
+        info_3.anyRouteAllowedAt(ALPHANODE);
         Infer verifier_3 = info_3.toInfer();
         RegexConstraints comm = new RegexConstraints(List.of(RegexConstraint.parse("100:2")));
         Invariant property_3 = new Invariant(net.tbdd(),Invariant.clauseBuilder().setCommunities(comm).build(net.tbdd(),net.imports().get(DELTANODE)));
@@ -227,7 +227,7 @@ public class InferTest {
         assertFalse(result_3.verified);
 
         NetworkInfo info_4 = net.getInfo();
-        info_4.addAnchor(ALPHANODE);
+        info_4.anyRouteAllowedAt(ALPHANODE);
         Infer verifier_4 = info_4.toInfer();
         RegexConstraints comm_ = new RegexConstraints(List.of(RegexConstraint.parse("100:1"),RegexConstraint.parse("!100:2")));
         Invariant property_4 = new Invariant(net.tbdd(),Invariant.clauseBuilder().setCommunities(comm_).build(net.tbdd(),net.imports().get(DELTANODE)));
@@ -236,7 +236,7 @@ public class InferTest {
         assertFalse(result_4.verified);
 
         NetworkInfo info_5 = net.getInfo();
-        info_5.addAnchor(ALPHANODE);
+        info_5.anyRouteAllowedAt(ALPHANODE);
         Infer verifier_5 = info_5.toInfer();
         RegexConstraints comm__ = new RegexConstraints(List.of(RegexConstraint.parse("100:1"),RegexConstraint.parse("!100:2")));
         Invariant property_5 = new Invariant(net.tbdd(),Invariant.clauseBuilder().setCommunities(comm__).build(net.tbdd(),net.imports().get(GAMMANODE)));
@@ -254,7 +254,7 @@ public class InferTest {
         TestConfigConstructionUtils.Network net = originalExample(ALPHANODE,BETANODE,GAMMANODE,DELTANODE);
 
         NetworkInfo info = net.getInfo();
-        info.addAnchor(ALPHANODE);
+        info.anyRouteAllowedAt(ALPHANODE);
         Infer verifier = info.toInfer();
         Invariant property = new Invariant(net.tbdd(),
                 Invariant.clauseBuilder().avoidPrefix(PREFIX).build(net.tbdd(), net.imports().get(DELTANODE)));
@@ -401,7 +401,7 @@ public class InferTest {
             Invariant not_prefix = Invariant.builder().addClause(avoidPrefix).build(net.tbdd(), net.imports().get(ALPHANODE));
 
             NetworkInfo info = net.getInfo();
-            info.addAnchor(ALPHANODE);
+            info.anyRouteAllowedAt(ALPHANODE);
             Infer verifier = info.toInfer();
             verifier.addProperty(DELTANODE, property);
             Infer.Result result = verifier.run();
@@ -557,7 +557,7 @@ public class InferTest {
         TestConfigConstructionUtils.Network net_0 = meshNetworkExample(A1,B1,G1,D1,A2,B2,G2,D2,0);
         Invariant property_0 = new Invariant(net_0.tbdd(), Invariant.clauseBuilder().avoidPrefix(PREFIX).build(net_0.tbdd(), net_0.imports().get(D1)));
         NetworkInfo info_0 = net_0.getInfo();
-        info_0.addAnchor(A1).addAnchor(A2);
+        info_0.anyRouteAllowedAt(A1).anyRouteAllowedAt(A2);
         Infer verifier_0 = info_0.toInfer();
         verifier_0.addProperty(D1, property_0).addProperty(D2, property_0);
         Infer.Result result_0 = verifier_0.run();
@@ -567,7 +567,7 @@ public class InferTest {
         TestConfigConstructionUtils.Network net_1 = meshNetworkExample(A1,B1,G1,D1,A2,B2,G2,D2,1);
         Invariant property_1 = new Invariant(net_1.tbdd(), Invariant.clauseBuilder().avoidPrefix(PREFIX).build(net_1.tbdd(), net_1.imports().get(D1)));
         NetworkInfo info_1 = net_1.getInfo();
-        info_1.addAnchor(A1).addAnchor(A2);
+        info_1.anyRouteAllowedAt(A1).anyRouteAllowedAt(A2);
         Infer verifier_1 = info_1.toInfer();
         verifier_1.addProperty(D1, property_1);
         Infer.Result result_1 = verifier_1.run();
@@ -578,7 +578,7 @@ public class InferTest {
         Invariant property_2 = new Invariant(net_2.tbdd(), Invariant.clauseBuilder().avoidPrefix(PREFIX).build(net_2.tbdd(), net_2.imports().get(D1)));
         Invariant not_prefix_2 = Invariant.builder().addClause(avoidPrefix).build(net_2.tbdd(), net_2.imports().get(A1));
         NetworkInfo info_2 = net_2.getInfo();
-        info_2.addAnchor(A1).addAnchor(A2);
+        info_2.anyRouteAllowedAt(A1).anyRouteAllowedAt(A2);
         Infer verifier_2 = info_2.toInfer();
         verifier_2.addProperty(D1, property_2).addProperty(D2, property_2);
         Infer.Result result_2 = verifier_2.run();
@@ -591,7 +591,7 @@ public class InferTest {
         Invariant property_3 = new Invariant(net_3.tbdd(), Invariant.clauseBuilder().avoidPrefix(PREFIX).build(net_3.tbdd(), net_3.imports().get(D1)));
         Invariant not_prefix_3 = Invariant.builder().addClause(avoidPrefix).build(net_3.tbdd(), net_3.imports().get(A1));
         NetworkInfo info_3 = net_3.getInfo();
-        info_3.addAnchor(A1).addAnchor(A2);
+        info_3.anyRouteAllowedAt(A1).anyRouteAllowedAt(A2);
         Infer verifier_3 = info_3.toInfer();
         verifier_3.addProperty(D1, property_3).addProperty(D2, property_3);
         Infer.Result result_3 = verifier_3.run();
@@ -605,7 +605,7 @@ public class InferTest {
         Invariant property_alt = new Invariant(net_4.tbdd(), Invariant.clauseBuilder().matchPrefix(PREFIX).build(net_4.tbdd(), net_4.imports().get(D1)));
         Invariant expected = Invariant.builder().addClause(Invariant.clauseBuilder().matchPrefix(PREFIX)).addClause(match_100_1).addClause(match_100_2).build(net_4.tbdd(), net_4.imports().get(A1));
         NetworkInfo info_4 = net_4.getInfo();
-        info_4.addAnchor(A1).addAnchor(A2);
+        info_4.anyRouteAllowedAt(A1).anyRouteAllowedAt(A2);
         Infer verifier_4 = info_4.toInfer();
         verifier_4.addProperty(D1, property_4).addProperty(D2, property_alt);
         Infer.Result result_4 = verifier_4.run();
@@ -778,7 +778,7 @@ public class InferTest {
         TestConfigConstructionUtils.Network net_1 = threeProngedNetwork(A0,B0,C0,NODE1,NODE2,NODE3,NODE4,1);
         Invariant property_1 = Invariant.builder().addClause(avoidBoth).build(net_1.tbdd(), net_1.imports().get(NODE4));
         NetworkInfo info_1 = net_1.getInfo();
-        info_1.addAnchor(A0).addAnchor(B0).addAnchor(C0);
+        info_1.anyRouteAllowedAt(A0).anyRouteAllowedAt(B0).anyRouteAllowedAt(C0);
         Infer verifier_1 = info_1.toInfer();
         verifier_1.addProperty(NODE4, property_1);
         Infer.Result result_1 = verifier_1.run();
@@ -789,7 +789,7 @@ public class InferTest {
         TestConfigConstructionUtils.Network net_2 = threeProngedNetwork(A0,B0,C0,NODE1,NODE2,NODE3,NODE4,2);
         Invariant property_2 = Invariant.builder().addClause(avoidBoth).build(net_2.tbdd(), net_2.imports().get(NODE4));
         NetworkInfo info_2 = net_2.getInfo();
-        info_2.addAnchor(A0).addAnchor(B0).addAnchor(C0);
+        info_2.anyRouteAllowedAt(A0).anyRouteAllowedAt(B0).anyRouteAllowedAt(C0);
         Infer verifier_2 = info_2.toInfer();
         verifier_2.addProperty(NODE4, property_2);
         Infer.Result result_2 = verifier_2.run();
@@ -932,7 +932,7 @@ public class InferTest {
 
         TestConfigConstructionUtils.Network net = twoPathNetwork(NODE_1A,NODE_1B,NODE_2A,NODE_2B,NODE_3,NODE_4,0);
         NetworkInfo info = net.getInfo();
-        info.addAnchor(NODE_1A).addAnchor(NODE_1B);
+        info.anyRouteAllowedAt(NODE_1A).anyRouteAllowedAt(NODE_1B);
         Infer verifier = info.toInfer();
         Invariant property = new Invariant(net.tbdd(),Invariant.clauseBuilder().avoidPrefix(PREFIX).build(net.tbdd(),net.imports().get(NODE_4)));
         verifier.addProperty(NODE_4,property);
@@ -943,7 +943,7 @@ public class InferTest {
 
         TestConfigConstructionUtils.Network net_1 = twoPathNetwork(NODE_1A,NODE_1B,NODE_2A,NODE_2B,NODE_3,NODE_4,1);
         NetworkInfo info_1 = net_1.getInfo();
-        info_1.addAnchor(NODE_1A).addAnchor(NODE_1B);
+        info_1.anyRouteAllowedAt(NODE_1A).anyRouteAllowedAt(NODE_1B);
         Infer verifier_1 = info_1.toInfer();
         Invariant property_1 = new Invariant(net_1.tbdd(),Invariant.clauseBuilder().avoidPrefix(PREFIX).build(net_1.tbdd(),net_1.imports().get(NODE_4)));
         verifier_1.addProperty(NODE_4,property_1);
@@ -954,7 +954,7 @@ public class InferTest {
 
         TestConfigConstructionUtils.Network net_2 = twoPathNetwork(NODE_1A,NODE_1B,NODE_2A,NODE_2B,NODE_3,NODE_4,2);
         NetworkInfo info_2 = net_2.getInfo();
-        info_2.addAnchor(NODE_1A).addAnchor(NODE_1B);
+        info_2.anyRouteAllowedAt(NODE_1A).anyRouteAllowedAt(NODE_1B);
         Infer verifier_2 = info_2.toInfer();
         Invariant property_2 = new Invariant(net_2.tbdd(),Invariant.clauseBuilder().avoidPrefix(PREFIX).build(net_2.tbdd(),net_2.imports().get(NODE_4)));
         verifier_2.addProperty(NODE_4,property_2);

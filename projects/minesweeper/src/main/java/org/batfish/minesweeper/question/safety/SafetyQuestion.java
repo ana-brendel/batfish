@@ -26,7 +26,7 @@ public final class SafetyQuestion extends Question {
     private final @Nonnull Map<Location.Builder,  Invariant.Builder> _targets = new HashMap<>();
     private final Location.Builders _assumption_locations;
     private final Invariant.Builders _assumptions;
-    private final boolean _showAll;
+    private final boolean _show_all;
     private final boolean _refine;
 
    public SafetyQuestion() { this(null,null,null,null,false,false); }
@@ -36,14 +36,14 @@ public final class SafetyQuestion extends Question {
             @Nullable Location.Builder location,
             @Nullable Location.Builders assumptions_locations,
             @Nullable Invariant.Builders assumptions,
-            boolean showAll,
+            boolean show_all,
             boolean refine) {
         if (target != null && location != null) {
             _targets.put(location,target);
         }
         _assumption_locations = assumptions_locations;
         _assumptions = assumptions;
-        _showAll = showAll;
+        _show_all = show_all;
         _refine = refine;
     }
 
@@ -53,18 +53,18 @@ public final class SafetyQuestion extends Question {
             @JsonProperty(PROP_LOCATION) Location.Builder location,
             @JsonProperty(PROP_ASSUMPTION_LOCATIONS) @Nullable Location.Builders assumption_locations,
             @JsonProperty(PROP_ASSUMPTIONS) @Nullable Invariant.Builders assumptions,
-            @JsonProperty(PROP_SHOW_ALL) @Nullable Boolean showAll,
+            @JsonProperty(PROP_SHOW_ALL) @Nullable Boolean show_all,
             @JsonProperty(PROP_REFINE) @Nullable Boolean refine
     ) {
-       // default for readable is false (as it is not efficient), default for refine is true (as it is not efficient)
+       // default for show_all is false (as it is not efficient), default for refine is true (as it is not efficient)
         // NOTE: made the refine default false because it wasn't correctly getting false flag
        return new SafetyQuestion(target,location,assumption_locations,assumptions,
-               showAll != null && showAll,refine != null && refine);
+               show_all != null && show_all,refine != null && refine);
     }
 
     @Nonnull
     public Map<Location.Builder, Invariant.Builder> get_targets() { return _targets; }
-    public boolean get_show_all() { return _showAll; }
+    public boolean get_show_all() { return _show_all; }
     public boolean get_refine() { return _refine; }
 
     public Optional<Location.Builders> get_assumption_locations() {

@@ -105,7 +105,7 @@ public final class SafetyAnswerer extends Answerer {
                             .put(Setup.LOCATION_RELEVANCE_COL, "Target")
                             .put(Setup.PROVIDED_INVARIANT_COL, targets.get(loc).toString(refinementOccurred,cache))
                             .put(Setup.INFERRED_INVARIANTS_COL, refinementOccurred ?
-                                    refinement.refined.get(loc).toString(true,cache) : "same")
+                                    refinement.refined.get(loc).toString(true,cache) : "same as provided")
                             .put(Setup.COUNTEREXAMPLE_COL, "")
                             .put(Setup.OVERALL_VERIFICATION_COL, refinement.verified)
                             .build()));

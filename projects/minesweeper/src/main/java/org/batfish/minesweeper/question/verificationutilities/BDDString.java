@@ -18,7 +18,7 @@ import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
 public class BDDString {
-    private final BDD bdd; // the bdd stored here is not assumed to be well-formed
+    private final BDD original; // the bdd stored here is not assumed to be well-formed
     private final BDDFactory factory;
     private final BDDRoute base;
     private final BDD wf;
@@ -26,9 +26,13 @@ public class BDDString {
     private final BDD prefixInfoSupport;
     private final Map<CommunityVar, Set<Integer>> communities;
 
+    // Integer representation used for easier simplification/reduction
+    /// Maps integers to the string that describes that property
     private final Map<Integer,String> atomicPredicateBank = new HashMap<>();
+    /// Maps string description of property to the integer used to represent it
     private final Map<String,Integer> stringBank = new HashMap<>();
 
+    /// Returns string representation of the provided BDD
     public static String get(TransferBDD tbdd, BDD bdd) {
         BDD wf = tbdd.getOriginalRoute().wellFormednessConstraints(true);
         if (bdd.isZero()) {
@@ -42,7 +46,7 @@ public class BDDString {
     }
 
     private BDDString(TransferBDD tbdd, BDD bdd) {
-        this.bdd = bdd.id();
+        this.original = bdd.id();
         this.factory = tbdd.getFactory();
         this.base = tbdd.getOriginalRoute();
         this.wf = this.base.wellFormednessConstraints(true);
@@ -59,10 +63,12 @@ public class BDDString {
 //        this.tbdd.getConfigAtomicPredicates().getAsPathRegexAtomicPredicates().getRegexAtomicPredicates();
     }
 
-    private BDD dropVariables(BDD original, BDD toRemove) {
+    /// Returns the original BDD with any variable mentioned in toRemove removed
+    private static BDD dropVariables(BDD original, BDD toRemove) {
         return original.exist(toRemove.support());
     }
 
+    /// Generates (or if it exists, find) the integer which represents the string property provided
     private Integer addStringToBank(String label) {
         if (stringBank.containsKey(label)) {
             assert atomicPredicateBank.containsKey(stringBank.get(label));
@@ -75,6 +81,9 @@ public class BDDString {
         }
     }
 
+    /// Returns the property associated with the variable. If the variable is negative, this is associated
+    /// with the negation of that property. A zero corresponds to '+' which means there is some information
+    /// which we are not effectively representing.
     private String getFromStringBank(Integer var) {
         if (var < 0) {
             return "!" + this.atomicPredicateBank.get(-var);
@@ -83,7 +92,8 @@ public class BDDString {
         }
     }
 
-    /// Currently, the only atomic predicates which are considered are communities (not AS paths)
+    /// Returns mapping of BDD to the string representation of the atomic predicates satisfied by that BDD.
+    /// Currently, the only atomic predicates which are considered are communities (not AS paths).
     private Pair<BDD, Set<Integer>> fetchAtomicPredicateBDD(byte[] assignment) {
         Set<Integer> strings = new HashSet<>();
         Set<BDD> running = new HashSet<>();
@@ -112,6 +122,7 @@ public class BDDString {
         return Pair.of(this.factory.andAll(running),strings);
     }
 
+    /// Converts byte[] corresponding to variable assignments to bdd, bdd size is limited by total variable count
     private BDD bddOfByteArr(byte[] arr) {
         Set<BDD> running = new HashSet<>();
         for (int v = 0; v < arr.length; v++) {
@@ -125,6 +136,7 @@ public class BDDString {
         return this.factory.andAll(running);
     }
 
+    /// Return prefix associated with a bdd
     private Prefix prefixOfBDD(BDD bdd) {
         Ip ip = Ip.create(this.base.getPrefix().satAssignmentToLong(bdd));
         int length = (int) this.base.getPrefixLength().satAssignmentToLong(bdd);
@@ -157,6 +169,7 @@ public class BDDString {
                 // if all the prefixes are some zero ip, treat that as no prefix
                 prefixes.clear();
             } else if (prefixes.size() > 1) {
+                // this branch checks if the set of prefixes is the negation of a prefix, limited to one
                 BDD disjunction = this.factory.orAll(differentPrefixes);
                 BDD potential = this.wf.and(disjunction.not());
                 Set<Pair<BDD,Prefix>> negated = new HashSet<>();
@@ -196,6 +209,7 @@ public class BDDString {
         }
     }
 
+    /// Checks remaining BDD set to see if it is a constant
     private Set<BDD> checkSetForConstant(Set<BDD> set) {
         Optional<BDD> single = set.stream().findFirst();
         if (set.size() == 1 && (this.wf.equals(this.wf.and(single.get())) || single.get().isOne())) {
@@ -211,6 +225,7 @@ public class BDDString {
         }
     }
 
+    /// Naive resolution algorithm (only reduces with single atoms)
     private Set<Set<Integer>> resolution(Set<Set<Integer>> clauses) {
         Set<Integer> atoms = clauses.stream().filter(clause -> clause.size() == 1)
                 .map(clause -> clause.stream().findFirst().get())
@@ -231,16 +246,33 @@ public class BDDString {
         return clauses;
     }
 
-    private String getString() {
+    /* *** Main driving loop for isolating the string associated with the provided BDD ***
+    *   Note: the provided BDD is original BDD projected onto the variables which we are
+    *   displaying the string for - in this case, atomic predicates (communities) and prefixes.
+    *
+    *   If there are more than 64 satisfying assignments, we don't investigate and return a string
+    *   indicating that the BDD is too complex for current analysis.
+    *
+    *   FUTURE IDEA: I think we might want to make the prefixes into atomic predicates and assign them their
+    *   own BDD variables. This will be useful for generating interpolants and for string representation - I
+    *   believe this will need to be introduced in the weakest precondition / strongest postcondition functions,
+    *   most likely earlier with the creation of the TransferBDD. Larger software engineering task.
+    * */
+    private String driver(BDD bdd) {
+        BDD originalProjection = bdd.id().and(this.wf);
         Map<BDD,Set<Integer>> bddToDisplays = new HashMap<>();
         Map<BDD,Set<BDD>> disjunctsByAtomicPredicates = new HashMap<>();
-        BDD.AllSatIterator iterator = this.bdd.allsat();
+        BDD.AllSatIterator iterator = bdd.allsat();
 
+        // STEP 1: Pull out any atomic predicates (i.e. easy to provide strings for)
+        int countLimit = 64;
         while (iterator.hasNext()) {
+            countLimit -= 1;
+            if (countLimit == 0) return "LIMIT (Complex BDD)";
             // for each satisfying assignment, pull out the atomic predicates
             byte[] sat = iterator.next();
             Pair<BDD, Set<Integer>> atoms = this.fetchAtomicPredicateBDD(sat);
-            BDD remaining = this.dropVariables(this.bddOfByteArr(sat),atoms.getLeft());
+            BDD remaining = dropVariables(this.bddOfByteArr(sat),atoms.getLeft());
 
             // if we haven't seen this set of atomic predicates yet, add to maps
             if (!disjunctsByAtomicPredicates.containsKey(atoms.getLeft())) {
@@ -254,8 +286,11 @@ public class BDDString {
             assert bddToDisplays.containsKey(atoms.getLeft());
             disjunctsByAtomicPredicates.get(atoms.getLeft()).add(remaining);
         }
+        // AFTER STEP 1: disjunctsByAtomicPredicates should hold a map of Pi -> Qi1,...,Qin
+        // where each Pi is a conjunction of atomic predicates and each Qij is some more complicated BDD
+        // ex. provided bdd = [P1 /\ (Q11 \/ ... \/ Q1n)] \/ ... \/ [Pm /\ (Qm1 \/ ... \/ Qmn)]
 
-        // deals with prefixes - haven't touched yet
+        // STEP 2: Reason independently about the sets of disjuncts, specifically looking for negations of prefixes
         Map<BDD,Set<BDD>> pullPrefixes = new HashMap<>();
         for (BDD aps : disjunctsByAtomicPredicates.keySet()) {
             Optional<Set<Pair<Pair<BDD,BDD>, Integer>>> pulled = this.extractPrefixes(disjunctsByAtomicPredicates.get(aps));
@@ -282,16 +317,20 @@ public class BDDString {
                 });
             }
         }
+        // AFTER STEP 2: pullPrefixes should hold a map of Pi -> Qi1,...,Qin
+        // where each Pi is a conjunction of atomic predicates with a prefix (or negation of prefix)
+        // and each Qij is some more complicated BDD (same interpretation as above)
 
-        // sanity check - displayed bdd equals the input bdd
+        // STEP 3: Sanity check against returning an incorrect string representation by our metric (with
+        // respect to the BDD being projected onto prefixes and atomic predicates (communities))
         if (!(this.factory.orAll(pullPrefixes.entrySet().stream().map(disjunct -> {
             BDD common = disjunct.getKey();
             BDD internalDisjuncts = this.factory.orAll(disjunct.getValue());
             return common.and(internalDisjuncts);
-        }).collect(Collectors.toSet())).and(this.wf)).equals(this.bdd))
+        }).collect(Collectors.toSet())).and(this.wf)).equals(originalProjection))
             return "ERR (BDD String)";
 
-        // simplify the formula then translate to strings and disjoin each conjunction
+        // STEP 4: simplify the formula via naive resolution then translate to strings and disjoin each conjunction
         return this.resolution(pullPrefixes.entrySet().stream()
                 .map(entry -> {
                     Set<Integer> predicates = bddToDisplays.get(entry.getKey());
@@ -300,5 +339,14 @@ public class BDDString {
                 }).collect(Collectors.toSet())).stream().map(clause ->
                         String.join(",",clause.stream().map(this::getFromStringBank).sorted().toList()))
                 .sorted().collect(Collectors.joining(" OR "));
+    }
+
+    /// Invokes algorithm to generate string
+    private String getString() {
+        BDD variablesToProjectOn = this.prefixInfoSupport.id();
+        this.communities.values().forEach(vars -> vars.forEach(v ->
+                variablesToProjectOn.andWith(this.factory.ithVar(v))));
+        BDD projection = this.original.project(variablesToProjectOn);
+        return this.driver(projection);
     }
 }

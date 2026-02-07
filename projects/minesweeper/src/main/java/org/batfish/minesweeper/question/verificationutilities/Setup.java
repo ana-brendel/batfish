@@ -49,7 +49,7 @@ public class Setup {
         return communityVars;
     }
 
-    // code copied from SearchRoutePoliciesAnswerer and modified
+    /// Returns relevant ConfigAtomicPredicates (code copied from SearchRoutePoliciesAnswerer and modified)
     public static ConfigAtomicPredicates getConfigAtomicPredicates(
             Set<RegexConstraint> communityRegexes, Set<RegexConstraint> asPathRegexes, Collection<Configuration> configs) {
         return new ConfigAtomicPredicates(
@@ -116,6 +116,7 @@ public class Setup {
         return "Bgpv4Route{" + String.join(", ", features.build()) + "}";
     }
 
+    // Constants for metadata definitions
     public static final String LOCATION_COL = "Network_Location";
     public static final String ASSUMPTION_COL = "Initial_Assumption";
     public static final String TARGET_COL = "Target_Property";
@@ -123,7 +124,10 @@ public class Setup {
     public static final String OVERALL_VERIFICATION_COL = "Overall_Verification_Result";
     public static final String LOCAL_VERIFICATION_COL = "Local_Verification_Result";
     public static final String ASSUMPTION_VIOLATION_COL = "Assumption_Violation";
+    public static final String LOCATION_RELEVANCE_COL = "Location_Relevance";
+    public static final String PROVIDED_INVARIANT_COL = "Provided_Invariant";
 
+    /// TableMetadata for safety property which displays all invariants inferred across network
     public static TableMetadata metadata_safety() {
         List<ColumnMetadata> columnMetadata =
                 ImmutableList.of(
@@ -138,6 +142,20 @@ public class Setup {
                 columnMetadata, "Invariant Inference and Verification Results");
     }
 
+    /// TableMetadata for safety property which displays target properties and assumptions and any counterexamples
+    public static TableMetadata metadata_safety_limited() {
+        List<ColumnMetadata> columnMetadata =
+                ImmutableList.of(
+                        new ColumnMetadata(LOCATION_COL, STRING, "InDev", true, false),
+                        new ColumnMetadata(LOCATION_RELEVANCE_COL, STRING, "InDev", true, false),
+                        new ColumnMetadata(PROVIDED_INVARIANT_COL, STRING, "InDev", true, false),
+                        new ColumnMetadata(INFERRED_INVARIANTS_COL, STRING, "InDev", true, false),
+                        new ColumnMetadata(OVERALL_VERIFICATION_COL, STRING, "InDev", true, false));
+        return new TableMetadata(
+                columnMetadata, "Invariant Inference and Verification Results");
+    }
+
+    /// TableMetadata for displaying just the locations within the network
     public static TableMetadata metadata_locations() {
         List<ColumnMetadata> columnMetadata =
                 ImmutableList.of(new ColumnMetadata(LOCATION_COL, STRING, "InDev", true, false));

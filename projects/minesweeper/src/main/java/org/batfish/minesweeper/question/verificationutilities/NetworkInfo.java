@@ -40,6 +40,10 @@ public class NetworkInfo {
     private final Map<Edge, RoutingPolicy> exports = new HashMap<>();
     private final Map<Location, Invariant> assumptions = new HashMap<>();
 
+    public String locationStr(Location loc) {
+        return loc.contextString(this.nodes);
+    }
+
     private void processConfigs(@Nonnull Map<String, Configuration> configs) {
         for (String nodeName : configs.keySet()) {
             Configuration config = configs.get(nodeName);
@@ -192,7 +196,7 @@ public class NetworkInfo {
 
     public TableAnswerElement getAnswerElement() {
         TableAnswerElement tae = new TableAnswerElement(metadata_locations());
-        locations.forEach(loc -> tae.addRow(Row.builder().put(Setup.LOCATION_COL, loc.toString()).build()));
+        locations.forEach(loc -> tae.addRow(Row.builder().put(Setup.LOCATION_COL, this.locationStr(loc)).build()));
         return tae;
     }
 

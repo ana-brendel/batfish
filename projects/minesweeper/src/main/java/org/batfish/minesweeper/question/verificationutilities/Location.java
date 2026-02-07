@@ -11,11 +11,13 @@ import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
 import java.util.Collection;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 
 public abstract class Location implements Comparable<Location> {
     public abstract Location copy();
+    public abstract String contextString(Map<Ip, Node> nodes);
 
     /// Builder for location to take in the location independent of the network info
     public static class Builder {

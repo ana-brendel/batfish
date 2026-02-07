@@ -4,6 +4,7 @@ import org.batfish.common.BatfishException;
 import org.batfish.datamodel.Ip;
 
 import javax.annotation.Nonnull;
+import java.util.Map;
 import java.util.Objects;
 
 public class Edge extends Location {
@@ -51,6 +52,13 @@ public class Edge extends Location {
     @Override
     public Edge copy() {
         return new Edge(Ip.create(src.asLong()),Ip.create(dst.asLong()));
+    }
+
+    @Override
+    public String contextString(Map<Ip, Node> nodes) {
+        String srcStr = nodes.containsKey(src) ? nodes.get(src).getName() : src.toString();
+        String dstStr = nodes.containsKey(dst) ? nodes.get(dst).getName() : dst.toString();
+        return srcStr + " -> " + dstStr;
     }
 
     @Override

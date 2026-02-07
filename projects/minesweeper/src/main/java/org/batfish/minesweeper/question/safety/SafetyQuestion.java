@@ -56,8 +56,7 @@ public final class SafetyQuestion extends Question {
             @JsonProperty(PROP_SHOW_ALL) @Nullable Boolean show_all,
             @JsonProperty(PROP_REFINE) @Nullable Boolean refine
     ) {
-       // default for show_all is false (as it is not efficient), default for refine is true (as it is not efficient)
-        // NOTE: made the refine default false because it wasn't correctly getting false flag
+       // default for show_all is false (as it is not efficient), default for refine is false (as it is not efficient)
        return new SafetyQuestion(target,location,assumption_locations,assumptions,
                show_all != null && show_all,refine != null && refine);
     }

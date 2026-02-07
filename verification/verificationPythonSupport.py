@@ -21,7 +21,7 @@ class LocationPropertyPair:
         return "".join(map(lambda c: c.format(),self.property))
 
 class VerificationQuery:
-    def __init__(self, target:LocationPropertyPair,assumptions:list[LocationPropertyPair],refine:bool=True):
+    def __init__(self, target:LocationPropertyPair,assumptions:list[LocationPropertyPair],refine:bool=False):
         self.target = target
         self.assumptions = assumptions
         self.refine = refine

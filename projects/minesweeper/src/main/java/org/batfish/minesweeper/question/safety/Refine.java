@@ -138,6 +138,7 @@ public class Refine {
                    Set<Edge> incoming, Map<Location, Invariant> inferred) {
         this.tbdd = tbdd;
         this.nodes = nodes;
+        // for better runtime, should switch locations to a neighbors map
         this.locations = locations;
         this.imports = imports;
         this.exports = exports;

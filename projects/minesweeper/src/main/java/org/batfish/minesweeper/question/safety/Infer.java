@@ -34,6 +34,7 @@ public class Infer {
 
     private final Map<Ip, Node> nodes = new HashMap<>();
     // for better runtime, should switch locations to a neighbors map
+    private final Map<Node, Set<Edge>> edgesByDestination = new HashMap<>();
     private final Set<Location> locations = new HashSet<>();
     private final Map<Edge, RoutingPolicy> imports = new HashMap<>();
     private final Map<Edge, RoutingPolicy> exports = new HashMap<>();
@@ -76,10 +77,12 @@ public class Infer {
         }
     }
 
-    public Infer(@Nonnull Path.Context context, @Nonnull Map<Ip, Node> nodes, @Nonnull Set<Location> locations) {
+    public Infer(@Nonnull Path.Context context, @Nonnull Map<Ip, Node> nodes, @Nonnull Set<Location> locations,
+                 @Nonnull Map<Node,Set<Edge>> edgesByDestination) {
         this.tbdd = context.tbdd();
         this.nodes.putAll(nodes);
         this.locations.addAll(locations);
+        this.edgesByDestination.putAll(edgesByDestination);
         this.imports.putAll(context.imports());
         this.exports.putAll(context.exports());
         this.assumptions.putAll(context.assumptions());
@@ -148,7 +151,7 @@ public class Infer {
                     working.add(src);
                 }
             } else if (location instanceof Node node) {
-                for (Location l : locations) {
+                for (Location l : edgesByDestination.get(node)) {
                     if (l instanceof Edge edge && edge.isDst(node)) {
                         RoutingPolicy importPolicy = imports.getOrDefault(edge, null);
                         if (importPolicy == null)

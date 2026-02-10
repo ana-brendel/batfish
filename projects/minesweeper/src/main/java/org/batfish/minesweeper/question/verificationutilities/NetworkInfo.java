@@ -173,40 +173,36 @@ public class NetworkInfo {
         return new Lightyear(this.tbdd,this.nodes,this.imports,this.exports);
     }
 
+    private Map<Node,Set<Edge>> getEdgesByDestination() {
+        Map<Node,Set<Edge>> edgesByDestination = new HashMap<>();
+        for (Location loc : this.locations) {
+            if (loc instanceof Edge edge && this.nodes.containsKey(edge.getDst())) {
+                Node dst = this.nodes.get(edge.getDst());
+                if (!edgesByDestination.containsKey(dst)) edgesByDestination.put(dst,new HashSet<>());
+                edgesByDestination.get(dst).add(edge);
+            }
+        }
+        return edgesByDestination;
+    }
+
     /// Returns an Infer object reflective of the network which can be used for safety property verification
     public Infer toInfer() {
         Path.Context context = new Path.Context(this.tbdd,this.assumptions,this.imports,this.exports);
-        return new Infer(context,this.nodes,this.locations);
+        return new Infer(context,this.nodes,this.locations,this.getEdgesByDestination());
     }
 
     /// Returns a PathAnalyzer objective reflective of the network which can be used for verification of the provided
     /// liveness property (pertaining to the provided prefix space)
     public PathAnalyzer toPathAnalyzer(PrefixSpace prefix, Location location, Invariant target) {
         Path.Context context = new Path.Context(this.tbdd,this.assumptions,this.imports,this.exports);
-        Map<Node,Set<Edge>> edgesByDestination = new HashMap<>();
-        for (Location loc : this.locations) {
-            if (loc instanceof Edge edge && this.nodes.containsKey(edge.getDst())) {
-                Node dst = this.nodes.get(edge.getDst());
-                if (!edgesByDestination.containsKey(dst)) edgesByDestination.put(dst,new HashSet<>());
-                edgesByDestination.get(dst).add(edge);
-            }
-        }
-        return new PathAnalyzer(context,prefix,location,target, this.nodes, edgesByDestination);
+        return new PathAnalyzer(context,prefix,location,target, this.nodes, this.getEdgesByDestination());
     }
 
     /// Returns a PathAnalyzer objective reflective of the network which can be used for interference of the provided
     /// liveness property (pertaining to the provided prefix space)
     public InterferenceCheck toInterferenceCheck(PrefixSpace prefix, Location location, Invariant target) {
         Path.Context context = new Path.Context(this.tbdd,this.assumptions,this.imports,this.exports);
-        Map<Node,Set<Edge>> edgesByDestination = new HashMap<>();
-        for (Location loc : this.locations) {
-            if (loc instanceof Edge edge && this.nodes.containsKey(edge.getDst())) {
-                Node dst = this.nodes.get(edge.getDst());
-                if (!edgesByDestination.containsKey(dst)) edgesByDestination.put(dst,new HashSet<>());
-                edgesByDestination.get(dst).add(edge);
-            }
-        }
-        return new InterferenceCheck(context,prefix,location,target, this.nodes, edgesByDestination);
+        return new InterferenceCheck(context,prefix,location,target, this.nodes, this.getEdgesByDestination());
     }
 
     /// Returns TableAnswerElement which lists all locations within the network (used when no target property is provided)

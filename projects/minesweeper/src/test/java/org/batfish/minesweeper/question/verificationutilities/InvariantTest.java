@@ -505,7 +505,7 @@ public class InvariantTest {
         Invariant P = new Invariant(tbdd,Invariant.clauseBuilder()
                 .setCommunities(new RegexConstraints(List.of(RegexConstraint.parse("100:1"),RegexConstraint.parse("!100:2"))))
                 .matchPrefix(PREFIX).build(tbdd,exports.get(ALPHANODE)));
-        Invariant interp = new Invariant(tbdd,TransferBDDUtils.interpolate(tbdd,P.wellFormedBDD(),Q.wellFormedBDD()));
+        Invariant interp = new Invariant(tbdd,TransferBDDUtils.interpolate(tbdd,P.wellFormedBDD(),Q.wellFormedBDD()).get());
         assertEquals(interp.wellFormedBDD(),Q.wellFormedBDD());
 
         // [2]
@@ -519,7 +519,7 @@ public class InvariantTest {
                 .addClause(Invariant.clauseBuilder().setCommunities(new RegexConstraints(List.of(RegexConstraint.parse("100:2")))))
                 .build(tbdd,exports.get(BETANODE));
         assertTrue(PorQ_and_R.implies(SorPorQ));
-        BDD interpolant = TransferBDDUtils.interpolate(tbdd,PorQ_and_R.wellFormedBDD(),SorPorQ.wellFormedBDD());
+        BDD interpolant = TransferBDDUtils.interpolate(tbdd,PorQ_and_R.wellFormedBDD(),SorPorQ.wellFormedBDD()).get();
         Invariant i = new Invariant(tbdd,interpolant);
         assertEquals(expected2.wellFormedBDD(),i.wellFormedBDD());
 
@@ -534,7 +534,7 @@ public class InvariantTest {
                 .addClause(Invariant.clauseBuilder()
                         .matchPrefix(new PrefixSpace(PrefixRange.fromPrefix(Prefix.parse("100.200.0.0/16")))))
                 .build(tbdd,exports.get(ALPHANODE));
-        Invariant AB_interpolant = new Invariant(tbdd,TransferBDDUtils.interpolate(tbdd,A.wellFormedBDD(),B.wellFormedBDD()));
+        Invariant AB_interpolant = new Invariant(tbdd,TransferBDDUtils.interpolate(tbdd,A.wellFormedBDD(),B.wellFormedBDD()).get());
         Invariant AB_expected = Invariant.builder().addClause(Invariant.clauseBuilder()
                         .matchPrefix(new PrefixSpace(PrefixRange.fromPrefix(Prefix.parse("2.4.8.0/24")))))
                 .build(tbdd,exports.get(ALPHANODE));
@@ -550,7 +550,7 @@ public class InvariantTest {
         Invariant D = Invariant.builder().addClause(Invariant.clauseBuilder()
                         .avoidPrefix(new PrefixSpace(PrefixRange.fromPrefix(Prefix.parse("2.4.8.0/24")))))
                 .build(tbdd,exports.get(ALPHANODE));
-        Invariant CD_interpolant = new Invariant(tbdd,TransferBDDUtils.interpolate(tbdd,C.wellFormedBDD(),D.wellFormedBDD()));
+        Invariant CD_interpolant = new Invariant(tbdd,TransferBDDUtils.interpolate(tbdd,C.wellFormedBDD(),D.wellFormedBDD()).get());
         Invariant CD_expected = Invariant.builder().addClause(Invariant.clauseBuilder()
                         .avoidPrefix(new PrefixSpace(PrefixRange.fromPrefix(Prefix.parse("2.4.8.0/24")))))
                 .build(tbdd,exports.get(ALPHANODE));

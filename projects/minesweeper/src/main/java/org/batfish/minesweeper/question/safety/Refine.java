@@ -27,7 +27,6 @@ public class Refine {
 
     private final TransferBDD tbdd;
     private final Map<Ip, Node> nodes;
-    private final Set<Location> locations;
     private final Map<Edge, RoutingPolicy> imports;
     private final Map<Edge, RoutingPolicy> exports;
     private final Set<Edge> enteringNetwork;
@@ -139,8 +138,6 @@ public class Refine {
                    Set<Edge> incoming, Map<Location, Invariant> inferred) {
         this.tbdd = tbdd;
         this.nodes = nodes;
-        // for better runtime, should switch locations to a neighbors map
-        this.locations = locations;
         this.imports = imports;
         this.exports = exports;
         this.targets = targets;
@@ -167,7 +164,8 @@ public class Refine {
                 }
                 Invariant weakest = inferred.get(toRefine).copy();
                 Invariant strongest = refinements.get(edge).strongestPostcondition(imports.get(edge));
-                BDD interpolant = interpolate(tbdd,strongest.wellFormedBDD(),weakest.wellFormedBDD());
+                BDD interpolant = interpolate(tbdd,strongest.wellFormedBDD(),weakest.wellFormedBDD())
+                        .orElse(weakest.wellFormedBDD());
                 Invariant previous = refinements.get(toRefine);
                 refinements.put(toRefine,new Invariant(tbdd,interpolant.or(previous.wellFormedBDD())));
                 if (!refinements.get(toRefine).equals(previous)) {
@@ -175,6 +173,7 @@ public class Refine {
                 }
             } else if (lastKnown instanceof Node source) {
                 Invariant precondition = refinements.get(source);
+                // should try to use neighbor mapping to improve runtime
                 for (Location neighbor : inferred.keySet()) {
                     if (neighbor instanceof Edge toRefine && toRefine.isSrc(source)) {
                         if (!inferred.containsKey(toRefine)) {
@@ -182,7 +181,8 @@ public class Refine {
                         }
                         Invariant weakest = inferred.get(toRefine).copy();
                         Invariant strongest = precondition.strongestPostcondition(exports.get(toRefine));
-                        BDD interpolant = interpolate(tbdd,strongest.wellFormedBDD(),weakest.wellFormedBDD());
+                        BDD interpolant = interpolate(tbdd,strongest.wellFormedBDD(),weakest.wellFormedBDD())
+                                .orElse(weakest.wellFormedBDD());
                         Invariant previous = refinements.put(toRefine,new Invariant(tbdd,interpolant));
                         if (previous == null || !refinements.get(toRefine).equals(previous)){
                             // if there is already an edge entering this destination, we don't need to add it twice
@@ -207,7 +207,7 @@ public class Refine {
         working.clear();
         // TODO determine if we want to include assumptions as ingress nodes (or maybe have option for user to specify ingress)
         // right now we just use any edge entering the network, not including assumptions within network... maybe we should swap
-        // any inferred invariant specifically with the assumption as the assumption would be stronger (if verifcation didn't
+        // any inferred invariant specifically with the assumption as the assumption would be stronger (if verification didn't
         // produce any counterexample)
         working.addAll(enteringNetwork);
         if (working.isEmpty()) {

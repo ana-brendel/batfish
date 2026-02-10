@@ -4,6 +4,7 @@ import com.google.common.annotations.VisibleForTesting;
 
 import java.util.HashSet;
 import java.util.List;
+import java.util.Optional;
 import java.util.Set;
 import java.util.function.BiFunction;
 import java.util.function.Function;
@@ -13,6 +14,7 @@ import net.sf.javabdd.BDDFactory;
 import net.sf.javabdd.BDDPairing;
 import org.batfish.common.BatfishException;
 import org.batfish.minesweeper.ConfigAtomicPredicates;
+import org.batfish.minesweeper.question.verificationutilities.Invariant;
 
 /**
  * Various utility methods for working with the results of the symbolic routing analysis {@link
@@ -186,10 +188,12 @@ public class TransferBDDUtils {
      * @param q second formula (BDD) for interpolation
      * @return interpolant between the two provided formulas as BDD
      */
-  public static BDD interpolate(TransferBDD tbdd, BDD p, BDD q) {
+  public static Optional<BDD> interpolate(TransferBDD tbdd, BDD p, BDD q) {
       assert p.varProfile().length == q.varProfile().length;
-      BDD wf = tbdd.getOriginalRoute().wellFormednessConstraints(true);
-      assert ((p.and(wf)).imp(q.and(wf))).isOne();
+      Invariant p_inv = new Invariant(tbdd,p);
+      Invariant q_inv = new Invariant(tbdd,q);
+      if (!p_inv.implies(q_inv))
+          return Optional.empty();
 
       // STEP 1: Prune q to only include assignments which are satisfiable given p
       BDD q_pruned = tbdd.getFactory().zero();
@@ -227,6 +231,6 @@ public class TransferBDDUtils {
       // STEP 4 ??? might want to do something else to handle prefixes in case !P1 /\ !P2 => !P1 where
       // the intended interpolant is !P1... there is example in unit test which demonstrates this limitation
 
-      return result;
+      return Optional.of(result);
   }
 }

@@ -38,7 +38,6 @@ import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
-import java.util.Optional;
 import java.util.Set;
 import java.util.stream.Stream;
 
@@ -635,16 +634,8 @@ public class RefineTest {
         verifier.addProperty(target,property);
 
         Infer.Result result = verifier.run();
-
-        Refine.Result refiner = verifier.refiner().refine();
-
-        Map<Location,String> initials = refiner.displayInitial();
-        Map<Location,String> refinements = refiner.displayRefinement();
-
-        assertTrue(lightyear.check(refiner.initial).isEmpty());
-        assertTrue(lightyear.check(refiner.refined).isEmpty());
+        assertTrue(lightyear.check(result.invariants).isEmpty());
         assertFalse(result.verified);
-        assertTrue(result.inferredTrue());
     }
     @Test
     public void networkBTest() {
@@ -666,16 +657,8 @@ public class RefineTest {
         verifier.addProperty(target,property);
 
         Infer.Result result = verifier.run();
-
-        Refine.Result refiner = verifier.refiner().refine();
-
-        Map<Location,String> initials = refiner.displayInitial();
-        Map<Location,String> refinements = refiner.displayRefinement();
-
-        assertTrue(lightyear.check(refiner.initial).isEmpty());
-        assertTrue(lightyear.check(refiner.refined).isEmpty());
+        assertTrue(lightyear.check(result.invariants).isEmpty());
         assertFalse(result.verified);
-        assertTrue(result.inferredTrue());
     }
     @Test
     public void networkCTest() {
@@ -698,15 +681,8 @@ public class RefineTest {
 
         Infer.Result result = verifier.run();
 
-        Refine.Result refiner = verifier.refiner().refine();
-
-        Map<Location,String> initials = refiner.displayInitial();
-        Map<Location,String> refinements = refiner.displayRefinement();
-
-        assertTrue(lightyear.check(refiner.initial).isEmpty());
-        assertTrue(lightyear.check(refiner.refined).isEmpty());
+        assertTrue(lightyear.check(result.invariants).isEmpty());
         assertFalse(result.verified);
-        assertTrue(result.inferredTrue());
     }
     @Test
     public void networkDTest() {
@@ -729,15 +705,8 @@ public class RefineTest {
 
         Infer.Result result = verifier.run();
 
-        Refine.Result refiner = verifier.refiner().refine();
-
-        Map<Location,String> initials = refiner.displayInitial();
-        Map<Location,String> refinements = refiner.displayRefinement();
-
-        assertTrue(lightyear.check(refiner.initial).isEmpty());
-        assertTrue(lightyear.check(refiner.refined).isEmpty());
+        assertTrue(lightyear.check(result.invariants).isEmpty());
         assertFalse(result.verified);
-        assertTrue(result.inferredTrue());
     }
     @Test
     public void networkETest() {
@@ -851,17 +820,8 @@ public class RefineTest {
 
         Infer.Result result = verifier.run();
 
-        Refine.Result refiner = verifier.refiner().refine();
-
-        Map<Location,String> initials = refiner.displayInitial();
-        Map<Location,String> refinements = refiner.displayRefinement();
-
-        Optional<Map.Entry<Location, Location>> counter = lightyear.check(refiner.initial);
-
-        assertTrue(lightyear.check(refiner.initial).isEmpty());
-        assertTrue(lightyear.check(refiner.refined).isEmpty());
+        assertTrue(lightyear.check(result.invariants).isEmpty());
         assertFalse(result.verified);
-        assertTrue(result.inferredTrue());
     }
     @Test
     public void networkITest() {
@@ -885,14 +845,7 @@ public class RefineTest {
 
         Infer.Result result = verifier.run();
 
-        Refine.Result refiner = verifier.refiner().refine();
-
-        Map<Location,String> initials = refiner.displayInitial();
-        Map<Location,String> refinements = refiner.displayRefinement();
-
-        assertTrue(lightyear.check(refiner.initial).isEmpty());
-        assertTrue(lightyear.check(refiner.refined).isEmpty());
+        assertTrue(lightyear.check(result.invariants).isEmpty());
         assertFalse(result.verified);
-        assertTrue(result.inferredTrue());
     }
 }

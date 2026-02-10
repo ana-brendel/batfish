@@ -105,13 +105,13 @@ public class BDDString {
                     // false - community is explicitly not set
                     running.add(this.factory.ithVar(v).not());
                     // needs to be negative because it is negated
-                    int varLabel = - this.addStringToBank("comm(" + var.getRegex() + ")");
+                    int varLabel = - this.addStringToBank("comm(" + var.getLiteralValue() + ")");
                     strings.add(varLabel);
                     break;
                 } else if (assignment[v] == 1) {
                     // true - community is explicitly set
                     running.add(this.factory.ithVar(v));
-                    int varLabel = this.addStringToBank("comm(" + var.getRegex() + ")");
+                    int varLabel = this.addStringToBank("comm(" + var.getLiteralValue() + ")");
                     strings.add(varLabel);
                     break;
                 } else {

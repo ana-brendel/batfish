@@ -23,9 +23,11 @@ import org.batfish.minesweeper.CommunityVar;
 import org.batfish.minesweeper.ConfigAtomicPredicates;
 import org.batfish.minesweeper.bdd.TransferBDD;
 import org.batfish.minesweeper.question.searchroutepolicies.RegexConstraint;
+import org.batfish.minesweeper.question.searchroutepolicies.RegexConstraints;
 import org.batfish.minesweeper.question.verificationutilities.Edge;
 import org.batfish.minesweeper.question.verificationutilities.Invariant;
 import org.batfish.minesweeper.question.verificationutilities.Lightyear;
+import org.batfish.minesweeper.question.verificationutilities.Location;
 import org.batfish.minesweeper.question.verificationutilities.NetworkInfo;
 import org.batfish.minesweeper.question.verificationutilities.Node;
 import org.batfish.minesweeper.question.verificationutilities.TestConfigConstructionUtils;
@@ -51,6 +53,7 @@ import static org.batfish.minesweeper.question.verificationutilities.TestConfigC
 import static org.batfish.minesweeper.question.verificationutilities.TestConfigConstructionUtils.metricGreaterThan;
 import static org.batfish.minesweeper.question.verificationutilities.TestConfigConstructionUtils.permitRoute;
 import static org.batfish.minesweeper.question.verificationutilities.TestConfigConstructionUtils.replaceCommunities;
+import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 
@@ -837,5 +840,231 @@ public class RefineTest {
 
         assertTrue(lightyear.check(result.invariants).isEmpty());
         assertFalse(result.verified);
+    }
+
+    private TestConfigConstructionUtils.Networkv2 refineNetwork1(Ip entry, Ip exit, Node NODE_A, Node NODE_B, Node NODE_C, String p_str) {
+        Map<Node, Configuration> configs = new HashMap<>();
+
+        String plain_comm_10 = "10:10";
+        String regex_comm_10_10 = "^" + plain_comm_10 + "$";
+        String plain_comm_20 = "20:20";
+        String regex_comm_20_20 = "^" + plain_comm_20 + "$";
+        String plain_comm_30 = "30:30";
+        String regex_comm_30_30 = "^" + plain_comm_30 + "$";
+
+        String PREFIX_MATCH = "prefixMatch";
+        PrefixRange p_prefix = PrefixRange.fromPrefix(Prefix.parse(p_str));
+        RouteFilterList prefixMatch = new RouteFilterList(PREFIX_MATCH, ImmutableList.of(new RouteFilterLine(PERMIT,p_prefix)));
+
+        // Create configs
+        setUpConfigs(configs,NODE_A,NODE_B,NODE_C);
+
+        includeCommunities(configs.get(NODE_A),regex_comm_10_10);
+        configs.get(NODE_A).setRouteFilterLists(ImmutableMap.of(PREFIX_MATCH,prefixMatch));
+        includeCommunities(configs.get(NODE_C),regex_comm_10_10,regex_comm_20_20,regex_comm_30_30);
+
+        // Create BGP processes
+        Map<Node,BgpProcess> processes = getBgpProcesses(configs,NODE_A,NODE_B,NODE_C);
+
+        processes.get(NODE_A).setNeighbors(ImmutableSortedMap.of(
+                entry,getBgpActivePeerConfig("outside","outsideImport",null),
+                NODE_B.getSingleIp(),getBgpActivePeerConfig("internalNeighbor",null,null)));
+
+        processes.get(NODE_B).setNeighbors(ImmutableSortedMap.of(
+                NODE_A.getSingleIp(),getBgpActivePeerConfig("internalNeighbor",null,null),
+                NODE_C.getSingleIp(),getBgpActivePeerConfig("internalNeighbor",null,null)));
+
+        processes.get(NODE_C).setNeighbors(ImmutableSortedMap.of(
+                NODE_B.getSingleIp(),getBgpActivePeerConfig("internalNeighbor",null,null),
+                exit,getBgpActivePeerConfig("outside",null,"outsideExport")));
+
+        // Creating routing policy
+        makePolicy(configs.get(NODE_A),"outsideImport",
+                ifStatement(checkForPrefixListMatch(PREFIX_MATCH),addToCommunities(plain_comm_10),permitRoute(true)));
+
+        // Adds extra communities
+        RoutingPolicy templatePolicy = makePolicy(configs.get(NODE_C),"outsideExport",
+                ifStatement(checkForCommunity(plain_comm_10), permitRoute(false),
+                        ifStatement(checkForCommunity(plain_comm_20),permitRoute(false),
+                                ifStatement(checkForCommunity(plain_comm_30),permitRoute(false),permitRoute(true)))));
+
+        // Set up the tbdd
+        Set<RegexConstraint> communityRegexes = ImmutableSet.<RegexConstraint>builder()
+                .add(RegexConstraint.parse(plain_comm_10))
+                .add(RegexConstraint.parse(plain_comm_20))
+                .add(RegexConstraint.parse(plain_comm_30)).build();
+        ConfigAtomicPredicates configAPs = getConfigAtomicPredicates(configs.values(), communityRegexes);
+        TransferBDD tbdd = new TransferBDD(configAPs);
+
+        return new TestConfigConstructionUtils.Networkv2(tbdd,configs,templatePolicy,List.of(p_str));
+    }
+
+    @Test
+    public void refineNetwork1Test() {
+        Ip entry = Ip.parse("10.10.0.0");
+        Ip exit = Ip.parse("10.10.10.0");
+        Node NODE_A = new Node("10.10.0.1","node_A");
+        Node NODE_B = new Node("10.10.0.2","node_B");
+        Node NODE_C = new Node("10.10.0.3","node_C");
+
+        String p_str = "25.13.0.0/16";
+        TestConfigConstructionUtils.Networkv2 net = refineNetwork1(entry,exit,NODE_A,NODE_B,NODE_C,p_str);
+        NetworkInfo info = net.getInfo();
+
+        PrefixSpace PREFIX = new PrefixSpace(PrefixRange.fromPrefix(Prefix.parse(p_str)));
+        Invariant property = new Invariant(net.tbdd(),Invariant.clauseBuilder().avoidPrefix(PREFIX).build(net.tbdd(),net.template()));
+        info.addAssumption(new Edge(exit,NODE_C.getSingleIp()),property.copy());
+
+        Infer verifier = info.toInfer();
+        Lightyear lightyear = info.checker();
+
+        Edge target = new Edge(NODE_C.getSingleIp(),exit);
+        verifier.addProperty(target,property.copy());
+
+        Infer.Result result = verifier.run();
+        assertTrue(lightyear.check(result.invariants).isEmpty());
+        assertTrue(result.verified);
+
+        Refine.Result refiner = verifier.refiner().refine();
+        assertTrue(lightyear.check(refiner.refined).isEmpty());
+        assertTrue(refiner.verified);
+
+        Invariant refined_property = Invariant.builder()
+                .addClause(Invariant.clauseBuilder().avoidPrefix(PREFIX))
+                .addClause(Invariant.clauseBuilder().setCommunities(new RegexConstraints(List.of(RegexConstraint.parse("10:10")))))
+                .build(net.tbdd(),net.template());
+        for (Location location : refiner.refined.keySet()) {
+            if (location.equals(new Edge(exit,NODE_C.getSingleIp())) || location.equals(new Edge(NODE_C.getSingleIp(),exit))) {
+                assertEquals(property.copy(),refiner.refined.get(location));
+            } else if (location.equals(new Edge(entry,NODE_A.getSingleIp()))) {
+                assertTrue(refiner.refined.get(location).isTrue());
+            } else {
+                assertEquals(refined_property.copy(),refiner.refined.get(location));
+            }
+        }
+    }
+
+    private TestConfigConstructionUtils.Networkv2 refineNetwork2(Ip entry, Ip exit, Node NODE_A, Node NODE_B, Node NODE_C, String p_str) {
+        Map<Node, Configuration> configs = new HashMap<>();
+
+        String plain_comm_10 = "10:10";
+        String regex_comm_10_10 = "^" + plain_comm_10 + "$";
+        String plain_comm_20 = "20:20";
+        String regex_comm_20_20 = "^" + plain_comm_20 + "$";
+        String plain_comm_30 = "30:30";
+        String regex_comm_30_30 = "^" + plain_comm_30 + "$";
+
+        String PREFIX_MATCH = "prefixMatch";
+        PrefixRange p_prefix = PrefixRange.fromPrefix(Prefix.parse(p_str));
+        RouteFilterList prefixMatch = new RouteFilterList(PREFIX_MATCH, ImmutableList.of(new RouteFilterLine(PERMIT,p_prefix)));
+
+        // Create configs
+        setUpConfigs(configs,NODE_A,NODE_B,NODE_C);
+
+        includeCommunities(configs.get(NODE_A),regex_comm_10_10);
+        configs.get(NODE_A).setRouteFilterLists(ImmutableMap.of(PREFIX_MATCH,prefixMatch));
+        includeCommunities(configs.get(NODE_B),regex_comm_10_10,regex_comm_20_20);
+        includeCommunities(configs.get(NODE_C),regex_comm_10_10,regex_comm_20_20,regex_comm_30_30);
+
+        // Create BGP processes
+        Map<Node,BgpProcess> processes = getBgpProcesses(configs,NODE_A,NODE_B,NODE_C);
+
+        processes.get(NODE_A).setNeighbors(ImmutableSortedMap.of(
+                entry,getBgpActivePeerConfig("outside","outsideImport",null),
+                NODE_B.getSingleIp(),getBgpActivePeerConfig("internalNeighbor",null,null)));
+
+        processes.get(NODE_B).setNeighbors(ImmutableSortedMap.of(
+                NODE_A.getSingleIp(),getBgpActivePeerConfig("internalNeighbor",null,"outToA"),
+                NODE_C.getSingleIp(),getBgpActivePeerConfig("internalNeighbor",null,"outToC")));
+
+        processes.get(NODE_C).setNeighbors(ImmutableSortedMap.of(
+                NODE_B.getSingleIp(),getBgpActivePeerConfig("internalNeighbor",null,null),
+                exit,getBgpActivePeerConfig("outside",null,"outsideExport")));
+
+        // Creating routing policy
+        makePolicy(configs.get(NODE_A),"outsideImport",
+                ifStatement(checkForPrefixListMatch(PREFIX_MATCH),addToCommunities(plain_comm_10),permitRoute(true)));
+
+        makePolicy(configs.get(NODE_B),"outToC",
+                ifStatement(checkForCommunity(plain_comm_10),addToCommunities(plain_comm_20),permitRoute(true)));
+        makePolicy(configs.get(NODE_B),"outToA",
+                ifStatement(checkForCommunity(plain_comm_20),addToCommunities(plain_comm_10),permitRoute(true)));
+
+        RoutingPolicy templatePolicy = makePolicy(configs.get(NODE_C),"outsideExport",
+                ifStatement(checkForCommunity(plain_comm_20), permitRoute(false),permitRoute(true)));
+
+        // Set up the tbdd
+        Set<RegexConstraint> communityRegexes = ImmutableSet.<RegexConstraint>builder()
+                .add(RegexConstraint.parse(plain_comm_10))
+                .add(RegexConstraint.parse(plain_comm_20))
+                .add(RegexConstraint.parse(plain_comm_30)).build();
+        ConfigAtomicPredicates configAPs = getConfigAtomicPredicates(configs.values(), communityRegexes);
+        TransferBDD tbdd = new TransferBDD(configAPs);
+
+        return new TestConfigConstructionUtils.Networkv2(tbdd,configs,templatePolicy,List.of(p_str));
+    }
+
+    @Test
+    public void refineNetwork2Test() {
+        Ip entry = Ip.parse("10.10.0.0");
+        Ip exit = Ip.parse("10.10.10.0");
+        Node NODE_A = new Node("10.10.0.1","node_A");
+        Node NODE_B = new Node("10.10.0.2","node_B");
+        Node NODE_C = new Node("10.10.0.3","node_C");
+
+        String p_str = "25.13.0.0/16";
+        TestConfigConstructionUtils.Networkv2 net = refineNetwork2(entry,exit,NODE_A,NODE_B,NODE_C,p_str);
+        NetworkInfo info = net.getInfo();
+
+        PrefixSpace PREFIX = new PrefixSpace(PrefixRange.fromPrefix(Prefix.parse(p_str)));
+        Invariant property = new Invariant(net.tbdd(),Invariant.clauseBuilder().avoidPrefix(PREFIX).build(net.tbdd(),net.template()));
+        info.addAssumption(new Edge(exit,NODE_C.getSingleIp()),property.copy());
+
+        Infer verifier = info.toInfer();
+        Lightyear lightyear = info.checker();
+
+        Edge target = new Edge(NODE_C.getSingleIp(),exit);
+        verifier.addProperty(target,property.copy());
+
+        Infer.Result result = verifier.run();
+        assertTrue(lightyear.check(result.invariants).isEmpty());
+        assertTrue(result.verified);
+
+        Refine.Result refiner = verifier.refiner().refine();
+        assertTrue(lightyear.check(refiner.refined).isEmpty());
+        assertTrue(refiner.verified);
+
+        Invariant prefix_or_1010 = Invariant.builder()
+                .addClause(Invariant.clauseBuilder().avoidPrefix(PREFIX))
+                .addClause(Invariant.clauseBuilder().setCommunities(new RegexConstraints(List.of(RegexConstraint.parse("10:10")))))
+                .build(net.tbdd(),net.template());
+        Invariant prefix_or_2020 = Invariant.builder()
+                .addClause(Invariant.clauseBuilder().avoidPrefix(PREFIX))
+                .addClause(Invariant.clauseBuilder().setCommunities(new RegexConstraints(List.of(RegexConstraint.parse("20:20")))))
+                .build(net.tbdd(),net.template());
+        Invariant prefix_or_1010_or_2020 = Invariant.builder()
+                .addClause(Invariant.clauseBuilder().avoidPrefix(PREFIX))
+                .addClause(Invariant.clauseBuilder().setCommunities(new RegexConstraints(List.of(RegexConstraint.parse("10:10")))))
+                .addClause(Invariant.clauseBuilder().setCommunities(new RegexConstraints(List.of(RegexConstraint.parse("20:20")))))
+                .build(net.tbdd(),net.template());
+        Invariant prefix_20_20_or_1010 = Invariant.builder()
+                .addClause(Invariant.clauseBuilder().avoidPrefix(PREFIX).setCommunities(new RegexConstraints(List.of(RegexConstraint.parse("!20:20")))))
+                .addClause(Invariant.clauseBuilder().setCommunities(new RegexConstraints(List.of(RegexConstraint.parse("10:10")))))
+                .build(net.tbdd(),net.template());
+        for (Location location : refiner.refined.keySet()) {
+            if (location.equals(new Edge(exit,NODE_C.getSingleIp())) || location.equals(new Edge(NODE_C.getSingleIp(),exit))) {
+                assertEquals(property.copy(),refiner.refined.get(location));
+            } else if (location.equals(new Edge(entry,NODE_A.getSingleIp()))) {
+                assertTrue(refiner.refined.get(location).isTrue());
+            } else if (location.equals(NODE_B)) {
+                assertEquals(prefix_or_1010_or_2020.copy(),refiner.refined.get(location));
+            } else if (location.equals(NODE_A) || location.equals(new Edge(NODE_A,NODE_B))) {
+                assertEquals(prefix_or_1010.copy(),refiner.refined.get(location));
+            } else if (location.equals(new Edge(NODE_B,NODE_A))) {
+                assertEquals(prefix_20_20_or_1010.copy(),refiner.refined.get(location));
+            } else {
+                assertEquals(prefix_or_2020.copy(),refiner.refined.get(location));
+            }
+        }
     }
 }

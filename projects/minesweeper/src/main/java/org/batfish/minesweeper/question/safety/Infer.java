@@ -216,10 +216,6 @@ public class Infer {
 
     /// Returns a Refiner object which is used to refine invariants in order to tease out key properties
     public Refine refiner() {
-        if (verified != null && !verified) {
-            throw new BatfishException("Should not attempt to refine if initial invariant inference does not verify the" +
-                    "target property.");
-        }
         return Refine.builder(this.tbdd)
                 .setNodes(this.nodes)
                 .setLocations(this.locations)

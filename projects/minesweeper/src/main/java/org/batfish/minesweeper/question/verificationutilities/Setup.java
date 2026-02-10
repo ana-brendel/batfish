@@ -124,6 +124,7 @@ public class Setup {
     public static final String OVERALL_VERIFICATION_COL = "Overall_Verification_Result";
     public static final String LOCAL_VERIFICATION_COL = "Local_Verification_Result";
     public static final String ASSUMPTION_VIOLATION_COL = "Assumption_Violation";
+    public static final String VERIFICATION_VIOLATION_COL = "Verification_Violation";
     public static final String LOCATION_RELEVANCE_COL = "Location_Relevance";
     public static final String PROVIDED_INVARIANT_COL = "Provided_Invariant";
     public static final String COUNTEREXAMPLE_COL = "Counterexample";
@@ -136,9 +137,7 @@ public class Setup {
                         new ColumnMetadata(ASSUMPTION_COL, STRING, "InDev", true, false),
                         new ColumnMetadata(TARGET_COL, STRING, "InDev", true, false),
                         new ColumnMetadata(INFERRED_INVARIANTS_COL, STRING, "InDev", true, false),
-                        new ColumnMetadata(OVERALL_VERIFICATION_COL, STRING, "InDev", true, false),
-                        new ColumnMetadata(LOCAL_VERIFICATION_COL, STRING, "InDev", true, false),
-                        new ColumnMetadata(ASSUMPTION_VIOLATION_COL, STRING, "InDev", true, false));
+                        new ColumnMetadata(VERIFICATION_VIOLATION_COL, STRING, "InDev", true, false));
         return new TableMetadata(
                 columnMetadata, "Invariant Inference and Verification Results");
     }
@@ -151,8 +150,7 @@ public class Setup {
                         new ColumnMetadata(LOCATION_RELEVANCE_COL, STRING, "InDev", true, false),
                         new ColumnMetadata(PROVIDED_INVARIANT_COL, STRING, "InDev", true, false),
                         new ColumnMetadata(INFERRED_INVARIANTS_COL, STRING, "InDev", true, false),
-                        new ColumnMetadata(COUNTEREXAMPLE_COL, STRING, "InDev", true, false),
-                        new ColumnMetadata(OVERALL_VERIFICATION_COL, STRING, "InDev", true, false));
+                        new ColumnMetadata(COUNTEREXAMPLE_COL, STRING, "InDev", true, false));
         return new TableMetadata(
                 columnMetadata, "Invariant Inference and Verification Results");
     }

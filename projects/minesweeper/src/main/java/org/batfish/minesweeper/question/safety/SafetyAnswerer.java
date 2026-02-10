@@ -86,10 +86,9 @@ public final class SafetyAnswerer extends Answerer {
                             .put(Setup.TARGET_COL, targets.containsKey(loc) ?
                                     targets.get(loc).toString(refinementOccurred,cache) : "-")
                             .put(Setup.INFERRED_INVARIANTS_COL, results.get(loc).toString(refinementOccurred,cache))
-                            .put(Setup.OVERALL_VERIFICATION_COL, refinement.verified)
-                            .put(Setup.LOCAL_VERIFICATION_COL, checks.containsKey(loc) ? checks.get(loc).isEmpty() : "")
-                            .put(Setup.ASSUMPTION_VIOLATION_COL, checks.containsKey(loc) && checks.get(loc).isPresent()
-                                    ? nonDefaultRoute(checks.get(loc).get()) : "").build()));
+                            .put(Setup.VERIFICATION_VIOLATION_COL, checks.containsKey(loc) && checks.get(loc).isPresent()
+                                    ? nonDefaultRoute(checks.get(loc).get()) : (results.get(loc).isFalse() && !refinementOccurred
+                                    ? "Inferred False - probable bug" : "")).build()));
             return tae;
         }
 
@@ -107,7 +106,6 @@ public final class SafetyAnswerer extends Answerer {
                             .put(Setup.INFERRED_INVARIANTS_COL, refinementOccurred ?
                                     refinement.refined.get(loc).toString(true,cache) : "same as provided")
                             .put(Setup.COUNTEREXAMPLE_COL, "")
-                            .put(Setup.OVERALL_VERIFICATION_COL, refinement.verified)
                             .build()));
             // if there is an inference counterexamples, return that
             if (inferenceCounter.isPresent()) {
@@ -117,8 +115,7 @@ public final class SafetyAnswerer extends Answerer {
                         .put(Setup.LOCATION_RELEVANCE_COL, "Intermediate")
                         .put(Setup.PROVIDED_INVARIANT_COL, "n/a")
                         .put(Setup.INFERRED_INVARIANTS_COL, cex.post().toString(true,cache))
-                        .put(Setup.COUNTEREXAMPLE_COL, "")
-                        .put(Setup.OVERALL_VERIFICATION_COL, refinement.verified)
+                        .put(Setup.COUNTEREXAMPLE_COL, "Any route")
                         .build());
             } else {
                 info.getAssumptions().entrySet().stream()
@@ -130,8 +127,8 @@ public final class SafetyAnswerer extends Answerer {
                         .put(Setup.INFERRED_INVARIANTS_COL, entry.getValue().equals(refinement.refined.get(entry.getKey())) ?
                                 "same" : refinement.refined.get(entry.getKey()).toString(true, cache))
                         .put(Setup.COUNTEREXAMPLE_COL, checks.containsKey(entry.getKey()) && checks.get(entry.getKey()).isPresent()
-                            ? nonDefaultRoute(checks.get(entry.getKey()).get()) : "")
-                        .put(Setup.OVERALL_VERIFICATION_COL, refinement.verified)
+                            ? nonDefaultRoute(checks.get(entry.getKey()).get()) :
+                                (refinement.refined.get(entry.getKey()).isFalse() ? "Any route" : ""))
                         .build()));
             }
             return tae;

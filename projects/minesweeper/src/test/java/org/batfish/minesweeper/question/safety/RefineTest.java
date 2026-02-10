@@ -26,7 +26,6 @@ import org.batfish.minesweeper.question.searchroutepolicies.RegexConstraint;
 import org.batfish.minesweeper.question.verificationutilities.Edge;
 import org.batfish.minesweeper.question.verificationutilities.Invariant;
 import org.batfish.minesweeper.question.verificationutilities.Lightyear;
-import org.batfish.minesweeper.question.verificationutilities.Location;
 import org.batfish.minesweeper.question.verificationutilities.NetworkInfo;
 import org.batfish.minesweeper.question.verificationutilities.Node;
 import org.batfish.minesweeper.question.verificationutilities.TestConfigConstructionUtils;

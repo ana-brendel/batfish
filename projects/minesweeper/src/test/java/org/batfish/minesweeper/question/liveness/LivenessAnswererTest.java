@@ -46,7 +46,7 @@ import static org.batfish.minesweeper.question.verificationutilities.TestConfigC
 import static org.batfish.minesweeper.question.verificationutilities.TestConfigConstructionUtils.permitRoute;
 import static org.junit.Assert.assertTrue;
 
-public class PathAnalyzerTest {
+public class LivenessAnswererTest {
     private static final NetworkFactory nf = new NetworkFactory();
     private static final String prefixStr = "10.0.0.0/8";
     private static final String BASIC_PREFIX_MATCH = "prefixMatch";

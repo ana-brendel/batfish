@@ -482,19 +482,6 @@ public class Invariant {
         return new Invariant(left.tbdd, left.bdd.and(right.bdd));
     }
 
-    public static BDD combineInterpolants(Set<BDD> interpolants) {
-        BDD result = interpolants.stream().findFirst().orElse(null);
-        for (BDD interpolant : interpolants) {
-            BDD conjoined = interpolant.id().and(result.id());
-            if (conjoined.equals(interpolant)) {
-                result = interpolant.id();
-            } else if (!conjoined.equals(result)) {
-                result = result.or(interpolant.id());
-            }
-        }
-        return result;
-    }
-
     /**
      * Indicates if this invariant implies the provided invariant
      * @param post postcondition for implication

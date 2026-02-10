@@ -87,6 +87,10 @@ public class Invariant {
         return new Invariant(tbdd,bdd.not(),"false");
     }
 
+    public String toString() {
+        return this.toString(false);
+    }
+
     public String toString(boolean refinementOccurred) {
         if (this.isFalse()) return refinementOccurred ? "no traffic" : "false";
         if (this.isTrue()) return "true";

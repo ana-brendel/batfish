@@ -20,6 +20,7 @@ import java.util.Set;
 import java.util.stream.Collectors;
 
 import static org.batfish.minesweeper.bdd.TransferBDDUtils.interpolate;
+import static org.batfish.minesweeper.question.safety.Infer.copyInferred;
 
 public class Refine {
     private static final Logger LOGGER = LogManager.getLogger(Refine.class);
@@ -214,15 +215,23 @@ public class Refine {
                     loc -> inferred.containsKey(loc) && assumptions.get(loc).implies(inferred.get(loc)));
             return new Result(verified,inferred,inferred);
         }
+
+        // need to update the inferred invariants to include the stronger assumption - safe update via previous check
+        // TODO if we add refinement even when assumptions don't imply inferred condition, we should tweak something here
+        Map<Location, Invariant> original = copyInferred(inferred);
+        enteringNetwork.forEach(e -> { if (assumptions.containsKey(e)) inferred.put(e,assumptions.get(e)); });
+
         Map<Location, Invariant> finalized = strengtheningLoop();
         finalized.forEach((loc,inv) -> { assert inv.implies(inferred.get(loc)); });
         finalized.forEach((loc,inv) -> {
-            if (!inv.implies(inferred.get(loc)))
+            if (!inv.implies(original.get(loc)))
+                // based on our algorithm, this should never happen
                 throw new BatfishException("Inferred invariant does not imply the weakest condition that was needed @ location " + loc);
         });
+
         targets.forEach((loc,i) -> { assert finalized.containsKey(loc); });
         boolean verified = assumptions.keySet().stream().allMatch(
                 loc -> finalized.containsKey(loc) && assumptions.get(loc).implies(finalized.get(loc)));
-        return new Result(verified,inferred,finalized);
+        return new Result(verified,original,finalized);
     }
 }

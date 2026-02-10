@@ -152,8 +152,9 @@ public final class SafetyAnswerer extends Answerer {
         Refine.Result refined;
         boolean refinementOccurred = true;
 
-        // we only want to refine if the inference did not yield any falses, or if the refinement flag is set
-        if (result.counter.isPresent() || !refine) {
+        // we only want to refine if the inference verifies the property, or if the refinement flag is set
+        // TODO determine if we still want to do refinement even when the incoming assumptions don't imply the needed invariant
+        if (result.counter.isPresent() || !refine || !result.verified) {
             LOGGER.info("No invariant refinement.");
             refinementOccurred = false;
             refined = inference.refiner().noRefinement();

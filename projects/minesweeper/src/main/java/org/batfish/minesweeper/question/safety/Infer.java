@@ -223,7 +223,7 @@ public class Infer {
     }
 
     /// Deep copies invariants inferred
-    private Map<Location, Invariant> copyInferred(Map<Location, Invariant> base) {
+    public static Map<Location, Invariant> copyInferred(Map<Location, Invariant> base) {
         Map<Location, Invariant> result = new HashMap<>();
         for (Location location : base.keySet()) {
             result.put(location.copy(),base.get(location).copy());

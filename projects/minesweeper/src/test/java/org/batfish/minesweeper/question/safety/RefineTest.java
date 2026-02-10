@@ -615,7 +615,7 @@ public class RefineTest {
     }
 
     @Test
-    public void networkATest() {
+    public void validityNetworkATest() {
         Ip entry = Ip.parse("10.10.0.0");
         Ip exit = Ip.parse("10.10.10.0");
         Node NODE_A = new Node("10.10.0.1","node_A");
@@ -638,7 +638,7 @@ public class RefineTest {
         assertFalse(result.verified);
     }
     @Test
-    public void networkBTest() {
+    public void validityNetworkBTest() {
         Ip entry = Ip.parse("10.10.0.0");
         Ip exit = Ip.parse("10.10.10.0");
         Node NODE_A = new Node("10.10.0.1","node_A");
@@ -661,7 +661,7 @@ public class RefineTest {
         assertFalse(result.verified);
     }
     @Test
-    public void networkCTest() {
+    public void validityNetworkCTest() {
         Ip entry = Ip.parse("10.10.0.0");
         Ip exit = Ip.parse("10.10.10.0");
         Node NODE_A = new Node("10.10.0.1","node_A");
@@ -685,7 +685,7 @@ public class RefineTest {
         assertFalse(result.verified);
     }
     @Test
-    public void networkDTest() {
+    public void validityNetworkDTest() {
         Ip entry = Ip.parse("10.10.0.0");
         Ip exit = Ip.parse("10.10.10.0");
         Node NODE_A = new Node("10.10.0.1","node_A");
@@ -709,7 +709,7 @@ public class RefineTest {
         assertFalse(result.verified);
     }
     @Test
-    public void networkETest() {
+    public void validityNetworkETest() {
         Ip entry = Ip.parse("10.10.0.0");
         Ip exit = Ip.parse("10.10.10.0");
         Node NODE_A = new Node("10.10.0.1","node_A");
@@ -730,16 +730,13 @@ public class RefineTest {
 
         Refine.Result refiner = verifier.refiner().refine();
 
-        Map<Location,String> initials = refiner.displayInitial();
-        Map<Location,String> refinements = refiner.displayRefinement();
-
         assertTrue(lightyear.check(refiner.initial).isEmpty());
         assertTrue(lightyear.check(refiner.refined).isEmpty());
         assertTrue(result.verified);
         assertTrue(result.inferredTrue());
     }
     @Test
-    public void networkFTest() {
+    public void validityNetworkFTest() {
         Ip entry = Ip.parse("10.10.0.0");
         Ip exit = Ip.parse("10.10.10.0");
         Node NODE_A = new Node("10.10.0.1","node_A");
@@ -760,16 +757,13 @@ public class RefineTest {
 
         Refine.Result refiner = verifier.refiner().refine();
 
-        Map<Location,String> initials = refiner.displayInitial();
-        Map<Location,String> refinements = refiner.displayRefinement();
-
         assertTrue(lightyear.check(refiner.initial).isEmpty());
         assertTrue(lightyear.check(refiner.refined).isEmpty());
         assertTrue(result.verified);
         assertTrue(result.inferredTrue());
     }
     @Test
-    public void networkGTest() {
+    public void validityNetworkGTest() {
         Ip entry = Ip.parse("10.10.0.0");
         Ip exit = Ip.parse("10.10.10.0");
         Node NODE_A = new Node("10.10.0.1","node_A");
@@ -790,16 +784,13 @@ public class RefineTest {
 
         Refine.Result refiner = verifier.refiner().refine();
 
-        Map<Location,String> initials = refiner.displayInitial();
-        Map<Location,String> refinements = refiner.displayRefinement();
-
         assertTrue(lightyear.check(refiner.initial).isEmpty());
         assertTrue(lightyear.check(refiner.refined).isEmpty());
         assertTrue(result.verified);
         assertTrue(result.inferredTrue());
     }
     @Test
-    public void networkHTest() {
+    public void validityNetworkHTest() {
         Ip entry = Ip.parse("10.10.0.0");
         Ip exit = Ip.parse("10.10.10.0");
         Node NODE_A = new Node("10.10.0.1","node_A");
@@ -824,7 +815,7 @@ public class RefineTest {
         assertFalse(result.verified);
     }
     @Test
-    public void networkITest() {
+    public void validityNetworkITest() {
         Ip entry = Ip.parse("10.10.0.0");
         Ip exit = Ip.parse("10.10.10.0");
         Node NODE_A = new Node("10.10.0.1","node_A");

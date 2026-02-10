@@ -43,6 +43,8 @@ public class Infer {
     private final Queue<Location> working = new LinkedList<>();
     private final Map<Location, Invariant> inferred = new Hashtable<>();
 
+    private Boolean verified = null;
+
     /// Inference counterexample, used for when we infer false within the network
     public record CounterExample(Location location, Invariant post, Location cause) { }
 
@@ -205,11 +207,16 @@ public class Infer {
         Optional<CounterExample> counter = inferenceLoop();
         LOGGER.info("Inference loop terminated.");
         Map<Location,Optional<Bgpv4Route>> checks = verificationAssumptionCheck();
-        return new Result(counter.isEmpty() && checks.values().stream().allMatch(Optional::isEmpty),copyInferred(inferred),counter,checks);
+        this.verified = counter.isEmpty() && checks.values().stream().allMatch(Optional::isEmpty);
+        return new Result(this.verified,copyInferred(inferred),counter,checks);
     }
 
     /// Returns a Refiner object which is used to refine invariants in order to tease out key properties
     public Refine refiner() {
+        if (verified != null && !verified) {
+            throw new BatfishException("Should not attempt to refine if initial invariant inference does not verify the" +
+                    "target property.");
+        }
         return Refine.builder(this.tbdd)
                 .setNodes(this.nodes)
                 .setLocations(this.locations)

@@ -1,7 +1,10 @@
 package org.batfish.minesweeper.bdd;
 
 import com.google.common.annotations.VisibleForTesting;
+
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 import java.util.function.BiFunction;
 import java.util.function.Function;
 import java.util.stream.Stream;
@@ -185,14 +188,45 @@ public class TransferBDDUtils {
      */
   public static BDD interpolate(TransferBDD tbdd, BDD p, BDD q) {
       assert p.varProfile().length == q.varProfile().length;
+      BDD wf = tbdd.getOriginalRoute().wellFormednessConstraints(true);
+      assert ((p.and(wf)).imp(q.and(wf))).isOne();
+
+      // STEP 1: Prune q to only include assignments which are satisfiable given p
+      BDD q_pruned = tbdd.getFactory().zero();
+      BDD.AllSatIterator qit = q.allsat();
+      while (qit.hasNext()) {
+          byte[] arr = qit.next();
+          Set<BDD> running = new HashSet<>();
+          for (int v = 0; v < arr.length; v++) {
+              if (arr[v] == 0)
+                  running.add(tbdd.getFactory().ithVar(v).not());
+              else if (arr[v] == 1)
+                  running.add(tbdd.getFactory().ithVar(v));
+          }
+          BDD q_assignment = tbdd.getFactory().andAll(running);
+
+          if (!p.and(q_assignment).isZero())
+              q_pruned.orWith(q_assignment);
+      }
+
+      // STEP 2: Existentially quantify out any variables in p which do not appear in the pruned q
       BDD result = p.id();
       for (int i = 0; i < p.varProfile().length; i++) {
           BDD var = tbdd.getFactory().ithVar(i).id();
           // we want to only keep variables that are present in both - check if either counts is zero
-          if (p.varProfile()[i] == 0 || q.varProfile()[i] == 0) {
+          if (p.varProfile()[i] == 0 || q_pruned.varProfile()[i] == 0) {
               result.existEq(var);
           }
       }
+
+      // STEP 3: In the case that we keep the prefix length but have no prefix, remove length variables
+      if (!result.testsVars(tbdd.getOriginalRoute().getPrefix().support())) {
+          result.existEq(tbdd.getOriginalRoute().getPrefixLength().support());
+      }
+
+      // STEP 4 ??? might want to do something else to handle prefixes in case !P1 /\ !P2 => !P1 where
+      // the intended interpolant is !P1... there is example in unit test which demonstrates this limitation
+
       return result;
   }
 }

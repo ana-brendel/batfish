@@ -93,6 +93,10 @@ public class BDDString {
         }
     }
 
+    private static String trimRegex(String regex) {
+        return regex.replaceAll("\\^","").replaceAll("\\$","");
+    }
+
     /// Returns mapping of BDD to the string representation of the atomic predicates satisfied by that BDD.
     /// Currently, the only atomic predicates which are considered are communities (not AS paths).
     private Pair<BDD, Set<Integer>> fetchAtomicPredicateBDD(byte[] assignment) {
@@ -105,13 +109,13 @@ public class BDDString {
                     // false - community is explicitly not set
                     running.add(this.factory.ithVar(v).not());
                     // needs to be negative because it is negated
-                    int varLabel = - this.addStringToBank("comm(" + var.getLiteralValue() + ")");
+                    int varLabel = - this.addStringToBank("comm(" + trimRegex(var.getRegex()) + ")");
                     strings.add(varLabel);
                     break;
                 } else if (assignment[v] == 1) {
                     // true - community is explicitly set
                     running.add(this.factory.ithVar(v));
-                    int varLabel = this.addStringToBank("comm(" + var.getLiteralValue() + ")");
+                    int varLabel = this.addStringToBank("comm(" + trimRegex(var.getRegex()) + ")");
                     strings.add(varLabel);
                     break;
                 } else {

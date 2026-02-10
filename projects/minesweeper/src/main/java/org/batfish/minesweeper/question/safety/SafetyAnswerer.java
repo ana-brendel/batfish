@@ -125,7 +125,7 @@ public final class SafetyAnswerer extends Answerer {
                         .put(Setup.LOCATION_RELEVANCE_COL, "Assumption")
                         .put(Setup.PROVIDED_INVARIANT_COL, entry.getValue().toString(refinementOccurred, cache))
                         .put(Setup.INFERRED_INVARIANTS_COL, entry.getValue().equals(refinement.refined.get(entry.getKey())) ?
-                                "same" : refinement.refined.get(entry.getKey()).toString(true, cache))
+                                "same as provided" : refinement.refined.get(entry.getKey()).toString(true, cache))
                         .put(Setup.COUNTEREXAMPLE_COL, checks.containsKey(entry.getKey()) && checks.get(entry.getKey()).isPresent()
                             ? nonDefaultRoute(checks.get(entry.getKey()).get()) :
                                 (refinement.refined.get(entry.getKey()).isFalse() ? "Any route" : ""))

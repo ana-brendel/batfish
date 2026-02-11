@@ -84,7 +84,7 @@ public class Invariant {
     }
 
     public Invariant negate() {
-        return new Invariant(tbdd,bdd.not(),"false");
+        return new Invariant(tbdd,bdd.not());
     }
 
     @Override
@@ -404,11 +404,6 @@ public class Invariant {
     /// Returns the BDD stored in this invariant (with well-formed constraint applied)
     public BDD wellFormedBDD() {
         return base.wellFormednessConstraints(true).and(bdd.id());
-    }
-
-    // Patch to get access to BDD without and-ing with wellFormednessConstraints (just used in )
-    public BDD getBDD() {
-        return bdd.id();
     }
 
     /// Returns true if the invariant is false

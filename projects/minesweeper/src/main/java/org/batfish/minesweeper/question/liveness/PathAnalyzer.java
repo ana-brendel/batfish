@@ -43,7 +43,7 @@ public class PathAnalyzer {
         if (prefix.isEmpty()) {
             throw new BatfishException("PathAnalyzer.generateGoodPaths() - Prefix space is empty, cannot perform liveness analysis.");
         }
-        Invariant condition = new Invariant(context.tbdd(),target.getBDD().and(context.prefixSpaceToBDD(prefix)));
+        Invariant condition = new Invariant(context.tbdd(),target.wellFormedBDD().and(context.prefixSpaceToBDD(prefix)));
 
         if (condition.isFalse()) {
             // no possible route exists that matches the prefix and target property

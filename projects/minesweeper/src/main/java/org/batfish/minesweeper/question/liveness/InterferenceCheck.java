@@ -69,7 +69,7 @@ public class InterferenceCheck {
                     Invariant wp = importPolicy == null ? property.copy()
                             : property.weakestPrecondition(importPolicy,false);
                     Invariant existing = inferred.getOrDefault(edge,Invariant.getFalse(context.tbdd()));
-                    Invariant updated = new Invariant(context.tbdd(),existing.getBDD().or(wp.getBDD()));
+                    Invariant updated = new Invariant(context.tbdd(),existing.wellFormedBDD().or(wp.wellFormedBDD()));
                     inferred.put(edge,updated);
                     if (!existing.equals(updated) && !working.contains(edge)) {
                         working.add(edge);
@@ -104,7 +104,7 @@ public class InterferenceCheck {
     public Optional<Map<Location,Bgpv4Route>> run() {
         inferred.clear();
         working.clear();
-        Invariant condition = new Invariant(context.tbdd(),target.negate().getBDD().and(context.prefixSpaceToBDD(prefix)));
+        Invariant condition = new Invariant(context.tbdd(),target.negate().wellFormedBDD().and(context.prefixSpaceToBDD(prefix)));
         if (condition.isFalse()) {
             // no possible "bad route" exists that matches the target prefix
             return Optional.empty();

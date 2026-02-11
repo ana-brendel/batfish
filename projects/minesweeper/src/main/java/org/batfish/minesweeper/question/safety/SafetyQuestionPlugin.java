@@ -11,13 +11,13 @@ import org.batfish.question.QuestionPlugin;
 /** QuestionPlugin for {@link SafetyQuestion}. */
 @AutoService(Plugin.class)
 public final class SafetyQuestionPlugin extends QuestionPlugin {
-    @Override
-    protected Answerer createAnswerer(Question question, IBatfish batfish) {
-        return new SafetyAnswerer((SafetyQuestion) question, batfish);
-    }
+  @Override
+  protected Answerer createAnswerer(Question question, IBatfish batfish) {
+    return new SafetyAnswerer((SafetyQuestion) question, batfish);
+  }
 
-    @Override
-    protected Question createQuestion() {
-        return new SafetyQuestion();
-    }
+  @Override
+  protected Question createQuestion() {
+    return new SafetyQuestion();
+  }
 }

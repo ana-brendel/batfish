@@ -18,84 +18,99 @@ import java.util.Queue;
 import java.util.Set;
 
 public class PathAnalyzer {
-    private final Path.Context context;
+  private final Path.Context context;
 
-    private final PrefixSpace prefix;
-    private final Location location;
-    private final Invariant target;
+  private final PrefixSpace prefix;
+  private final Location location;
+  private final Invariant target;
 
-    private final Map<Ip, Node> nodes;
-    private final Map<Node,Set<Edge>> edgesByDestination;
+  private final Map<Ip, Node> nodes;
+  private final Map<Node, Set<Edge>> edgesByDestination;
 
-    public PathAnalyzer(@Nonnull Path.Context context,
-                        @Nonnull PrefixSpace prefix, @Nonnull Location location, @Nonnull Invariant target,
-                        @Nonnull Map<Ip, Node> nodes, @Nonnull Map<Node,Set<Edge>> edgesByDestination) {
-        this.context = context;
-        this.prefix = prefix;
-        this.location = location;
-        this.target = target;
-        this.nodes = nodes;
-        this.edgesByDestination = edgesByDestination;
+  public PathAnalyzer(
+      @Nonnull Path.Context context,
+      @Nonnull PrefixSpace prefix,
+      @Nonnull Location location,
+      @Nonnull Invariant target,
+      @Nonnull Map<Ip, Node> nodes,
+      @Nonnull Map<Node, Set<Edge>> edgesByDestination) {
+    this.context = context;
+    this.prefix = prefix;
+    this.location = location;
+    this.target = target;
+    this.nodes = nodes;
+    this.edgesByDestination = edgesByDestination;
+  }
+
+  /// Based on potential paths provided, see if there is at least one which satisfies the liveness
+  // property (is a good path)
+  private Optional<Path> generateGoodPaths(@Nonnull List<Path.Builder> potentialPaths) {
+    if (prefix.isEmpty()) {
+      throw new BatfishException(
+          "PathAnalyzer.generateGoodPaths() - Prefix space is empty, cannot perform liveness analysis.");
+    }
+    Invariant condition =
+        new Invariant(context.tbdd(), target.wellFormedBDD().and(context.prefixSpaceToBDD(prefix)));
+
+    if (condition.isFalse()) {
+      // no possible route exists that matches the prefix and target property
+      return Optional.empty();
     }
 
-    /// Based on potential paths provided, see if there is at least one which satisfies the liveness property (is a good path)
-    private Optional<Path> generateGoodPaths(@Nonnull List<Path.Builder> potentialPaths) {
-        if (prefix.isEmpty()) {
-            throw new BatfishException("PathAnalyzer.generateGoodPaths() - Prefix space is empty, cannot perform liveness analysis.");
-        }
-        Invariant condition = new Invariant(context.tbdd(),target.wellFormedBDD().and(context.prefixSpaceToBDD(prefix)));
-
-        if (condition.isFalse()) {
-            // no possible route exists that matches the prefix and target property
-            return Optional.empty();
-        }
-
-        for (Path.Builder builder : potentialPaths) {
-            Path path = builder.build(location,condition);
-            if (path != null && path.isGoodPath().isPresent()) {
-                return Optional.of(path);
-            }
-        }
-        return Optional.empty();
+    for (Path.Builder builder : potentialPaths) {
+      Path path = builder.build(location, condition);
+      if (path != null && path.isGoodPath().isPresent()) {
+        return Optional.of(path);
+      }
     }
+    return Optional.empty();
+  }
 
-    /// Returns set of possible paths from ingress node to the target properties location
-    private List<Path.Builder> generatePathBuilders() {
-        Set<Path.Builder> paths = new HashSet<>();
-        Queue<Path.Builder> working = new LinkedList<>();
-        Path.Builder starter = Path.builder(context);
-        starter.addToPath(location.copy());
-        working.add(starter);
-        while (!working.isEmpty()) {
-            Path.Builder curr = working.remove();
-            Optional<Location> prev = curr.previous();
-            if (prev.isEmpty()) {
-                throw new BatfishException("PathAnalyzer.generatePathBuilders() - This should be unreachable.");
-            } else if (context.assumptions().containsKey(prev.get())) {
-                paths.add(curr);
-            } else if (prev.get() instanceof Edge edge && nodes.containsKey(edge.getSrc())) {
-                // source node of edge is still in network so we just there, if valid path
-                if (curr.addToPath(nodes.get(edge.getSrc()))) {
-                    working.add(curr);
-                }
-            } else if (prev.get() instanceof Edge) {
-                // this means this edge comes from outside, so we've reach edge of network so add to result
-                paths.add(curr);
-            } else if (prev.get() instanceof Node node) {
-                // this means we are at a node, so we need to expand outwards
-                Set<Edge> potentialSteps = edgesByDestination.get(node);
-                working.addAll(curr.expand(potentialSteps));
-            }
+  /// Returns set of possible paths from ingress node to the target properties location
+  private List<Path.Builder> generatePathBuilders() {
+    Set<Path.Builder> paths = new HashSet<>();
+    Queue<Path.Builder> working = new LinkedList<>();
+    Path.Builder starter = Path.builder(context);
+    starter.addToPath(location.copy());
+    working.add(starter);
+    while (!working.isEmpty()) {
+      Path.Builder curr = working.remove();
+      Optional<Location> prev = curr.previous();
+      if (prev.isEmpty()) {
+        throw new BatfishException(
+            "PathAnalyzer.generatePathBuilders() - This should be unreachable.");
+      } else if (context.assumptions().containsKey(prev.get())) {
+        paths.add(curr);
+      } else if (prev.get() instanceof Edge edge && nodes.containsKey(edge.getSrc())) {
+        // source node of edge is still in network so we just there, if valid path
+        if (curr.addToPath(nodes.get(edge.getSrc()))) {
+          working.add(curr);
         }
-        // filters out any paths which don't start at an assumption and then sorts by the length of the path
-        return paths.stream().filter(p -> p.previous().isPresent() && context.assumptions().containsKey(p.previous().get())).sorted().toList();
+      } else if (prev.get() instanceof Edge) {
+        // this means this edge comes from outside, so we've reach edge of network so add to result
+        paths.add(curr);
+      } else if (prev.get() instanceof Node node) {
+        // this means we are at a node, so we need to expand outwards
+        Set<Edge> potentialSteps = edgesByDestination.get(node);
+        working.addAll(curr.expand(potentialSteps));
+      }
     }
+    // filters out any paths which don't start at an assumption and then sorts by the length of the
+    // path
+    return paths.stream()
+        .filter(
+            p -> p.previous().isPresent() && context.assumptions().containsKey(p.previous().get()))
+        .sorted()
+        .toList();
+  }
 
-    /// Returns (if it exists) a good path that satisfies the liveness property in question. Note, this is a Path
-    /// object so the necessary invariants have been inferred, and we've checked that the ingress assumptions satisfies the
-    /// inferred ingress invariant.
-    public Optional<Path> run() {
-        List<Path.Builder> potentialPaths = this.generatePathBuilders();
-        return this.generateGoodPaths(potentialPaths);
-    }
+  /// Returns (if it exists) a good path that satisfies the liveness property in question. Note,
+  // this is a Path
+  /// object so the necessary invariants have been inferred, and we've checked that the ingress
+  // assumptions satisfies the
+  /// inferred ingress invariant.
+  public Optional<Path> run() {
+    List<Path.Builder> potentialPaths = this.generatePathBuilders();
+    return this.generateGoodPaths(potentialPaths);
+  }
 }

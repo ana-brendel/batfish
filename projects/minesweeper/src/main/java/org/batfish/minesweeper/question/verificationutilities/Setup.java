@@ -39,12 +39,13 @@ public class Setup {
                 case REGEX -> communityVars.addAll(ImmutableList.of(CommunityVar.from(regex)));
                 case STRUCTURE_NAME ->
                         configs.forEach(config -> {
-                            if (config.getCommunityMatchExprs().containsKey(regex))
+                            if (config.getCommunityMatchExprs().containsKey(regex)) {
                                 communityVars.addAll(config.getCommunityMatchExprs()
                                         .get(regex)
                                         .accept(new CommunityMatchExprVarCollector(), config));
+                            }
                         });
-            };
+            }
         }
         return communityVars;
     }
@@ -56,7 +57,7 @@ public class Setup {
                 configs.stream().map(config -> {
                     Collection<RoutingPolicy> policies = config.getRoutingPolicies().values();
                     // need to create variables to adhere to types
-                    return (Map.Entry<Configuration, Collection<RoutingPolicy>>) new AbstractMap.SimpleImmutableEntry<Configuration, Collection<RoutingPolicy>>(config, policies);
+                    return (Map.Entry<Configuration, Collection<RoutingPolicy>>) new AbstractMap.SimpleImmutableEntry<>(config, policies);
                 } ).toList(),
                 getCommunityVars(communityRegexes,configs), // need to add atomic predicates for communities exclusive to the provided properties
                 asPathRegexes.stream().map(RegexConstraint::getRegex).collect(ImmutableSet.toImmutableSet())); // should be empty, not handling as path yet
@@ -82,37 +83,50 @@ public class Setup {
         ImmutableList.Builder<String> features = ImmutableList.builder();
         // Always include the IP address
         features.add("network=" + route.getNetwork());
-        if (route.getAdministrativeCost() != 0)
+        if (route.getAdministrativeCost() != 0) {
             features.add("admin=" + route.getAdministrativeCost());
-        if (route.getTag() != 0)
+        }
+        if (route.getTag() != 0) {
             features.add("tag=" + route.getTag());
-        if (route.getAsPath().length() != 0)
+        }
+        if (route.getAsPath().length() != 0) {
             features.add("asPath=" + route.getAsPath());
-        if (!route.getClusterList().isEmpty())
+        }
+        if (!route.getClusterList().isEmpty()) {
             features.add("clusterList=" + route.getClusterList());
-        if (!route.getCommunities().getCommunities().isEmpty())
+        }
+        if (!route.getCommunities().getCommunities().isEmpty()) {
             features.add("communities=" + route.getCommunities());
-        if (route.getLocalPreference() != BgpRoute.DEFAULT_LOCAL_PREFERENCE)
+        }
+        if (route.getLocalPreference() != BgpRoute.DEFAULT_LOCAL_PREFERENCE) {
             features.add("localPreference=" + route.getLocalPreference());
-        if (route.getMetric() != 0)
+        }
+        if (route.getMetric() != 0) {
             features.add("med=" + route.getMetric());
-        //if (route.getNextHop() != ...)
-        //features.add("nextHop=" + route.getNextHop());
-        if (!route.getOriginatorIp().equals(Ip.ZERO))
+        }
+        // if (route.getNextHop() != ...)
+        // features.add("nextHop=" + route.getNextHop());
+        if (!route.getOriginatorIp().equals(Ip.ZERO)) {
             features.add("originatorIp=" + route.getOriginatorIp());
-        if (route.getOriginMechanism() != OriginMechanism.LEARNED)
+        }
+        if (route.getOriginMechanism() != OriginMechanism.LEARNED) {
             features.add("originMechanism=" + route.getOriginMechanism().name());
-        //if (route.getOriginType() != OriginType.INCOMPLETE)
-        //features.add("originType=" + route.getOriginType().name());
-        if (route.getProtocol() != RoutingProtocol.BGP)
+        }
+        // if (route.getOriginType() != OriginType.INCOMPLETE)
+        // features.add("originType=" + route.getOriginType().name());
+        if (route.getProtocol() != RoutingProtocol.BGP) {
             features.add("srcProtocol=" + route.getProtocol().name());
-        if (route.getReceivedFrom() != ReceivedFromSelf.instance())
+        }
+        if (route.getReceivedFrom() != ReceivedFromSelf.instance()) {
             features.add("receivedFrom=" + route.getReceivedFrom());
-        if (route.getReceivedFromRouteReflectorClient())
+        }
+        if (route.getReceivedFromRouteReflectorClient()) {
             features.add("receivedFromRouteReflectorClient=" + true);
-        //features.add("srcProtocol=" + route.getSrcProtocol().name());
-        if (route.getWeight() != 0)
+        }
+        // features.add("srcProtocol=" + route.getSrcProtocol().name());
+        if (route.getWeight() != 0) {
             features.add("weight=" + route.getWeight());
+        }
         return "Bgpv4Route{" + String.join(", ", features.build()) + "}";
     }
 
@@ -121,9 +135,6 @@ public class Setup {
     public static final String ASSUMPTION_COL = "Initial_Assumption";
     public static final String TARGET_COL = "Target_Property";
     public static final String INFERRED_INVARIANTS_COL = "Inferred_Invariant";
-    public static final String OVERALL_VERIFICATION_COL = "Overall_Verification_Result";
-    public static final String LOCAL_VERIFICATION_COL = "Local_Verification_Result";
-    public static final String ASSUMPTION_VIOLATION_COL = "Assumption_Violation";
     public static final String VERIFICATION_VIOLATION_COL = "Verification_Violation";
     public static final String LOCATION_RELEVANCE_COL = "Location_Relevance";
     public static final String PROVIDED_INVARIANT_COL = "Provided_Invariant";

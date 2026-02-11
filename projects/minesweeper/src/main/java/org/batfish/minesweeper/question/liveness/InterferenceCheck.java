@@ -1,7 +1,6 @@
 package org.batfish.minesweeper.question.liveness;
 
 import net.sf.javabdd.BDD;
-import org.batfish.common.BatfishException;
 import org.batfish.datamodel.Bgpv4Route;
 import org.batfish.datamodel.Ip;
 import org.batfish.datamodel.PrefixSpace;
@@ -14,7 +13,6 @@ import org.batfish.minesweeper.question.verificationutilities.Node;
 
 import javax.annotation.Nonnull;
 import java.util.HashMap;
-import java.util.Hashtable;
 import java.util.LinkedList;
 import java.util.Map;
 import java.util.Optional;
@@ -32,7 +30,7 @@ public class InterferenceCheck {
     private final Map<Node,Set<Edge>> edgesByDestination;
 
     private final Queue<Location> working = new LinkedList<>();
-    private final Map<Location, Invariant> inferred = new Hashtable<>();
+    private final Map<Location, Invariant> inferred = new HashMap<>();
 
     public InterferenceCheck(@Nonnull Path.Context context,
                         @Nonnull PrefixSpace prefix, @Nonnull Location location, @Nonnull Invariant target,
@@ -54,12 +52,11 @@ public class InterferenceCheck {
             Location location = working.remove();
             Invariant property = inferred.get(location);
             if (location instanceof Edge edge && nodes.containsKey(edge.getSrc())) {
-                RoutingPolicy exportPolicy = context.exports().getOrDefault(edge, null);
-                if (exportPolicy == null)
-                    throw new BatfishException("Infer.inferenceLoop() - No export policy for: " + edge);
+                RoutingPolicy exportPolicy = context.exports().get(edge);
+                Invariant wp = exportPolicy == null ? property.copy()
+                        : property.weakestPrecondition(exportPolicy,false);
                 Node src = nodes.get(edge.getSrc());
                 Invariant existing = inferred.getOrDefault(src,Invariant.getFalse(context.tbdd()));
-                Invariant wp = property.weakestPrecondition(exportPolicy,false);
                 // TODO verify that disjoining here is the correct move - we want to consider any "bad route"
                 Invariant updated = new Invariant(context.tbdd(),existing.wellFormedBDD().or(wp.wellFormedBDD()));
                 inferred.put(src,updated);
@@ -68,13 +65,11 @@ public class InterferenceCheck {
                 }
             } else if (location instanceof Node node) {
                 for (Edge edge : edgesByDestination.get(node)) {
-                    RoutingPolicy importPolicy = context.imports().getOrDefault(edge, null);
-                    if (importPolicy == null)
-                        throw new BatfishException("Infer.inferenceLoop() - No import policy for: " + edge);
+                    RoutingPolicy importPolicy = context.imports().get(edge);
+                    Invariant wp = importPolicy == null ? property.copy()
+                            : property.weakestPrecondition(importPolicy,false);
                     Invariant existing = inferred.getOrDefault(edge,Invariant.getFalse(context.tbdd()));
-                    Invariant wp = property.weakestPrecondition(importPolicy,false);
-                    // TODO verify that disjoining here is the correct move - we want to consider any "bad route"
-                    Invariant updated = new Invariant(context.tbdd(),existing.wellFormedBDD().or(wp.wellFormedBDD()));
+                    Invariant updated = new Invariant(context.tbdd(),existing.getBDD().or(wp.getBDD()));
                     inferred.put(edge,updated);
                     if (!existing.equals(updated) && !working.contains(edge)) {
                         working.add(edge);
@@ -88,9 +83,7 @@ public class InterferenceCheck {
     private Map<Location,Bgpv4Route> interferenceExample() {
         Map<Location,Bgpv4Route> checks = new HashMap<>();
         for (Location assumption_location : context.assumptions().keySet()) {
-            if (!inferred.containsKey(assumption_location)) {
-                throw new BatfishException("");
-            } else {
+            if (inferred.containsKey(assumption_location)) {
                 BDD assumption = context.assumptions().get(assumption_location).wellFormedBDD();
                 BDD badRouteCondition = inferred.get(assumption_location).wellFormedBDD();
                 BDD intersection = assumption.and(badRouteCondition);
@@ -101,6 +94,7 @@ public class InterferenceCheck {
                     checks.put(assumption_location,counter);
                 }
             }
+            // In the else branch, we didn't infer an incoming invariant, thus no route is possible so we are good
         }
         return checks;
     }
@@ -110,7 +104,11 @@ public class InterferenceCheck {
     public Optional<Map<Location,Bgpv4Route>> run() {
         inferred.clear();
         working.clear();
-        Invariant condition = new Invariant(context.tbdd(),target.negate().wellFormedBDD().and(context.prefixSpaceToBDD(prefix)));
+        Invariant condition = new Invariant(context.tbdd(),target.negate().getBDD().and(context.prefixSpaceToBDD(prefix)));
+        if (condition.isFalse()) {
+            // no possible "bad route" exists that matches the target prefix
+            return Optional.empty();
+        }
         inferred.put(location,condition);
         working.add(location.copy());
         inferenceLoop();

@@ -32,14 +32,13 @@ public class Node extends Location {
     }
 
     public Ip getSingleIp() {
-        if (ips.size() != 1)
+        if (ips.size() != 1) {
             throw new BatfishException("Node.getIp() - Trying to get distinct Ip address from node with multiple.");
+        }
         return Ip.create(ips.get(0).asLong());
     }
 
     public Optional<Ip> getRepresentativeIp() {
-//        if (ips.isEmpty())
-//            throw new BatfishException("Node.getRepresentativeIp() - Trying to get representative Ip with no Ips.");
         return ips.isEmpty() ? Optional.empty() : Optional.of(Ip.create(ips.get(0).asLong()));
     }
 
@@ -93,11 +92,12 @@ public class Node extends Location {
     @Override
     public int compareTo(@Nonnull Location location) {
         if (location instanceof Edge edge) {
-            if (this.getIps().contains(edge.getSrc()))
+            if (this.getIps().contains(edge.getSrc())) {
                 return -1; // this is an edge coming out of provided node, so edges should follow
-            else
+            } else {
                 // use the single ip, so that comparisons can remain consistent
                 return this.getRepresentativeIp().map(edge.getSrc()::compareTo).orElse(1);
+            }
         } else if (location instanceof Node node) {
             // use the single ip, so that comparisons can remain consistent
             Optional<Ip> thisRep = this.getRepresentativeIp();

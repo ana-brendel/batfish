@@ -131,12 +131,13 @@ public class BDDString {
     private BDD bddOfByteArr(byte[] arr) {
         Set<BDD> running = new HashSet<>();
         for (int v = 0; v < arr.length; v++) {
-            if (arr[v] == 0)
+            if (arr[v] == 0) {
                 running.add(this.factory.ithVar(v).not());
-            else if (arr[v] == 1)
+            } else if (arr[v] == 1) {
                 running.add(this.factory.ithVar(v));
-            else
+            } else {
                 assert arr[v] == -1;
+            }
         }
         return this.factory.andAll(running);
     }
@@ -156,8 +157,9 @@ public class BDDString {
         for (BDD assignment : disjuncts) {
             BDD remaining = assignment.exist(this.prefixInfoSupport);
             BDD prefixBDD = assignment.project(this.prefixInfoSupport);
-            if (!prefixBDDGroups.containsKey(remaining))
+            if (!prefixBDDGroups.containsKey(remaining)) {
                 prefixBDDGroups.put(remaining,new HashSet<>());
+            }
             prefixBDDGroups.get(remaining).add(prefixBDD);
         }
 
@@ -185,14 +187,18 @@ public class BDDString {
                     Prefix prefix = this.prefixOfBDD(assignment);
                     negated.add(Pair.of(projection,prefix));
                     // only switches to the negation if there is one negated prefix
-                    if (negated.size() > 1) break;
+                    if (negated.size() > 1) {
+                        break;
+                    }
                 }
                 // only switches to the negation if there is one negated prefix
                 if (negated.size() == 1) {
                     prefixes = Set.of(Pair.of(negated.stream().findFirst().get(),false));
                 }
             }
-            if (!prefixes.isEmpty()) prefixGroups.put(remaining,prefixes);
+            if (!prefixes.isEmpty()) {
+                prefixGroups.put(remaining,prefixes);
+            }
         }
 
         if (prefixGroups.isEmpty()) {
@@ -273,7 +279,9 @@ public class BDDString {
         int countLimit = 64;
         while (iterator.hasNext()) {
             countLimit -= 1;
-            if (countLimit == 0) return "LIMIT (Complex BDD)";
+            if (countLimit == 0) {
+                return "LIMIT (Complex BDD)";
+            }
             // for each satisfying assignment, pull out the atomic predicates
             byte[] sat = iterator.next();
             Pair<BDD, Set<Integer>> atoms = this.fetchAtomicPredicateBDD(sat);
@@ -314,10 +322,14 @@ public class BDDString {
                     // update the display if not included
                     if (!bddToDisplays.containsKey(combined)) {
                         bddToDisplays.put(combined, new HashSet<>(bddToDisplays.get(aps)));
-                        if (prefixLabel != 0) bddToDisplays.get(combined).add(prefixLabel);
+                        if (prefixLabel != 0) {
+                            bddToDisplays.get(combined).add(prefixLabel);
+                        }
                     }
                     // add this disjunct to the set
-                    if (!pullPrefixes.containsKey(combined)) pullPrefixes.put(combined,new HashSet<>());
+                    if (!pullPrefixes.containsKey(combined)) {
+                        pullPrefixes.put(combined,new HashSet<>());
+                    }
                     pullPrefixes.get(combined).add(remaining);
                 });
             }
@@ -332,14 +344,17 @@ public class BDDString {
             BDD common = disjunct.getKey();
             BDD internalDisjuncts = this.factory.orAll(disjunct.getValue());
             return common.and(internalDisjuncts);
-        }).collect(Collectors.toSet())).and(this.wf)).equals(originalProjection))
+        }).collect(Collectors.toSet())).and(this.wf)).equals(originalProjection)) {
             return "ERR (BDD String)";
+        }
 
         // STEP 4: simplify the formula via naive resolution then translate to strings and disjoin each conjunction
         return this.resolution(pullPrefixes.entrySet().stream()
                 .map(entry -> {
                     Set<Integer> predicates = bddToDisplays.get(entry.getKey());
-                    if (!checkSetForConstant(entry.getValue()).isEmpty()) predicates.add(0);
+                    if (!checkSetForConstant(entry.getValue()).isEmpty()) {
+                        predicates.add(0);
+                    }
                     return predicates;
                 }).collect(Collectors.toSet())).stream().map(clause ->
                         String.join(",",clause.stream().map(this::getFromStringBank).sorted().toList()))

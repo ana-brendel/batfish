@@ -106,12 +106,6 @@ public class BDDStringTest {
         assertEquals("prefix(25.13.0.0/16)",a);
         String b = BDDString.get(tbdd,prefixStringToBDD("25.13.0.0/16",false));
         assertEquals("!prefix(25.13.0.0/16)",b);
-        // todo - figure out what the two below should be
-        String aa = BDDString.get(tbdd,prefixStringToBDD("25.13.0.0/16:16-32",true));
-        // aa = prefix(25.13.0.0/16) OR prefix(25.13.0.0/17) OR prefix(25.13.0.0/18) OR prefix(25.13.0.0/20) OR
-        //  prefix(25.13.0.0/24) OR prefix(25.13.0.0/32)
-        String bb = BDDString.get(tbdd,prefixStringToBDD("25.13.0.0/16:16-32",false));
-        // bb = long
 
         // disjunction
         String c = BDDString.get(tbdd,prefixStringToBDD("25.13.0.0/16",true)
@@ -128,12 +122,12 @@ public class BDDStringTest {
         String f = BDDString.get(tbdd,prefixStringToBDD("25.13.0.0/16",true)
                 .and(prefixStringToBDD("12.0.0.0/8",true)));
         assertEquals("False",f);
-        String g = BDDString.get(tbdd,prefixStringToBDD("25.13.0.0/16",false)
-                .and(prefixStringToBDD("12.0.0.0/8",false)));
-//        assertEquals("",g);
-        String h = BDDString.get(tbdd,prefixStringToBDD("25.13.7.0/24",false)
-                .and(prefixStringToBDD("25.13.0.0/16:16-32",true)));
-//        assertEquals("",h);
+
+        // TODO - Examples that our BDD to string class cannot support
+        // String unknown1 = BDDString.get(tbdd,prefixStringToBDD("25.13.0.0/16:16-32",true));
+        // String unknown2 = BDDString.get(tbdd,prefixStringToBDD("25.13.0.0/16:16-32",false));
+        // String unknown3 = BDDString.get(tbdd,prefixStringToBDD("25.13.0.0/16",false).and(prefixStringToBDD("12.0.0.0/8",false)));
+        // String unknown4 = BDDString.get(tbdd,prefixStringToBDD("25.13.7.0/24",false).and(prefixStringToBDD("25.13.0.0/16:16-32",true)));
     }
 
     @Test

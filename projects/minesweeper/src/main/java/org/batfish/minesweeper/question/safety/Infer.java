@@ -17,8 +17,6 @@ import org.batfish.minesweeper.question.verificationutilities.Node;
 
 import javax.annotation.Nonnull;
 import java.util.HashMap;
-import java.util.HashSet;
-import java.util.Hashtable;
 import java.util.LinkedList;
 import java.util.Map;
 import java.util.Optional;
@@ -35,22 +33,19 @@ public class Infer {
     private final Map<Ip, Node> nodes = new HashMap<>();
     // for better runtime, should switch locations to a neighbors map
     private final Map<Node, Set<Edge>> edgesByDestination = new HashMap<>();
-    private final Set<Location> locations = new HashSet<>();
     private final Map<Edge, RoutingPolicy> imports = new HashMap<>();
     private final Map<Edge, RoutingPolicy> exports = new HashMap<>();
 
     private final Map<Location, Invariant> targets = new HashMap<>();
     private final Map<Location, Invariant> assumptions = new HashMap<>();
     private final Queue<Location> working = new LinkedList<>();
-    private final Map<Location, Invariant> inferred = new Hashtable<>();
-
-    private Boolean verified = null;
+    private final Map<Location, Invariant> inferred = new HashMap<>();
 
     /// Inference counterexample, used for when we infer false within the network
     public record CounterExample(Location location, Invariant post, Location cause) { }
 
     /// Stores useful results collected during invariant inference
-    public class Result {
+    public static class Result {
         public final boolean verified;
         public final Map<Location, Invariant> invariants;
         public final Optional<CounterExample> counter;
@@ -70,18 +65,17 @@ public class Infer {
             }
             return false;
         }
-        public Map<Location,String> strings(Infer infer) {
+        public Map<Location,String> strings() {
             Map<Location,String> strings = new HashMap<>();
             invariants.forEach((loc,inv) -> strings.put(loc,inv.toString(false,this.cache)));
             return strings;
         }
     }
 
-    public Infer(@Nonnull Path.Context context, @Nonnull Map<Ip, Node> nodes, @Nonnull Set<Location> locations,
+    public Infer(@Nonnull Path.Context context, @Nonnull Map<Ip, Node> nodes,
                  @Nonnull Map<Node,Set<Edge>> edgesByDestination) {
         this.tbdd = context.tbdd();
         this.nodes.putAll(nodes);
-        this.locations.addAll(locations);
         this.edgesByDestination.putAll(edgesByDestination);
         this.imports.putAll(context.imports());
         this.exports.putAll(context.exports());
@@ -136,13 +130,11 @@ public class Infer {
             LOGGER.info("Working to weakest precondition for property to hold at: {}", location);
             assert !property.isFalse();
             if (location instanceof Edge edge && nodes.containsKey(edge.getSrc())) {
-                RoutingPolicy exportPolicy = exports.getOrDefault(edge, null);
-                if (exportPolicy == null)
-                    throw new BatfishException("Infer.inferenceLoop() - No export policy for: " + edge);
+                RoutingPolicy exportPolicy = exports.get(edge);
+                Invariant wp = exportPolicy == null ? property.copy() : property.weakestPrecondition(exportPolicy);
                 Node src = nodes.get(edge.getSrc());
                 boolean firstVisit = !inferred.containsKey(src);
                 Invariant existing = inferred.getOrDefault(src,new Invariant(tbdd));
-                Invariant wp = property.weakestPrecondition(exportPolicy);
                 Invariant updated = strongestCommonImplicant(existing,wp);
                 inferred.put(src,updated);
                 if (updated.isFalse()) {
@@ -153,12 +145,10 @@ public class Infer {
             } else if (location instanceof Node node) {
                 for (Location l : edgesByDestination.get(node)) {
                     if (l instanceof Edge edge && edge.isDst(node)) {
-                        RoutingPolicy importPolicy = imports.getOrDefault(edge, null);
-                        if (importPolicy == null)
-                            throw new BatfishException("Infer.inferenceLoop() - No import policy for: " + edge);
+                        RoutingPolicy importPolicy = imports.get(edge);
+                        Invariant wp = importPolicy == null ? property.copy() : property.weakestPrecondition(importPolicy);
                         boolean firstVisit = !inferred.containsKey(edge);
                         Invariant existing = inferred.getOrDefault(edge,new Invariant(tbdd));
-                        Invariant wp = property.weakestPrecondition(importPolicy);
                         Invariant updated = strongestCommonImplicant(existing,wp);
                         inferred.put(edge,updated);
                         if (updated.isFalse()) {
@@ -210,15 +200,13 @@ public class Infer {
         Optional<CounterExample> counter = inferenceLoop();
         LOGGER.info("Inference loop terminated.");
         Map<Location,Optional<Bgpv4Route>> checks = verificationAssumptionCheck();
-        this.verified = counter.isEmpty() && checks.values().stream().allMatch(Optional::isEmpty);
-        return new Result(this.verified,copyInferred(inferred),counter,checks);
+        return new Result(counter.isEmpty() && checks.values().stream().allMatch(Optional::isEmpty),copyInferred(inferred),counter,checks);
     }
 
     /// Returns a Refiner object which is used to refine invariants in order to tease out key properties
     public Refine refiner() {
         return Refine.builder(this.tbdd)
                 .setNodes(this.nodes)
-                .setLocations(this.locations)
                 .setImports(this.imports)
                 .setExports(this.exports)
                 .setTargets(copyInferred(this.targets))

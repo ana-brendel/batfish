@@ -536,13 +536,17 @@ public class RefineTest {
                 exit,getBgpActivePeerConfig("outside",null,"outsideExport")));
 
         // Creating routing policy
-        if (preventBackwards) makePolicy(configs.get(NODE_A),"rightImport",permitRoute(false));
+        if (preventBackwards) {
+            makePolicy(configs.get(NODE_A),"rightImport",permitRoute(false));
+        }
         RoutingPolicy templatePolicy = makePolicy(configs.get(NODE_A),"outsideImport",
                 ifStatement(checkForPrefixListMatch(PREFIX_MATCH_P),replaceCommunities(plain_comm_10),replaceCommunities(plain_comm_30)));
 
         makePolicy(configs.get(NODE_B),"leftImport",
                 ifStatement(checkForPrefixListMatch(PREFIX_MATCH_Q),replaceCommunities(plain_comm_20),permitRoute(true)));
-        if (preventBackwards) makePolicy(configs.get(NODE_B),"rightImport",permitRoute(false));
+        if (preventBackwards) {
+            makePolicy(configs.get(NODE_B),"rightImport",permitRoute(false));
+        }
 
         makePolicy(configs.get(NODE_C),"outsideExport",
                 ifStatement(checkForCommunity(plain_comm_10),permitRoute(true),

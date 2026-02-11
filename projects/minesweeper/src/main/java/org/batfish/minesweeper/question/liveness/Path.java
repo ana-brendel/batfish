@@ -37,9 +37,10 @@ public class Path {
         this.steps = steps == null ? new Location[0] : steps;
         this.properties = properties == null ? new Invariant[0] : properties;
         this.context = context;
-        if (this.steps.length != this.properties.length)
+        if (this.steps.length != this.properties.length) {
             throw new BatfishException("Path.constructor - " + this.steps.length +
                     " locations on the path and " + this.properties.length + " properties provided.");
+        }
     }
 
     /// Network context needed
@@ -53,7 +54,7 @@ public class Path {
                 BDD rangeBDD = isRelevantForDestination(r,range);
                 result = result.or(rangeBDD);
             }
-            return result.and(r.wellFormednessConstraints(true));
+            return result;
         }
     }
 
@@ -118,8 +119,9 @@ public class Path {
             Set<Builder> result = new HashSet<>();
             for (Location step : potentialSteps) {
                 Builder curr = new Builder(tbdd,imports,exports,assumptions,steps);
-                if (curr.addToPath(step))
+                if (curr.addToPath(step)) {
                     result.add(curr);
+                }
             }
             return result;
         }
@@ -207,8 +209,12 @@ public class Path {
                 } else {
                     throw new BatfishException("Path.build() - Path is not valid; going from " + curr + " to " + prev);
                 }
-                if (policy == null) throw new BatfishException("Path.build() - No policy on record for going from " + curr + " to " + prev);
-                predicates[i] = post.weakestPrecondition(policy,false);
+                if (policy == null) {
+                    // no policy so the weakest precondition is this post condition just pushed on
+                    predicates[i] = post.copy();
+                } else {
+                    predicates[i] = post.weakestPrecondition(policy,false);
+                }
             }
             return new Path(locations,predicates,new Context(tbdd,assumptions,imports,exports));
         }
@@ -217,8 +223,9 @@ public class Path {
         public boolean equals(Object obj) {
             if (obj instanceof Builder other && other.steps.size() == this.steps.size()) {
                 for (int i = 0; i < this.steps.size(); i++) {
-                    if (!this.steps.elementAt(i).equals(other.steps.elementAt(i)))
+                    if (!this.steps.elementAt(i).equals(other.steps.elementAt(i))) {
                         return false;
+                    }
                 }
                 return true;
             } else {

@@ -192,28 +192,35 @@ public class TransferBDDUtils {
       assert p.varProfile().length == q.varProfile().length;
       Invariant p_inv = new Invariant(tbdd,p);
       Invariant q_inv = new Invariant(tbdd,q);
-      if (!p_inv.implies(q_inv))
-          return Optional.empty();
 
-      // STEP 1: Prune q to only include assignments which are satisfiable given p
+      // Not sure if this is necessary, for our current purposes we wouldn't want to interpolate is P does not imply Q
+      if (!p_inv.implies(q_inv)) {
+          return Optional.empty();
+      }
+
+      // STEP 1: Prune q to only include assignments which are satisfiable given p (hopefully scaling is not issue)
+      // ex. P = A /\ B and  Q = A \/ !B, then A => B but !B /\ P is unsatisfiable so we want Q' = A for interpolation
       BDD q_pruned = tbdd.getFactory().zero();
       BDD.AllSatIterator qit = q.allsat();
       while (qit.hasNext()) {
           byte[] arr = qit.next();
           Set<BDD> running = new HashSet<>();
           for (int v = 0; v < arr.length; v++) {
-              if (arr[v] == 0)
+              if (arr[v] == 0) {
                   running.add(tbdd.getFactory().ithVar(v).not());
-              else if (arr[v] == 1)
+              } else if (arr[v] == 1) {
                   running.add(tbdd.getFactory().ithVar(v));
+              }
           }
           BDD q_assignment = tbdd.getFactory().andAll(running);
 
-          if (!p.and(q_assignment).isZero())
+          if (!p.and(q_assignment).isZero()) {
               q_pruned.orWith(q_assignment);
+          }
       }
 
       // STEP 2: Existentially quantify out any variables in p which do not appear in the pruned q
+      // ex. P = (A \/ B) /\ C and Q = A \/ B, so P => Q and C is not in Q so we remove it from P to get interpolant A \/ B
       BDD result = p.id();
       for (int i = 0; i < p.varProfile().length; i++) {
           BDD var = tbdd.getFactory().ithVar(i).id();
@@ -224,12 +231,14 @@ public class TransferBDDUtils {
       }
 
       // STEP 3: In the case that we keep the prefix length but have no prefix, remove length variables
+      // TODO This is an edge case - might be a bug on my end related to the well-formedness constraint stuff, might be unnecessary
       if (!result.testsVars(tbdd.getOriginalRoute().getPrefix().support())) {
           result.existEq(tbdd.getOriginalRoute().getPrefixLength().support());
       }
 
-      // STEP 4 ??? might want to do something else to handle prefixes in case !P1 /\ !P2 => !P1 where
-      // the intended interpolant is !P1... there is example in unit test which demonstrates this limitation
+      // STEP 4 ??? (tbd to address existing limitations in approach)
+      //    ex. Reasoning distinctly about negations of prefixes (demonstrated in InvariantTest.interpolationExactTest())
+      //    ex. ...
 
       return Optional.of(result);
   }

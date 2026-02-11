@@ -162,8 +162,9 @@ public final class SafetyAnswerer extends Answerer {
         }
 
         // sanity check that refinement didn't change verification result
-        if (result.verified != refined.verified)
+        if (result.verified != refined.verified) {
             throw new BatfishException("SafetyAnswerer.run() - Inference and refinement final verification results inconsistent.");
+        }
 
         return new Result(info,refinementOccurred,result.checks,Map.of(location,target),refined,result.counter);
     }
@@ -182,10 +183,11 @@ public final class SafetyAnswerer extends Answerer {
         LOGGER.info(info.displayNodes());
 
         // if there is no provided target, return a list of the network locations (check for more than one)
-        if (_targets.isEmpty())
+        if (_targets.isEmpty()) {
             return info.getAnswerElement();
-        else if (_targets.size() != 1)
+        } else if (_targets.size() != 1) {
             throw new BatfishException("SafetyAnswerer.answer() - Expects exactly one property to verify, provided with " + _targets.size());
+        }
 
         // determine the target and run the inference algorithm
         Map.Entry<Location, Invariant> target = buildInvariant(info,true,_targets.entrySet().stream().findFirst().get());

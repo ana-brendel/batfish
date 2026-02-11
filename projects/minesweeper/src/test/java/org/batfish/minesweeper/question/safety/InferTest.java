@@ -562,7 +562,6 @@ public class InferTest {
         verifier_0.addProperty(D1, property_0).addProperty(D2, property_0);
         Infer.Result result_0 = verifier_0.run();
         assertTrue(result_0.verified);
-        Map<Location,String> strings0 = result_0.strings(verifier_0);
 
         TestConfigConstructionUtils.Network net_1 = meshNetworkExample(A1,B1,G1,D1,A2,B2,G2,D2,1);
         Invariant property_1 = new Invariant(net_1.tbdd(), Invariant.clauseBuilder().avoidPrefix(PREFIX).build(net_1.tbdd(), net_1.imports().get(D1)));
@@ -572,7 +571,6 @@ public class InferTest {
         verifier_1.addProperty(D1, property_1);
         Infer.Result result_1 = verifier_1.run();
         assertTrue(result_1.verified);
-        Map<Location,String> strings1 = result_1.strings(verifier_1);
 
         TestConfigConstructionUtils.Network net_2 = meshNetworkExample(A1,B1,G1,D1,A2,B2,G2,D2,2);
         Invariant property_2 = new Invariant(net_2.tbdd(), Invariant.clauseBuilder().avoidPrefix(PREFIX).build(net_2.tbdd(), net_2.imports().get(D1)));
@@ -585,7 +583,6 @@ public class InferTest {
         assertFalse(result_2.verified);
         assertEquals(result_2.invariants.get(A1), not_prefix_2);
         assertEquals(result_2.invariants.get(A2), not_prefix_2);
-        Map<Location,String> strings2 = result_2.strings(verifier_2);
 
         TestConfigConstructionUtils.Network net_3 = meshNetworkExample(A1,B1,G1,D1,A2,B2,G2,D2,3);
         Invariant property_3 = new Invariant(net_3.tbdd(), Invariant.clauseBuilder().avoidPrefix(PREFIX).build(net_3.tbdd(), net_3.imports().get(D1)));
@@ -598,7 +595,6 @@ public class InferTest {
         assertFalse(result_3.verified);
         assertEquals(result_3.invariants.get(A1), not_prefix_3);
         assertEquals(result_3.invariants.get(A2), not_prefix_3);
-        Map<Location,String> strings3 = result_3.strings(verifier_3);
 
         TestConfigConstructionUtils.Network net_4 = meshNetworkExample(A1,B1,G1,D1,A2,B2,G2,D2,0);
         Invariant property_4 = new Invariant(net_4.tbdd(), Invariant.clauseBuilder().avoidPrefix(PREFIX).build(net_4.tbdd(), net_4.imports().get(D1)));
@@ -610,7 +606,6 @@ public class InferTest {
         verifier_4.addProperty(D1, property_4).addProperty(D2, property_alt);
         Infer.Result result_4 = verifier_4.run();
         assertFalse(result_4.verified);
-        Map<Location,String> strings4 = result_4.strings(verifier_4);
         assertEquals(result_4.invariants.get(A1), expected);
         assertEquals(result_4.invariants.get(A2), expected);
 
@@ -760,9 +755,7 @@ public class InferTest {
         Node NODE2 = new Node("101.0.1.11", "node_2");
         Node NODE3 = new Node("101.0.1.22", "node_3");
         Node NODE4 = new Node("101.0.1.33", "node_4");
-        Invariant.ClauseBuilder avoidPrefix = Invariant.clauseBuilder().avoidPrefix(PREFIX);
-        Invariant.ClauseBuilder match_100_1 = Invariant.clauseBuilder().setCommunities(new RegexConstraints(List.of(RegexConstraint.parse("100:1"))));
-        Invariant.ClauseBuilder match_100_2 = Invariant.clauseBuilder().setCommunities(new RegexConstraints(List.of(RegexConstraint.parse("100:2"))));
+
         Invariant.ClauseBuilder avoidBoth = Invariant.clauseBuilder().setCommunities(new RegexConstraints(List.of(
                 RegexConstraint.parse("!1:10"),
                 RegexConstraint.parse("!1:30"))));
@@ -920,7 +913,6 @@ public class InferTest {
     @Test
     public void originalTwoPathNetworkTest() {
         String prefix = "25.13.0.0/16";
-        List<String> prefixesConsidered = ImmutableList.of(prefix);
         PrefixSpace PREFIX = new PrefixSpace(PrefixRange.fromPrefix(Prefix.parse(prefix)));
 
         Node NODE_1A = new Node("10.0.1.1","node_1_a");
@@ -1062,7 +1054,6 @@ public class InferTest {
     @Test
     public void simpleNetworkTest() {
         String prefix = "25.13.0.0/16";
-        List<String> prefixesConsidered = ImmutableList.of(prefix);
         PrefixSpace PREFIX = new PrefixSpace(PrefixRange.fromPrefix(Prefix.parse(prefix)));
 
         Ip entry = Ip.parse("10.10.0.0");
@@ -1079,8 +1070,6 @@ public class InferTest {
         Invariant property = new Invariant(net.tbdd(),Invariant.clauseBuilder().avoidPrefix(PREFIX).build(net.tbdd(),net.imports().get(NODE_C)));
         verifier.addProperty(target,property);
         Infer.Result result = verifier.run();
-
-        Map<Location,String> strings = result.strings(verifier);
 
         assertTrue(result.verified);
         assertTrue(result.inferredTrue());

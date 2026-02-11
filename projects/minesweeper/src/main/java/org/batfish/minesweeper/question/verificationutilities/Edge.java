@@ -84,16 +84,18 @@ public class Edge extends Location {
     @Override
     public int compareTo(@Nonnull Location location) {
         if (location instanceof Edge edge) {
-            if (edge.src.equals(this.src))
+            if (edge.src.equals(this.src)) {
                 return this.dst.compareTo(edge.dst);
-            else
+            } else {
                 return this.src.compareTo(edge.src);
+            }
         } else if (location instanceof Node node) {
-            if (node.getIps().contains(this.src))
+            if (node.getIps().contains(this.src)) {
                 return 1; // this is an edge coming out of provided node, so edges should follow
-            else
+            } else {
                 // use the single ip, so that comparisons can remain consistent
                 return node.getRepresentativeIp().map(this.src::compareTo).orElse(1);
+            }
         } else {
             throw new BatfishException("Edge.compareTo() - Only two implementations of Location, should never reach here.");
         }

@@ -41,7 +41,6 @@ public class Refine {
     public static class Builder {
         private final TransferBDD tbdd;
         private Map<Ip,Node> nodes;
-        private Set<Location> locations;
         private Map<Edge, RoutingPolicy> imports;
         private Map<Edge, RoutingPolicy> exports;
         private Map<Location, Invariant> targets;
@@ -53,11 +52,6 @@ public class Refine {
 
         public Builder setNodes(Map<Ip,Node> nodes) {
             this.nodes = nodes;
-            return this;
-        }
-
-        public Builder setLocations(Set<Location> locations) {
-            this.locations = locations;
             return this;
         }
 
@@ -93,8 +87,8 @@ public class Refine {
         }
 
         public Refine build() {
-            return new Refine(this.tbdd,this.nodes, this.locations,
-                    this.imports, this.exports, this.targets, this.assumptions, this.incoming, this.inferred);
+            return new Refine(this.tbdd,this.nodes, this.imports, this.exports,
+                    this.targets, this.assumptions, this.incoming, this.inferred);
         }
     }
 
@@ -104,7 +98,7 @@ public class Refine {
     }
 
     /// Stores useful results collected during invariant refinement
-    public class Result {
+    public static class Result {
         public final boolean verified;
         public final Map<Location, Invariant> initial;
         public final Map<Location, Invariant> refined;
@@ -131,8 +125,7 @@ public class Refine {
         }
     }
 
-    private Refine(TransferBDD tbdd,
-                   Map<Ip,Node> nodes, Set<Location> locations,
+    private Refine(TransferBDD tbdd, Map<Ip,Node> nodes,
                    Map<Edge, RoutingPolicy> imports, Map<Edge, RoutingPolicy> exports,
                    Map<Location, Invariant> targets, Map<Location, Invariant> assumptions,
                    Set<Edge> incoming, Map<Location, Invariant> inferred) {
@@ -163,7 +156,9 @@ public class Refine {
                     throw new BatfishException("This should not happen - any reachable node should have inferred invariant");
                 }
                 Invariant weakest = inferred.get(toRefine).copy();
-                Invariant strongest = refinements.get(edge).strongestPostcondition(imports.get(edge));
+                RoutingPolicy importPolicy = imports.get(edge);
+                Invariant strongest = importPolicy == null ? refinements.get(edge).copy() :
+                        refinements.get(edge).strongestPostcondition(importPolicy);
                 BDD interpolant = interpolate(tbdd,strongest.wellFormedBDD(),weakest.wellFormedBDD())
                         .orElse(weakest.wellFormedBDD());
                 Invariant previous = refinements.get(toRefine);
@@ -180,13 +175,17 @@ public class Refine {
                             throw new BatfishException("This should not happen - any reachable edge should have inferred invariant");
                         }
                         Invariant weakest = inferred.get(toRefine).copy();
-                        Invariant strongest = precondition.strongestPostcondition(exports.get(toRefine));
+                        RoutingPolicy exportPolicy = exports.get(toRefine);
+                        Invariant strongest = exportPolicy == null ? precondition.copy() :
+                                precondition.strongestPostcondition(exportPolicy);
                         BDD interpolant = interpolate(tbdd,strongest.wellFormedBDD(),weakest.wellFormedBDD())
                                 .orElse(weakest.wellFormedBDD());
                         Invariant previous = refinements.put(toRefine,new Invariant(tbdd,interpolant));
                         if (previous == null || !refinements.get(toRefine).equals(previous)){
                             // if there is already an edge entering this destination, we don't need to add it twice
-                            if (!working.contains(nodes.get(toRefine.getDst()))) working.add(toRefine);
+                            if (!working.contains(nodes.get(toRefine.getDst()))) {
+                                working.add(toRefine);
+                            }
                         }
                     }
                 }
@@ -199,7 +198,7 @@ public class Refine {
     public Result noRefinement() {
         boolean verified = assumptions.keySet().stream().allMatch(
                 loc -> inferred.containsKey(loc) && assumptions.get(loc).implies(inferred.get(loc)));
-        return new Result(verified,inferred,inferred);
+        return new Result(verified, inferred, inferred);
     }
 
     /// Driving method to perform invariant refinement
@@ -213,25 +212,30 @@ public class Refine {
         if (working.isEmpty()) {
             boolean verified = assumptions.keySet().stream().allMatch(
                     loc -> inferred.containsKey(loc) && assumptions.get(loc).implies(inferred.get(loc)));
-            return new Result(verified,inferred,inferred);
+            return new Result(verified, inferred, inferred);
         }
 
         // need to update the inferred invariants to include the stronger assumption - safe update via previous check
         // TODO if we add refinement even when assumptions don't imply inferred condition, we should tweak something here
         Map<Location, Invariant> original = copyInferred(inferred);
-        enteringNetwork.forEach(e -> { if (assumptions.containsKey(e)) inferred.put(e,assumptions.get(e)); });
+        enteringNetwork.forEach(e -> {
+            if (assumptions.containsKey(e)) {
+                inferred.put(e,assumptions.get(e));
+            }
+        });
 
         Map<Location, Invariant> finalized = strengtheningLoop();
         finalized.forEach((loc,inv) -> { assert inv.implies(inferred.get(loc)); });
         finalized.forEach((loc,inv) -> {
-            if (!inv.implies(original.get(loc)))
+            if (!inv.implies(original.get(loc))) {
                 // based on our algorithm, this should never happen
                 throw new BatfishException("Inferred invariant does not imply the weakest condition that was needed @ location " + loc);
+            }
         });
 
         targets.forEach((loc,i) -> { assert finalized.containsKey(loc); });
         boolean verified = assumptions.keySet().stream().allMatch(
                 loc -> finalized.containsKey(loc) && assumptions.get(loc).implies(finalized.get(loc)));
-        return new Result(verified,original,finalized);
+        return new Result(verified, original, finalized);
     }
 }

@@ -87,16 +87,21 @@ public class Invariant {
         return new Invariant(tbdd,bdd.not(),"false");
     }
 
+    @Override
     public String toString() {
         return this.toString(false);
     }
 
     public String toString(boolean refinementOccurred) {
-        if (this.isFalse()) return refinementOccurred ? "no traffic" : "false";
-        if (this.isTrue()) return "true";
-        String returned = Objects.requireNonNullElseGet(this.str, () -> BDDString.get(this.tbdd, this.bdd));
-        assert !returned.trim().isEmpty();
-        return returned;
+        if (this.isFalse()) {
+            return refinementOccurred ? "no traffic" : "false";
+        } else if (this.isTrue()) {
+            return "true";
+        } else {
+            String returned = Objects.requireNonNullElseGet(this.str, () -> BDDString.get(this.tbdd, this.bdd));
+            assert !returned.trim().isEmpty();
+            return returned;
+        }
     }
 
     public String toString(boolean refinementOccurred, @Nonnull Map<BDD,String> cache) {
@@ -111,7 +116,7 @@ public class Invariant {
 
     /**
      * Creates an invariant type from a BgpRouteConstraint (constants used for routeConstraintsToBDD expect that
-     * this invariant will be used to start a weakest precondition based inference)
+     * this invariant will be used to start the weakest precondition based inference)
      * @param tbdd the TransferBDD to be used
      * @param constraint constraint to be reflected by invariant
      * @param direction IN for invariant on node, OUT for invariant on edge (inherited from routeConstraintsToBDD)
@@ -163,7 +168,9 @@ public class Invariant {
         @VisibleForTesting
         static Builder forValue(@Nonnull String value) {
             Builder builder = new Builder(value);
-            if (value.equals("[]")) return builder;
+            if (value.equals("[]")) {
+                return builder;
+            }
             String[] splits = value.trim().split("]");
             for (String clause : splits) {
                 String trimmed = clause.trim();
@@ -397,6 +404,11 @@ public class Invariant {
     /// Returns the BDD stored in this invariant (with well-formed constraint applied)
     public BDD wellFormedBDD() {
         return base.wellFormednessConstraints(true).and(bdd.id());
+    }
+
+    // Patch to get access to BDD without and-ing with wellFormednessConstraints (just used in )
+    public BDD getBDD() {
+        return bdd.id();
     }
 
     /// Returns true if the invariant is false

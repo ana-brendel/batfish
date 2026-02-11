@@ -40,12 +40,21 @@ public class PathAnalyzer {
 
     /// Based on potential paths provided, see if there is at least one which satisfies the liveness property (is a good path)
     private Optional<Path> generateGoodPaths(@Nonnull List<Path.Builder> potentialPaths) {
-        if (prefix.isEmpty())
+        if (prefix.isEmpty()) {
             throw new BatfishException("PathAnalyzer.generateGoodPaths() - Prefix space is empty, cannot perform liveness analysis.");
-        Invariant condition = new Invariant(context.tbdd(),target.wellFormedBDD().and(context.prefixSpaceToBDD(prefix)));
+        }
+        Invariant condition = new Invariant(context.tbdd(),target.getBDD().and(context.prefixSpaceToBDD(prefix)));
+
+        if (condition.isFalse()) {
+            // no possible route exists that matches the prefix and target property
+            return Optional.empty();
+        }
+
         for (Path.Builder builder : potentialPaths) {
             Path path = builder.build(location,condition);
-            if (path != null && path.isGoodPath().isPresent()) return Optional.of(path);
+            if (path != null && path.isGoodPath().isPresent()) {
+                return Optional.of(path);
+            }
         }
         return Optional.empty();
     }
@@ -66,8 +75,9 @@ public class PathAnalyzer {
                 paths.add(curr);
             } else if (prev.get() instanceof Edge edge && nodes.containsKey(edge.getSrc())) {
                 // source node of edge is still in network so we just there, if valid path
-                if (curr.addToPath(nodes.get(edge.getSrc())))
+                if (curr.addToPath(nodes.get(edge.getSrc()))) {
                     working.add(curr);
+                }
             } else if (prev.get() instanceof Edge) {
                 // this means this edge comes from outside, so we've reach edge of network so add to result
                 paths.add(curr);

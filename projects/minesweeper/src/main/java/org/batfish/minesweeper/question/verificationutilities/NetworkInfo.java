@@ -45,7 +45,9 @@ public class NetworkInfo {
         for (String nodeName : configs.keySet()) {
             Configuration config = configs.get(nodeName);
             // no need to evaluate any configs which are null or don't yield anything
-            if (isNull(config) || isNull(config.getVrfs())) continue;
+            if (isNull(config) || isNull(config.getVrfs())) {
+                continue;
+            }
             // filter out any null VRFs
             Stream<Vrf> forwarding = config.getVrfs().values().stream().filter(Objects::nonNull);
             // gets the bgp processes and filters out any null processes
@@ -65,14 +67,15 @@ public class NetworkInfo {
                         Edge incoming = new Edge(entry.getKey(),nodeIp);
                         Edge outgoing = new Edge(nodeIp,entry.getKey());
                         Ipv4UnicastAddressFamily unicast = entry.getValue().getIpv4UnicastAddressFamily();
-                        imports.put(incoming,isNull(unicast) || isNull(unicast.getImportPolicy())
-                                || isNull(config.getRoutingPolicies()) || isNull(config.getRoutingPolicies().get(unicast.getImportPolicy()))
-                                ? new RoutingPolicy("from null",config)
-                                : config.getRoutingPolicies().get(unicast.getImportPolicy()));
-                        exports.put(outgoing,isNull(unicast) || isNull(unicast.getExportPolicy())
-                                || isNull(config.getRoutingPolicies()) || isNull(config.getRoutingPolicies().get(unicast.getExportPolicy()))
-                                ? new RoutingPolicy("from null",config)
-                                : config.getRoutingPolicies().get(unicast.getExportPolicy()));
+                        // only add policies which exist, otherwise a default is used for weakest precondition
+                        if (!isNull(unicast) && !isNull(config.getRoutingPolicies())) {
+                            if (!isNull(unicast.getImportPolicy()) && !isNull(config.getRoutingPolicies().get(unicast.getImportPolicy()))) {
+                                imports.put(incoming,config.getRoutingPolicies().get(unicast.getImportPolicy()));
+                            }
+                            if (!isNull(unicast.getExportPolicy()) && !isNull(config.getRoutingPolicies().get(unicast.getExportPolicy()))){
+                                exports.put(outgoing,config.getRoutingPolicies().get(unicast.getExportPolicy()));
+                            }
+                        }
                         // add anywhere edge is going into this node (i.e. the incoming edge above)
                         locations.add(new Edge(entry.getKey(),nodeIp));
                     });
@@ -106,8 +109,9 @@ public class NetworkInfo {
     /// Returns set of all ips associated with a provided node (via node's name)
     public Optional<Collection<Ip>> ipsFromNodeName(String name) {
         for (Location location : locations) {
-            if (location instanceof Node node && node.getName().equals(name))
+            if (location instanceof Node node && node.getName().equals(name)) {
                 return Optional.of(node.getIps());
+            }
         }
         return Optional.empty();
     }
@@ -170,7 +174,7 @@ public class NetworkInfo {
 
     /// Creates instance of Lightyear objection, which can be used as a sanity check
     public Lightyear checker() {
-        return new Lightyear(this.tbdd,this.nodes,this.imports,this.exports);
+        return new Lightyear(this.nodes,this.imports,this.exports);
     }
 
     private Map<Node,Set<Edge>> getEdgesByDestination() {
@@ -178,7 +182,9 @@ public class NetworkInfo {
         for (Location loc : this.locations) {
             if (loc instanceof Edge edge && this.nodes.containsKey(edge.getDst())) {
                 Node dst = this.nodes.get(edge.getDst());
-                if (!edgesByDestination.containsKey(dst)) edgesByDestination.put(dst,new HashSet<>());
+                if (!edgesByDestination.containsKey(dst)) {
+                    edgesByDestination.put(dst,new HashSet<>());
+                }
                 edgesByDestination.get(dst).add(edge);
             }
         }
@@ -188,7 +194,7 @@ public class NetworkInfo {
     /// Returns an Infer object reflective of the network which can be used for safety property verification
     public Infer toInfer() {
         Path.Context context = new Path.Context(this.tbdd,this.assumptions,this.imports,this.exports);
-        return new Infer(context,this.nodes,this.locations,this.getEdgesByDestination());
+        return new Infer(context,this.nodes,this.getEdgesByDestination());
     }
 
     /// Returns a PathAnalyzer objective reflective of the network which can be used for verification of the provided

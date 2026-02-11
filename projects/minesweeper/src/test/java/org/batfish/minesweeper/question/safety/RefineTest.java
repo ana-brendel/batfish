@@ -86,14 +86,6 @@ public class RefineTest {
                 .setVrf(vrf).build();
     }
 
-    private static Map<String,Configuration> configInput(Map<Node, Configuration> configs) {
-        Map<String,Configuration> result = new HashMap<>();
-        for (Node node: configs.keySet()) {
-            result.put(node.getName(),configs.get(node));
-        }
-        return result;
-    }
-
     private void setUpConfigs(Map<Node, Configuration> configs, Node ... nodes) {
         for (Node node : nodes) {
             Configuration.Builder configBuilder = nf.configurationBuilder().setHostname(node.getName());

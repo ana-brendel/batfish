@@ -612,6 +612,7 @@ public class RefineTest {
         return new TestConfigConstructionUtils.Networkv2(tbdd,configs,templatePolicy,List.of(p_str,q_str));
     }
 
+    // All the "validNetwork*Test()" functions don't explicitly check refinement behavior
     @Test
     public void validityNetworkATest() {
         Ip entry = Ip.parse("10.10.0.0");
@@ -838,6 +839,7 @@ public class RefineTest {
         assertFalse(result.verified);
     }
 
+    // The "refineNetwork*()" tests explicit check for what the expected refinements are, these might change if we change refinement
     private TestConfigConstructionUtils.Networkv2 refineNetwork1(Ip entry, Ip exit, Node NODE_A, Node NODE_B, Node NODE_C, String p_str) {
         Map<Node, Configuration> configs = new HashMap<>();
 

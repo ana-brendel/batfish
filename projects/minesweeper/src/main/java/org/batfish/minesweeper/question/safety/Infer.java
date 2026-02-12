@@ -192,7 +192,7 @@ public class Infer {
         BDD constraint =
             assumption
                 .getBDD()
-                .andWith(infer.negate().getBDD())
+                .andWith(infer.getBDD().not())
                 .andWith(tbdd.getOriginalRoute().wellFormednessConstraints(true));
         assert !constraint.isZero();
         BDD model =

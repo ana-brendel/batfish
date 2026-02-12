@@ -268,6 +268,7 @@ public class Refine {
         });
 
     Map<Location, Invariant> finalized = strengtheningLoop();
+
     finalized.forEach(
         (loc, inv) -> {
           assert inv.implies(inferred.get(loc));

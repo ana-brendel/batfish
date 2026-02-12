@@ -29,6 +29,7 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 
+import static com.google.common.base.Preconditions.checkArgument;
 import static org.batfish.minesweeper.question.verificationutilities.Setup.buildInvariant;
 import static org.batfish.minesweeper.question.verificationutilities.Setup.getConfigAtomicPredicates;
 import static org.batfish.minesweeper.question.verificationutilities.Setup.metadata_safety;
@@ -62,7 +63,9 @@ public final class SafetyAnswerer extends Answerer {
         question.get_assumption_locations().isPresent()
             ? question.get_assumption_locations().get().get_builders()
             : List.of();
-    assert invAssumptions.size() == locAssumptions.size();
+    checkArgument(
+        invAssumptions.size() == locAssumptions.size(),
+        "Must have the same number of assumptions and assumption locations");
     _assumptions = new HashMap<>();
     for (int i = 0; i < invAssumptions.size(); i++) {
       _assumptions.put(locAssumptions.get(i), invAssumptions.get(i));

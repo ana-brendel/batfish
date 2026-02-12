@@ -187,10 +187,9 @@ public class Refine {
                 ? refinements.get(edge).copy()
                 : refinements.get(edge).strongestPostcondition(importPolicy);
         BDD interpolant =
-            interpolate(tbdd, strongest.wellFormedBDD(), weakest.wellFormedBDD())
-                .orElse(weakest.wellFormedBDD());
+            interpolate(tbdd, strongest.getBDD(), weakest.getBDD()).orElse(weakest.getBDD());
         Invariant previous = refinements.get(toRefine);
-        refinements.put(toRefine, new Invariant(tbdd, interpolant.or(previous.wellFormedBDD())));
+        refinements.put(toRefine, new Invariant(tbdd, interpolant.or(previous.getBDD())));
         if (!refinements.get(toRefine).equals(previous)) {
           working.add(toRefine);
         }
@@ -210,8 +209,7 @@ public class Refine {
                     ? precondition.copy()
                     : precondition.strongestPostcondition(exportPolicy);
             BDD interpolant =
-                interpolate(tbdd, strongest.wellFormedBDD(), weakest.wellFormedBDD())
-                    .orElse(weakest.wellFormedBDD());
+                interpolate(tbdd, strongest.getBDD(), weakest.getBDD()).orElse(weakest.getBDD());
             Invariant previous = refinements.put(toRefine, new Invariant(tbdd, interpolant));
             if (previous == null || !refinements.get(toRefine).equals(previous)) {
               // if there is already an edge entering this destination, we don't need to add it

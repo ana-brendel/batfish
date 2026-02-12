@@ -68,8 +68,7 @@ public class InterferenceCheck {
         Invariant existing = inferred.getOrDefault(src, Invariant.getFalse(context.tbdd()));
         // TODO verify that disjoining here is the correct move - we want to consider any "bad
         // route"
-        Invariant updated =
-            new Invariant(context.tbdd(), existing.wellFormedBDD().or(wp.wellFormedBDD()));
+        Invariant updated = new Invariant(context.tbdd(), existing.getBDD().or(wp.getBDD()));
         inferred.put(src, updated);
         if (!existing.equals(updated) && !working.contains(src)) {
           working.add(src);
@@ -82,8 +81,7 @@ public class InterferenceCheck {
                   ? property.copy()
                   : property.weakestPrecondition(importPolicy, false);
           Invariant existing = inferred.getOrDefault(edge, Invariant.getFalse(context.tbdd()));
-          Invariant updated =
-              new Invariant(context.tbdd(), existing.wellFormedBDD().or(wp.wellFormedBDD()));
+          Invariant updated = new Invariant(context.tbdd(), existing.getBDD().or(wp.getBDD()));
           inferred.put(edge, updated);
           if (!existing.equals(updated) && !working.contains(edge)) {
             working.add(edge);
@@ -98,15 +96,17 @@ public class InterferenceCheck {
     Map<Location, Bgpv4Route> checks = new HashMap<>();
     for (Location assumption_location : context.assumptions().keySet()) {
       if (inferred.containsKey(assumption_location)) {
-        BDD assumption = context.assumptions().get(assumption_location).wellFormedBDD();
-        BDD badRouteCondition = inferred.get(assumption_location).wellFormedBDD();
-        BDD intersection = assumption.and(badRouteCondition);
+        BDD assumption = context.assumptions().get(assumption_location).getBDD();
+        BDD badRouteCondition = inferred.get(assumption_location).getBDD();
+        BDD intersection = assumption.andWith(badRouteCondition);
         if (!intersection.isZero()) {
           // if the intersection is not empty, then routes meeting this condition at this location
           // might cause interference
           BDD model =
               ModelGeneration.constraintsToModel(
-                  intersection, context.tbdd().getConfigAtomicPredicates());
+                  intersection.andWith(
+                      context.tbdd().getOriginalRoute().wellFormednessConstraints(true)),
+                  context.tbdd().getConfigAtomicPredicates());
           Bgpv4Route counter =
               ModelGeneration.satAssignmentToBgpInputRoute(
                   model, context.tbdd().getConfigAtomicPredicates());
@@ -127,7 +127,7 @@ public class InterferenceCheck {
     working.clear();
     Invariant condition =
         new Invariant(
-            context.tbdd(), target.negate().wellFormedBDD().and(context.prefixSpaceToBDD(prefix)));
+            context.tbdd(), target.negate().getBDD().and(context.prefixSpaceToBDD(prefix)));
     if (condition.isFalse()) {
       // no possible "bad route" exists that matches the target prefix
       return Optional.empty();

@@ -21,7 +21,6 @@ public class BDDString {
   private final BDD original; // the bdd stored here is not assumed to be well-formed
   private final BDDFactory factory;
   private final BDDRoute base;
-  private final BDD wf;
 
   private final BDD prefixInfoSupport;
   private final Map<CommunityVar, Set<Integer>> communities;
@@ -34,13 +33,12 @@ public class BDDString {
 
   /// Returns string representation of the provided BDD
   public static String get(TransferBDD tbdd, BDD bdd) {
-    BDD wf = tbdd.getOriginalRoute().wellFormednessConstraints(true);
     if (bdd.isZero()) {
       return "False";
-    } else if (bdd.isOne() || wf.equals(wf.and(bdd))) {
+    } else if (bdd.isOne()) {
       return "True";
     } else {
-      BDDString str = new BDDString(tbdd, wf.and(bdd));
+      BDDString str = new BDDString(tbdd, bdd);
       String result = str.getString();
       return result.trim().equals("+") ? "LIMIT (Complex BDD)" : result;
     }
@@ -50,7 +48,6 @@ public class BDDString {
     this.original = bdd.id();
     this.factory = tbdd.getFactory();
     this.base = tbdd.getOriginalRoute();
-    this.wf = this.base.wellFormednessConstraints(true);
     this.prefixInfoSupport =
         this.base.getPrefix().support().and(this.base.getPrefixLength().support());
 
@@ -193,7 +190,7 @@ public class BDDString {
       } else if (prefixes.size() > 1) {
         // this branch checks if the set of prefixes is the negation of a prefix, limited to one
         BDD disjunction = this.factory.orAll(differentPrefixes);
-        BDD potential = this.wf.and(disjunction.not());
+        BDD potential = disjunction.not();
         Set<Pair<BDD, Prefix>> negated = new HashSet<>();
         BDD.AllSatIterator iterator = potential.allsat();
         while (iterator.hasNext()) {
@@ -247,12 +244,12 @@ public class BDDString {
   /// Checks remaining BDD set to see if it is a constant
   private Set<BDD> checkSetForConstant(Set<BDD> set) {
     Optional<BDD> single = set.stream().findFirst();
-    if (set.size() == 1 && (this.wf.equals(this.wf.and(single.get())) || single.get().isOne())) {
+    if (set.size() == 1 && single.get().isOne()) {
       return new HashSet<>();
     } else {
       assert single.isEmpty() || !single.get().isZero();
       BDD disjunction = this.factory.orAll(set);
-      if (this.wf.equals(this.wf.and(disjunction)) || disjunction.isOne()) {
+      if (disjunction.isOne()) {
         return new HashSet<>();
       } else {
         return set;
@@ -301,7 +298,6 @@ public class BDDString {
    *   most likely earlier with the creation of the TransferBDD. Larger software engineering task.
    * */
   private String driver(BDD bdd) {
-    BDD originalProjection = bdd.id().and(this.wf);
     Map<BDD, Set<Integer>> bddToDisplays = new HashMap<>();
     Map<BDD, Set<BDD>> disjunctsByAtomicPredicates = new HashMap<>();
     BDD.AllSatIterator iterator = bdd.allsat();
@@ -375,18 +371,16 @@ public class BDDString {
 
     // STEP 3: Sanity check against returning an incorrect string representation by our metric (with
     // respect to the BDD being projected onto prefixes and atomic predicates (communities))
-    if (!(this.factory
-            .orAll(
-                pullPrefixes.entrySet().stream()
-                    .map(
-                        disjunct -> {
-                          BDD common = disjunct.getKey();
-                          BDD internalDisjuncts = this.factory.orAll(disjunct.getValue());
-                          return common.and(internalDisjuncts);
-                        })
-                    .collect(Collectors.toSet()))
-            .and(this.wf))
-        .equals(originalProjection)) {
+    if (!(this.factory.orAll(
+            pullPrefixes.entrySet().stream()
+                .map(
+                    disjunct -> {
+                      BDD common = disjunct.getKey();
+                      BDD internalDisjuncts = this.factory.orAll(disjunct.getValue());
+                      return common.and(internalDisjuncts);
+                    })
+                .collect(Collectors.toSet())))
+        .equals(bdd)) {
       return "ERR (BDD String)";
     }
 

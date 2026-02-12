@@ -45,7 +45,6 @@ import org.batfish.minesweeper.question.searchroutepolicies.RegexConstraints;
 public class Invariant {
   private final TransferBDD tbdd;
   private final BDD bdd; // the bdd stored here is not assumed to be well-formed
-  private final BDDRoute base;
   public final String str;
 
   /**
@@ -55,10 +54,7 @@ public class Invariant {
    * @param bdd BDD to be represented by invariant
    */
   public Invariant(TransferBDD tbdd, BDD bdd) {
-    this.tbdd = tbdd;
-    this.bdd = bdd;
-    this.base = new BDDRoute(tbdd.getFactory(), tbdd.getConfigAtomicPredicates());
-    this.str = null;
+    this(tbdd, bdd, null);
   }
 
   /**
@@ -67,16 +63,12 @@ public class Invariant {
    * @param tbdd the TransferBDD to be used
    */
   public Invariant(TransferBDD tbdd) {
-    this.tbdd = tbdd;
-    this.bdd = tbdd.getFactory().one();
-    this.base = new BDDRoute(tbdd.getFactory(), tbdd.getConfigAtomicPredicates());
-    this.str = "true";
+    this(tbdd, tbdd.getFactory().one());
   }
 
   public Invariant(TransferBDD tbdd, BDD bdd, String str) {
     this.tbdd = tbdd;
     this.bdd = bdd;
-    this.base = new BDDRoute(tbdd.getFactory(), tbdd.getConfigAtomicPredicates());
     this.str = str == null || str.isEmpty() ? null : str;
   }
 
@@ -343,7 +335,7 @@ public class Invariant {
     public BDD build(TransferBDD tbdd, RoutingPolicy policy) {
       BDDRoute base = new BDDRoute(tbdd.getFactory(), tbdd.getConfigAtomicPredicates());
       TransferBDD.Context context = policy == null ? null : TransferBDD.Context.forPolicy(policy);
-      BDD clauseBDD = base.wellFormednessConstraints(true);
+      BDD clauseBDD = tbdd.getFactory().one();
       if (_positivePrefix != null && !_positivePrefix.isEmpty()) {
         clauseBDD.andWith(prefixSpaceToBDD(_positivePrefix, base, true));
       }
@@ -447,18 +439,18 @@ public class Invariant {
   }
 
   /// Returns the BDD stored in this invariant (with well-formed constraint applied)
-  public BDD wellFormedBDD() {
-    return base.wellFormednessConstraints(true).and(bdd.id());
+  public BDD getBDD() {
+    return bdd;
   }
 
   /// Returns true if the invariant is false
   public boolean isFalse() {
-    return this.wellFormedBDD().isZero();
+    return this.getBDD().isZero();
   }
 
   /// Returns true if the invariant is true (for any well-formed route)
   public boolean isTrue() {
-    return this.wellFormedBDD().equals(base.wellFormednessConstraints(true));
+    return this.getBDD().isOne();
   }
 
   public Invariant copy() {
@@ -516,7 +508,7 @@ public class Invariant {
       BDD acceptedWP =
           TransferBDDUtils.weakestPrecondition(
               paths,
-              this.wellFormedBDD(),
+              this.getBDD(),
               tbdd,
               (post, path) -> conditionsForConstraint(tbdd, post, path.getOutputRoute()));
 
@@ -557,7 +549,7 @@ public class Invariant {
    * @return true if implies provided invariant
    */
   public boolean implies(Invariant post) {
-    return (this.wellFormedBDD().imp(post.wellFormedBDD())).isOne();
+    return (this.getBDD().imp(post.getBDD())).isOne();
   }
 
   /**
@@ -567,7 +559,7 @@ public class Invariant {
    * @return true if implied by provided invariant
    */
   public boolean impliedBy(Invariant pre) {
-    return (pre.wellFormedBDD().imp(this.wellFormedBDD())).isOne();
+    return (pre.getBDD().imp(this.getBDD())).isOne();
   }
 
   /**
@@ -598,8 +590,7 @@ public class Invariant {
             "Unexpected error analyzing policy " + policy.getName() + " in node " + name, e);
       }
       BDD strongest =
-          TransferBDDUtils.strongestPostcondition(
-              paths, this.wellFormedBDD(), tbdd, Function.identity());
+          TransferBDDUtils.strongestPostcondition(paths, this.getBDD(), tbdd, Function.identity());
       return new Invariant(tbdd, strongest);
     }
   }
@@ -607,7 +598,7 @@ public class Invariant {
   @Override
   public boolean equals(Object obj) {
     if (obj != null && obj.getClass() == this.getClass()) {
-      return this.wellFormedBDD().equals(((Invariant) obj).wellFormedBDD());
+      return this.getBDD().equals(((Invariant) obj).getBDD());
     } else {
       return false;
     }
@@ -641,13 +632,11 @@ public class Invariant {
     if (!paths.stream().filter(TransferReturn::getAccepted).toList().isEmpty()) {
       for (TransferReturn path : paths) {
         BDD pathAnnouncements = path.getInputConstraints();
-        if (path
-            .getAccepted()) { // path is permitted, need to check if precondition is sat, so are
-                              // output
+        if (path.getAccepted()) { // path is permitted, need to check if precondition is sat, so are
+          // output
           BDDRoute route = path.getOutputRoute();
-          BDD constraintsMatchingOutput =
-              conditionsForConstraint(tbdd, this.wellFormedBDD(), route);
-          BDD constrainedInput = pathAnnouncements.and(pre.wellFormedBDD());
+          BDD constraintsMatchingOutput = conditionsForConstraint(tbdd, this.getBDD(), route);
+          BDD constrainedInput = pathAnnouncements.and(pre.getBDD());
           BDD intersection = constrainedInput.and(constraintsMatchingOutput);
           BDD diff = constrainedInput.diff(intersection); // this should be empty
           if (!diff.isZero()) {

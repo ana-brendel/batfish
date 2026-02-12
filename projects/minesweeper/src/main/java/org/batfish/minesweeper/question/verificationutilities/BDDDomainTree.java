@@ -1,7 +1,6 @@
 package org.batfish.minesweeper.question.verificationutilities;
 
 import net.sf.javabdd.BDD;
-import org.batfish.minesweeper.SymbolicAsPathRegex;
 import org.batfish.minesweeper.bdd.BDDDomain;
 import org.batfish.minesweeper.bdd.TransferBDD;
 

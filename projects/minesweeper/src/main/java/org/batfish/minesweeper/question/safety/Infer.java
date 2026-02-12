@@ -189,7 +189,11 @@ public class Infer {
       if (assumption.implies(infer)) {
         checks.put(location, Optional.empty());
       } else {
-        BDD constraint = assumption.wellFormedBDD().and(infer.negate().wellFormedBDD());
+        BDD constraint =
+            assumption
+                .getBDD()
+                .andWith(infer.negate().getBDD())
+                .andWith(tbdd.getOriginalRoute().wellFormednessConstraints(true));
         assert !constraint.isZero();
         BDD model =
             ModelGeneration.constraintsToModel(constraint, tbdd.getConfigAtomicPredicates());

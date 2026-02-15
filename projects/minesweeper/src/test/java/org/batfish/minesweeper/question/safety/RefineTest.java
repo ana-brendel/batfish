@@ -1470,13 +1470,6 @@ public class RefineTest {
     assertTrue(lightyear.check(refiner.refined).isEmpty());
     assertTrue(refiner.verified);
 
-    Invariant prefix_or_1010 =
-        Invariant.builder()
-            .addClause(Invariant.clauseBuilder().avoidPrefix(PREFIX))
-            .addClause(
-                Invariant.clauseBuilder()
-                    .setCommunities(new RegexConstraints(List.of(RegexConstraint.parse("10:10")))))
-            .build(net.tbdd(), net.template());
     Invariant prefix_or_2020 =
         Invariant.builder()
             .addClause(Invariant.clauseBuilder().avoidPrefix(PREFIX))
@@ -1494,16 +1487,6 @@ public class RefineTest {
                 Invariant.clauseBuilder()
                     .setCommunities(new RegexConstraints(List.of(RegexConstraint.parse("20:20")))))
             .build(net.tbdd(), net.template());
-    Invariant prefix_20_20_or_1010 =
-        Invariant.builder()
-            .addClause(
-                Invariant.clauseBuilder()
-                    .avoidPrefix(PREFIX)
-                    .setCommunities(new RegexConstraints(List.of(RegexConstraint.parse("!20:20")))))
-            .addClause(
-                Invariant.clauseBuilder()
-                    .setCommunities(new RegexConstraints(List.of(RegexConstraint.parse("10:10")))))
-            .build(net.tbdd(), net.template());
     for (Location location : refiner.refined.keySet()) {
       if (location.equals(new Edge(exit, NODE_C.getSingleIp()))
           || location.equals(new Edge(NODE_C.getSingleIp(), exit))) {
@@ -1513,9 +1496,9 @@ public class RefineTest {
       } else if (location.equals(NODE_B)) {
         assertEquals(prefix_or_1010_or_2020.copy(), refiner.refined.get(location));
       } else if (location.equals(NODE_A) || location.equals(new Edge(NODE_A, NODE_B))) {
-        assertEquals(prefix_or_1010.copy(), refiner.refined.get(location));
+        assertEquals(prefix_or_1010_or_2020.copy(), refiner.refined.get(location));
       } else if (location.equals(new Edge(NODE_B, NODE_A))) {
-        assertEquals(prefix_20_20_or_1010.copy(), refiner.refined.get(location));
+        assertEquals(prefix_or_1010_or_2020.copy(), refiner.refined.get(location));
       } else {
         assertEquals(prefix_or_2020.copy(), refiner.refined.get(location));
       }

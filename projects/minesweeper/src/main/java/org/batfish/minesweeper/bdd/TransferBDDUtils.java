@@ -208,10 +208,50 @@ public class TransferBDDUtils {
       return Optional.empty();
     }
 
-    // STEP 1: Prune q to only include assignments which are satisfiable given p (hopefully scaling
-    // is not issue)
-    // ex. P = A /\ B and  Q = A \/ !B, then A => B but !B /\ P is unsatisfiable so we want Q' = A
-    // for interpolation
+    // STEP 1: Simplify q by pruning disjuncts that are incompatible with p; and
+    // do the same dually for p
+    BDD q_pruned = simplifyRight(tbdd, p, q);
+    BDD q_not = q.not();
+    BDD p_not = p.not();
+    BDD p_pruned = simplifyRight(tbdd, q_not, p_not).notEq();
+    q_not.free();
+    p_not.free();
+
+    // STEP 2: Existentially quantify out any variables in p which do not appear in the pruned q
+    // ex. P = (A \/ B) /\ C and Q = A \/ B, so P => Q and C is not in Q so we remove it from P to
+    // get interpolant A \/ B
+    for (int i = 0; i < p_pruned.varProfile().length; i++) {
+      BDD var = tbdd.getFactory().ithVar(i);
+      // we want to only keep variables that are present in both - check if either counts is zero
+      if (p_pruned.varProfile()[i] == 0 || q_pruned.varProfile()[i] == 0) {
+        p_pruned.existEq(var);
+      }
+      var.free();
+    }
+
+    // STEP 3: In the case that we keep the prefix length but have no prefix, remove length
+    // variables
+    // TODO This is an edge case - might be a bug on my end related to the well-formedness
+    // constraint stuff, might be unnecessary
+    if (!p_pruned.testsVars(tbdd.getOriginalRoute().getPrefix().support())) {
+      p_pruned.existEq(tbdd.getOriginalRoute().getPrefixLength().support());
+    }
+
+    // STEP 4 ??? (tbd to address existing limitations in approach)
+    //    ex. Reasoning distinctly about negations of prefixes (demonstrated in
+    // InvariantTest.interpolationExactTest())
+    //    ex. ...
+
+    q_pruned.free();
+
+    return Optional.of(p_pruned);
+  }
+
+  // Prune q to only include assignments which are satisfiable given p (hopefully scaling
+  // is not issue)
+  // ex. P = A /\ B and  Q = A \/ !B, then P /\ A is satisfiable but P /\ !B is unsatisfiable so we
+  // simplify Q to just A
+  private static BDD simplifyRight(TransferBDD tbdd, BDD p, BDD q) {
     BDD q_pruned = tbdd.getFactory().zero();
     BDD.AllSatIterator qit = q.allsat();
     while (qit.hasNext()) {
@@ -224,38 +264,12 @@ public class TransferBDDUtils {
           running.add(tbdd.getFactory().ithVar(v));
         }
       }
-      BDD q_assignment = tbdd.getFactory().andAll(running);
+      BDD q_assignment = tbdd.getFactory().andAllAndFree(running);
 
       if (!p.and(q_assignment).isZero()) {
         q_pruned.orWith(q_assignment);
       }
     }
-
-    // STEP 2: Existentially quantify out any variables in p which do not appear in the pruned q
-    // ex. P = (A \/ B) /\ C and Q = A \/ B, so P => Q and C is not in Q so we remove it from P to
-    // get interpolant A \/ B
-    BDD result = p.id();
-    for (int i = 0; i < p.varProfile().length; i++) {
-      BDD var = tbdd.getFactory().ithVar(i).id();
-      // we want to only keep variables that are present in both - check if either counts is zero
-      if (p.varProfile()[i] == 0 || q_pruned.varProfile()[i] == 0) {
-        result.existEq(var);
-      }
-    }
-
-    // STEP 3: In the case that we keep the prefix length but have no prefix, remove length
-    // variables
-    // TODO This is an edge case - might be a bug on my end related to the well-formedness
-    // constraint stuff, might be unnecessary
-    if (!result.testsVars(tbdd.getOriginalRoute().getPrefix().support())) {
-      result.existEq(tbdd.getOriginalRoute().getPrefixLength().support());
-    }
-
-    // STEP 4 ??? (tbd to address existing limitations in approach)
-    //    ex. Reasoning distinctly about negations of prefixes (demonstrated in
-    // InvariantTest.interpolationExactTest())
-    //    ex. ...
-
-    return Optional.of(result);
+    return q_pruned;
   }
 }

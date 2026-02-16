@@ -171,7 +171,8 @@ import org.batfish.datamodel.routing_policy.expr.DestinationNetwork;
 import org.batfish.datamodel.routing_policy.expr.Disjunction;
 import org.batfish.datamodel.routing_policy.expr.ExplicitPrefixSet;
 import org.batfish.datamodel.routing_policy.expr.FirstMatchChain;
-import org.batfish.datamodel.routing_policy.expr.LiteralInt;
+import org.batfish.datamodel.routing_policy.expr.LiteralAdministrativeCost;
+import org.batfish.datamodel.routing_policy.expr.LiteralLong;
 import org.batfish.datamodel.routing_policy.expr.LiteralOrigin;
 import org.batfish.datamodel.routing_policy.expr.MatchLocalRouteSourcePrefixLength;
 import org.batfish.datamodel.routing_policy.expr.MatchPrefixSet;
@@ -185,6 +186,7 @@ import org.batfish.datamodel.routing_policy.statement.Comment;
 import org.batfish.datamodel.routing_policy.statement.If;
 import org.batfish.datamodel.routing_policy.statement.SetAdministrativeCost;
 import org.batfish.datamodel.routing_policy.statement.SetDefaultPolicy;
+import org.batfish.datamodel.routing_policy.statement.SetLocalPreference;
 import org.batfish.datamodel.routing_policy.statement.SetOrigin;
 import org.batfish.datamodel.routing_policy.statement.SetOspfMetricType;
 import org.batfish.datamodel.routing_policy.statement.Statement;
@@ -724,7 +726,7 @@ public final class JuniperConfiguration extends VendorConfiguration {
       if (ig.getPreference() != null && ig.getPreference() != bgpAdmin) {
         peerImportPolicy
             .getStatements()
-            .add(new SetAdministrativeCost(new LiteralInt(ig.getPreference())));
+            .add(new SetAdministrativeCost(new LiteralAdministrativeCost(ig.getPreference())));
       }
       List<BooleanExpr> importPolicyCalls = new ArrayList<>();
       ig.getImportPolicies()
@@ -773,6 +775,11 @@ public final class JuniperConfiguration extends VendorConfiguration {
       // Add route modifier statements
       peerExportPolicy.getStatements().add(setOriginForNonBgp);
       peerExportPolicy.getStatements().addAll(staticRouteCommunitySetters);
+      if (ig.getLocalPreference() != null) {
+        peerExportPolicy
+            .getStatements()
+            .add(new SetLocalPreference(new LiteralLong(ig.getLocalPreference())));
+      }
 
       List<BooleanExpr> exportPolicyCalls = new ArrayList<>();
       ig.getExportPolicies()

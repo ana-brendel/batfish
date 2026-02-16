@@ -123,8 +123,6 @@ import static org.batfish.datamodel.matchers.IsisLevelSettingsMatchers.hasWideMe
 import static org.batfish.datamodel.matchers.IsisProcessMatchers.hasNetAddress;
 import static org.batfish.datamodel.matchers.IsisProcessMatchers.hasOverload;
 import static org.batfish.datamodel.matchers.LineMatchers.hasAuthenticationLoginList;
-import static org.batfish.datamodel.matchers.LiteralIntMatcher.hasVal;
-import static org.batfish.datamodel.matchers.LiteralIntMatcher.isLiteralIntThat;
 import static org.batfish.datamodel.matchers.MapMatchers.hasKeys;
 import static org.batfish.datamodel.matchers.NssaSettingsMatchers.hasDefaultOriginateType;
 import static org.batfish.datamodel.matchers.NssaSettingsMatchers.hasSuppressType3;
@@ -140,8 +138,6 @@ import static org.batfish.datamodel.matchers.OspfAreaSummaryMatchers.isAdvertise
 import static org.batfish.datamodel.matchers.OspfProcessMatchers.hasArea;
 import static org.batfish.datamodel.matchers.OspfProcessMatchers.hasRouterId;
 import static org.batfish.datamodel.matchers.RouteFilterListMatchers.permits;
-import static org.batfish.datamodel.matchers.SetAdministrativeCostMatchers.hasAdmin;
-import static org.batfish.datamodel.matchers.SetAdministrativeCostMatchers.isSetAdministrativeCostThat;
 import static org.batfish.datamodel.matchers.VrfMatchers.hasBgpProcess;
 import static org.batfish.datamodel.matchers.VrfMatchers.hasOspfProcess;
 import static org.batfish.datamodel.matchers.VrfMatchers.hasStaticRoutes;
@@ -188,6 +184,7 @@ import static org.batfish.representation.juniper.JuniperStructureType.POLICY_STA
 import static org.batfish.representation.juniper.JuniperStructureType.PREFIX_LIST;
 import static org.batfish.representation.juniper.JuniperStructureType.RTF_PREFIX_LIST;
 import static org.batfish.representation.juniper.JuniperStructureType.SECURITY_POLICY_TERM;
+import static org.batfish.representation.juniper.JuniperStructureType.SOURCE_CLASS;
 import static org.batfish.representation.juniper.JuniperStructureType.SRLG;
 import static org.batfish.representation.juniper.JuniperStructureType.TUNNEL_ATTRIBUTE;
 import static org.batfish.representation.juniper.JuniperStructureType.VLAN;
@@ -383,9 +380,17 @@ import org.batfish.datamodel.routing_policy.Environment;
 import org.batfish.datamodel.routing_policy.Environment.Direction;
 import org.batfish.datamodel.routing_policy.Result;
 import org.batfish.datamodel.routing_policy.RoutingPolicy;
+import org.batfish.datamodel.routing_policy.expr.DecrementAdministrativeCost;
+import org.batfish.datamodel.routing_policy.expr.DecrementMetric;
+import org.batfish.datamodel.routing_policy.expr.IncrementAdministrativeCost;
+import org.batfish.datamodel.routing_policy.expr.IncrementMetric;
+import org.batfish.datamodel.routing_policy.expr.LiteralAdministrativeCost;
+import org.batfish.datamodel.routing_policy.expr.LiteralLong;
 import org.batfish.datamodel.routing_policy.expr.MatchProtocol;
 import org.batfish.datamodel.routing_policy.statement.If;
 import org.batfish.datamodel.routing_policy.statement.SetAdministrativeCost;
+import org.batfish.datamodel.routing_policy.statement.SetLocalPreference;
+import org.batfish.datamodel.routing_policy.statement.SetMetric;
 import org.batfish.datamodel.routing_policy.statement.TraceableStatement;
 import org.batfish.datamodel.tracking.TrackMethods;
 import org.batfish.datamodel.transformation.AssignIpAddressFromPool;
@@ -425,6 +430,7 @@ import org.batfish.representation.juniper.FwFromInterface;
 import org.batfish.representation.juniper.FwFromInterfaceSet;
 import org.batfish.representation.juniper.FwFromPacketLength;
 import org.batfish.representation.juniper.FwFromPort;
+import org.batfish.representation.juniper.FwFromSourceClass;
 import org.batfish.representation.juniper.FwFromSourcePort;
 import org.batfish.representation.juniper.FwFromTtl;
 import org.batfish.representation.juniper.FwTerm;
@@ -473,6 +479,7 @@ import org.batfish.representation.juniper.PsFromCondition;
 import org.batfish.representation.juniper.PsFromExternal;
 import org.batfish.representation.juniper.PsFromLocalPreference;
 import org.batfish.representation.juniper.PsFromTag;
+import org.batfish.representation.juniper.PsProtocol;
 import org.batfish.representation.juniper.PsTerm;
 import org.batfish.representation.juniper.PsThenAigpOriginate;
 import org.batfish.representation.juniper.PsThenAsPathExpandAsList;
@@ -482,6 +489,10 @@ import org.batfish.representation.juniper.PsThenCommunityAdd;
 import org.batfish.representation.juniper.PsThenCommunitySet;
 import org.batfish.representation.juniper.PsThenLocalPreference;
 import org.batfish.representation.juniper.PsThenLocalPreference.Operator;
+import org.batfish.representation.juniper.PsThenMetric;
+import org.batfish.representation.juniper.PsThenMetric2;
+import org.batfish.representation.juniper.PsThenPreference;
+import org.batfish.representation.juniper.PsThenSourceClass;
 import org.batfish.representation.juniper.PsThenTag;
 import org.batfish.representation.juniper.PsThenTunnelAttributeRemove;
 import org.batfish.representation.juniper.PsThenTunnelAttributeSet;
@@ -3665,7 +3676,7 @@ public final class FlatJuniperGrammarTest {
         eb.setOriginalRoute(staticRoute).setOutputRoute(OspfExternalType2Route.builder()).build());
 
     // Checking admin cost set on the output route
-    assertThat(eb.build().getOutputRoute().getAdmin(), equalTo(123));
+    assertThat(eb.build().getOutputRoute().getAdmin(), equalTo(123L));
   }
 
   @Test
@@ -3688,9 +3699,198 @@ public final class FlatJuniperGrammarTest {
         getOnlyElement(traceableStatement.getInnerStatements()),
         instanceOf(SetAdministrativeCost.class));
 
+    SetAdministrativeCost setAdministrativeCost =
+        (SetAdministrativeCost) getOnlyElement(traceableStatement.getInnerStatements());
+    assertThat(setAdministrativeCost.getAdmin(), instanceOf(LiteralAdministrativeCost.class));
     assertThat(
-        getOnlyElement(traceableStatement.getInnerStatements()),
-        isSetAdministrativeCostThat(hasAdmin(isLiteralIntThat(hasVal(123)))));
+        ((LiteralAdministrativeCost) setAdministrativeCost.getAdmin()).getValue(), equalTo(123L));
+  }
+
+  @Test
+  public void testPsPreferenceAddSubtractExtraction() {
+    JuniperConfiguration c = parseJuniperConfig("preference-add-subtract");
+    Map<String, PolicyStatement> policies = c.getMasterLogicalSystem().getPolicyStatements();
+
+    // Test literal preference
+    PolicyStatement ps1 = policies.get("PS1");
+    assertThat(ps1.getTerms().get("T1").getThens().getAllThens(), hasSize(1));
+    assertThat(
+        getOnlyElement(ps1.getTerms().get("T1").getThens().getAllThens()),
+        equalTo(new PsThenPreference(100, PsThenPreference.Operator.SET)));
+
+    // Test preference add
+    PolicyStatement ps2 = policies.get("PS2");
+    assertThat(ps2.getTerms().get("T1").getThens().getAllThens(), hasSize(1));
+    assertThat(
+        getOnlyElement(ps2.getTerms().get("T1").getThens().getAllThens()),
+        equalTo(new PsThenPreference(50, PsThenPreference.Operator.ADD)));
+
+    // Test preference subtract
+    PolicyStatement ps3 = policies.get("PS3");
+    assertThat(ps3.getTerms().get("T1").getThens().getAllThens(), hasSize(1));
+    assertThat(
+        getOnlyElement(ps3.getTerms().get("T1").getThens().getAllThens()),
+        equalTo(new PsThenPreference(30, PsThenPreference.Operator.SUBTRACT)));
+
+    // Test large preference add (near uint32 max)
+    PolicyStatement ps4 = policies.get("PS4");
+    assertThat(ps4.getTerms().get("T1").getThens().getAllThens(), hasSize(1));
+    assertThat(
+        getOnlyElement(ps4.getTerms().get("T1").getThens().getAllThens()),
+        equalTo(new PsThenPreference(4294967200L, PsThenPreference.Operator.ADD)));
+
+    // Test large preference subtract
+    PolicyStatement ps5 = policies.get("PS5");
+    assertThat(ps5.getTerms().get("T1").getThens().getAllThens(), hasSize(1));
+    assertThat(
+        getOnlyElement(ps5.getTerms().get("T1").getThens().getAllThens()),
+        equalTo(new PsThenPreference(4294967200L, PsThenPreference.Operator.SUBTRACT)));
+  }
+
+  @Test
+  public void testPsPreferenceAddSubtractConversion() {
+    Configuration c = parseConfig("preference-add-subtract");
+
+    // Test preference add
+    RoutingPolicy ps2 = c.getRoutingPolicies().get("PS2");
+    assertThat(ps2, notNullValue());
+    assertThat(ps2.getStatements(), hasSize(2));
+    SetAdministrativeCost setAdd =
+        (SetAdministrativeCost)
+            ((TraceableStatement) ((If) ps2.getStatements().get(0)).getTrueStatements().get(0))
+                .getInnerStatements()
+                .get(0);
+    assertThat(setAdd.getAdmin(), instanceOf(IncrementAdministrativeCost.class));
+    IncrementAdministrativeCost inc = (IncrementAdministrativeCost) setAdd.getAdmin();
+    assertThat(inc.getAddend(), equalTo(50L));
+    assertThat(inc.getMax(), equalTo(AbstractRoute.MAX_ADMIN_DISTANCE));
+
+    // Test preference subtract
+    RoutingPolicy ps3 = c.getRoutingPolicies().get("PS3");
+    assertThat(ps3, notNullValue());
+    assertThat(ps3.getStatements(), hasSize(2));
+    SetAdministrativeCost setSub =
+        (SetAdministrativeCost)
+            ((TraceableStatement) ((If) ps3.getStatements().get(0)).getTrueStatements().get(0))
+                .getInnerStatements()
+                .get(0);
+    assertThat(setSub.getAdmin(), instanceOf(DecrementAdministrativeCost.class));
+    DecrementAdministrativeCost dec = (DecrementAdministrativeCost) setSub.getAdmin();
+    assertThat(dec.getSubtrahend(), equalTo(30L));
+    assertThat(dec.getMin(), equalTo(0L));
+  }
+
+  @Test
+  public void testPsMetricAddSubtractExtraction() {
+    JuniperConfiguration c = parseJuniperConfig("metric-add-subtract");
+    Map<String, PolicyStatement> policies = c.getMasterLogicalSystem().getPolicyStatements();
+
+    // Test literal metric
+    PolicyStatement ps1 = policies.get("PS1");
+    assertThat(ps1.getTerms().get("T1").getThens().getAllThens(), hasSize(1));
+    assertThat(
+        getOnlyElement(ps1.getTerms().get("T1").getThens().getAllThens()),
+        equalTo(new PsThenMetric(100, PsThenMetric.Operator.SET)));
+
+    // Test metric add
+    PolicyStatement ps2 = policies.get("PS2");
+    assertThat(ps2.getTerms().get("T1").getThens().getAllThens(), hasSize(1));
+    assertThat(
+        getOnlyElement(ps2.getTerms().get("T1").getThens().getAllThens()),
+        equalTo(new PsThenMetric(50, PsThenMetric.Operator.ADD)));
+
+    // Test metric subtract
+    PolicyStatement ps3 = policies.get("PS3");
+    assertThat(ps3.getTerms().get("T1").getThens().getAllThens(), hasSize(1));
+    assertThat(
+        getOnlyElement(ps3.getTerms().get("T1").getThens().getAllThens()),
+        equalTo(new PsThenMetric(30, PsThenMetric.Operator.SUBTRACT)));
+
+    // Test large metric add (near uint32 max)
+    PolicyStatement ps4 = policies.get("PS4");
+    assertThat(ps4.getTerms().get("T1").getThens().getAllThens(), hasSize(1));
+    assertThat(
+        getOnlyElement(ps4.getTerms().get("T1").getThens().getAllThens()),
+        equalTo(new PsThenMetric(4294967200L, PsThenMetric.Operator.ADD)));
+
+    // Test large metric subtract
+    PolicyStatement ps5 = policies.get("PS5");
+    assertThat(ps5.getTerms().get("T1").getThens().getAllThens(), hasSize(1));
+    assertThat(
+        getOnlyElement(ps5.getTerms().get("T1").getThens().getAllThens()),
+        equalTo(new PsThenMetric(4294967200L, PsThenMetric.Operator.SUBTRACT)));
+  }
+
+  @Test
+  public void testPsMetricAddSubtractConversion() {
+    Configuration c = parseConfig("metric-add-subtract");
+
+    // Test metric add
+    RoutingPolicy ps2 = c.getRoutingPolicies().get("PS2");
+    assertThat(ps2, notNullValue());
+    assertThat(ps2.getStatements(), hasSize(2));
+    SetMetric setAdd =
+        (SetMetric)
+            ((TraceableStatement) ((If) ps2.getStatements().get(0)).getTrueStatements().get(0))
+                .getInnerStatements()
+                .get(0);
+    assertThat(setAdd.getMetric(), instanceOf(IncrementMetric.class));
+    IncrementMetric inc = (IncrementMetric) setAdd.getMetric();
+    assertThat(inc.getAddend(), equalTo(50L));
+
+    // Test metric subtract
+    RoutingPolicy ps3 = c.getRoutingPolicies().get("PS3");
+    assertThat(ps3, notNullValue());
+    assertThat(ps3.getStatements(), hasSize(2));
+    SetMetric setSub =
+        (SetMetric)
+            ((TraceableStatement) ((If) ps3.getStatements().get(0)).getTrueStatements().get(0))
+                .getInnerStatements()
+                .get(0);
+    assertThat(setSub.getMetric(), instanceOf(DecrementMetric.class));
+    DecrementMetric dec = (DecrementMetric) setSub.getMetric();
+    assertThat(dec.getSubtrahend(), equalTo(30L));
+  }
+
+  @Test
+  public void testPsMetric2AddSubtractExtraction() {
+    JuniperConfiguration c = parseJuniperConfig("metric2-add-subtract");
+    Map<String, PolicyStatement> policies = c.getMasterLogicalSystem().getPolicyStatements();
+
+    // Test literal metric2
+    PolicyStatement ps1 = policies.get("PS1");
+    assertThat(ps1.getTerms().get("T1").getThens().getAllThens(), hasSize(1));
+    assertThat(
+        getOnlyElement(ps1.getTerms().get("T1").getThens().getAllThens()),
+        equalTo(new PsThenMetric2(100, PsThenMetric2.Operator.SET)));
+
+    // Test metric2 add
+    PolicyStatement ps2 = policies.get("PS2");
+    assertThat(ps2.getTerms().get("T1").getThens().getAllThens(), hasSize(1));
+    assertThat(
+        getOnlyElement(ps2.getTerms().get("T1").getThens().getAllThens()),
+        equalTo(new PsThenMetric2(50, PsThenMetric2.Operator.ADD)));
+
+    // Test metric2 subtract
+    PolicyStatement ps3 = policies.get("PS3");
+    assertThat(ps3.getTerms().get("T1").getThens().getAllThens(), hasSize(1));
+    assertThat(
+        getOnlyElement(ps3.getTerms().get("T1").getThens().getAllThens()),
+        equalTo(new PsThenMetric2(30, PsThenMetric2.Operator.SUBTRACT)));
+
+    // Test large metric2 add (near uint32 max)
+    PolicyStatement ps4 = policies.get("PS4");
+    assertThat(ps4.getTerms().get("T1").getThens().getAllThens(), hasSize(1));
+    assertThat(
+        getOnlyElement(ps4.getTerms().get("T1").getThens().getAllThens()),
+        equalTo(new PsThenMetric2(4294967200L, PsThenMetric2.Operator.ADD)));
+
+    // Test large metric2 subtract
+    PolicyStatement ps5 = policies.get("PS5");
+    assertThat(ps5.getTerms().get("T1").getThens().getAllThens(), hasSize(1));
+    assertThat(
+        getOnlyElement(ps5.getTerms().get("T1").getThens().getAllThens()),
+        equalTo(new PsThenMetric2(4294967200L, PsThenMetric2.Operator.SUBTRACT)));
   }
 
   @Test
@@ -9343,7 +9543,9 @@ public final class FlatJuniperGrammarTest {
     Map<String, Policer> policers = c.getMasterLogicalSystem().getPolicers();
 
     // Verify policers are extracted
-    assertThat(policers, hasKeys("10M", "1M"));
+    assertThat(
+        policers,
+        hasKeys("10M", "1M", "FILTER-SPECIFIC-POL", "LOGICAL-INTERFACE-POL", "BOTH-FLAGS-POL"));
 
     // Verify 10M policer details
     Policer policer10M = policers.get("10M");
@@ -9352,6 +9554,8 @@ public final class FlatJuniperGrammarTest {
     assertThat(policer10M.getIfExceeding().getBandwidthLimit(), equalTo(10000000L));
     assertThat(policer10M.getIfExceeding().getBurstSizeLimit(), equalTo(15000L));
     assertThat(policer10M.getThen(), equalTo(PolicerThen.DISCARD));
+    assertThat(policer10M.getFilterSpecific(), nullValue());
+    assertThat(policer10M.getLogicalInterfacePolicer(), nullValue());
 
     // Verify 1M policer details
     Policer policer1M = policers.get("1M");
@@ -9360,6 +9564,38 @@ public final class FlatJuniperGrammarTest {
     assertThat(policer1M.getIfExceeding().getBandwidthLimit(), equalTo(1000000L));
     assertThat(policer1M.getIfExceeding().getBurstSizeLimit(), equalTo(2000L));
     assertThat(policer1M.getThen(), equalTo(PolicerThen.DISCARD));
+    assertThat(policer1M.getFilterSpecific(), nullValue());
+    assertThat(policer1M.getLogicalInterfacePolicer(), nullValue());
+
+    // Verify filter-specific policer
+    Policer filterSpecificPol = policers.get("FILTER-SPECIFIC-POL");
+    assertThat(filterSpecificPol.getName(), equalTo("FILTER-SPECIFIC-POL"));
+    assertThat(filterSpecificPol.getFilterSpecific(), equalTo(true));
+    assertThat(filterSpecificPol.getLogicalInterfacePolicer(), nullValue());
+    assertThat(filterSpecificPol.getIfExceeding(), notNullValue());
+    assertThat(filterSpecificPol.getIfExceeding().getBandwidthLimit(), equalTo(100000000L));
+    assertThat(filterSpecificPol.getIfExceeding().getBurstSizeLimit(), equalTo(200000L));
+    assertThat(filterSpecificPol.getThen(), equalTo(PolicerThen.DISCARD));
+
+    // Verify logical-interface-policer
+    Policer logicalInterfacePol = policers.get("LOGICAL-INTERFACE-POL");
+    assertThat(logicalInterfacePol.getName(), equalTo("LOGICAL-INTERFACE-POL"));
+    assertThat(logicalInterfacePol.getFilterSpecific(), nullValue());
+    assertThat(logicalInterfacePol.getLogicalInterfacePolicer(), equalTo(true));
+    assertThat(logicalInterfacePol.getIfExceeding(), notNullValue());
+    assertThat(logicalInterfacePol.getIfExceeding().getBandwidthLimit(), equalTo(1000000000L));
+    assertThat(logicalInterfacePol.getIfExceeding().getBurstSizeLimit(), equalTo(10000000L));
+    assertThat(logicalInterfacePol.getThen(), equalTo(PolicerThen.DISCARD));
+
+    // Verify policer with both flags
+    Policer bothFlagsPol = policers.get("BOTH-FLAGS-POL");
+    assertThat(bothFlagsPol.getName(), equalTo("BOTH-FLAGS-POL"));
+    assertThat(bothFlagsPol.getFilterSpecific(), equalTo(true));
+    assertThat(bothFlagsPol.getLogicalInterfacePolicer(), equalTo(true));
+    assertThat(bothFlagsPol.getIfExceeding(), notNullValue());
+    assertThat(bothFlagsPol.getIfExceeding().getBandwidthLimit(), equalTo(500000000L));
+    assertThat(bothFlagsPol.getIfExceeding().getBurstSizeLimit(), equalTo(1000000L));
+    assertThat(bothFlagsPol.getThen(), equalTo(PolicerThen.DISCARD));
 
     // Verify filter terms reference policers
     Map<String, FirewallFilter> filters = c.getMasterLogicalSystem().getFirewallFilters();
@@ -9404,6 +9640,9 @@ public final class FlatJuniperGrammarTest {
     // Verify policer definitions
     assertThat(ccae, hasDefinedStructure(filename, FIREWALL_POLICER, "10M"));
     assertThat(ccae, hasDefinedStructure(filename, FIREWALL_POLICER, "1M"));
+    assertThat(ccae, hasDefinedStructure(filename, FIREWALL_POLICER, "FILTER-SPECIFIC-POL"));
+    assertThat(ccae, hasDefinedStructure(filename, FIREWALL_POLICER, "LOGICAL-INTERFACE-POL"));
+    assertThat(ccae, hasDefinedStructure(filename, FIREWALL_POLICER, "BOTH-FLAGS-POL"));
 
     // Verify policer references from filter terms
     assertThat(ccae, hasNumReferrers(filename, FIREWALL_POLICER, "10M", 1));
@@ -9528,6 +9767,238 @@ public final class FlatJuniperGrammarTest {
     assertThat(
         vc.getMasterLogicalSystem().getNamedVlans().get("EXAMPLE_VLAN_4000").getVlanId(),
         equalTo(4000));
+  }
+
+  @Test
+  public void testBgpLocalPreference() {
+    JuniperConfiguration config = parseJuniperConfig("bgp-local-preference");
+    Map<String, NamedBgpGroup> groups =
+        config.getMasterLogicalSystem().getDefaultRoutingInstance().getNamedBgpGroups();
+    BgpGroup master =
+        config.getMasterLogicalSystem().getDefaultRoutingInstance().getMasterBgpGroup();
+
+    // Process-level local-preference
+    assertThat(master.getLocalPreference(), equalTo(50L));
+
+    // Group with override
+    BgpGroup groupOverride = groups.get("TEST-GROUP");
+    assertThat(groupOverride.getLocalPreference(), equalTo(100L));
+
+    // Group that inherits from process level
+    BgpGroup groupInherit = groups.get("TEST-GROUP-INHERIT");
+    assertThat(groupInherit.getLocalPreference(), nullValue());
+    groupInherit.cascadeInheritance();
+    assertThat(groupInherit.getLocalPreference(), equalTo(50L));
+  }
+
+  @Test
+  public void testBgpLocalPreferenceConversion() {
+    Configuration c = parseConfig("bgp-local-preference");
+
+    // Group with local-preference 100: export policy should set local-preference
+    RoutingPolicy overrideExportPolicy =
+        c.getRoutingPolicies().get(generatedBgpPeerExportPolicyName("default", "1.1.1.2/32"));
+    assertThat(overrideExportPolicy, notNullValue());
+    assertThat(
+        overrideExportPolicy.getStatements(),
+        hasItem(equalTo(new SetLocalPreference(new LiteralLong(100L)))));
+
+    // Group that inherits process-level local-preference 50
+    RoutingPolicy inheritExportPolicy =
+        c.getRoutingPolicies().get(generatedBgpPeerExportPolicyName("default", "1.1.1.3/32"));
+    assertThat(inheritExportPolicy, notNullValue());
+    assertThat(
+        inheritExportPolicy.getStatements(),
+        hasItem(equalTo(new SetLocalPreference(new LiteralLong(50L)))));
+  }
+
+  @Test
+  public void testSourceClassExtraction() {
+    JuniperConfiguration c = parseJuniperConfig("source-class");
+    Map<String, PolicyStatement> policies = c.getMasterLogicalSystem().getPolicyStatements();
+    Map<String, FirewallFilter> filters = c.getMasterLogicalSystem().getFirewallFilters();
+
+    // Test policy-statement then source-class extraction (definition)
+    PolicyStatement exportScu = policies.get("EXPORT-SCU");
+    assertThat(exportScu, notNullValue());
+
+    PsTerm termA = exportScu.getTerms().get("REGION-A");
+    assertThat(termA.getThens().getAllThens(), hasSize(1));
+    assertThat(
+        getOnlyElement(termA.getThens().getAllThens()),
+        equalTo(new PsThenSourceClass("SOURCE-CLASS-A")));
+
+    PsTerm termB = exportScu.getTerms().get("REGION-B");
+    assertThat(termB.getThens().getAllThens(), hasSize(1));
+    assertThat(
+        getOnlyElement(termB.getThens().getAllThens()),
+        equalTo(new PsThenSourceClass("SOURCE-CLASS-B")));
+
+    // Test firewall filter from source-class extraction (reference)
+    assertThat(filters, hasEntry(equalTo("METERING"), instanceOf(ConcreteFirewallFilter.class)));
+    ConcreteFirewallFilter meteringFilter = (ConcreteFirewallFilter) filters.get("METERING");
+    assertThat(meteringFilter.getTerms(), hasKeys("METER-A", "METER-B", "METER-UNDEF", "ACCEPT"));
+
+    FwTerm fwTermA = meteringFilter.getTerms().get("METER-A");
+    assertThat(fwTermA.getFroms(), hasSize(1));
+    FwFrom fromA = getOnlyElement(fwTermA.getFroms());
+    assertThat(fromA, instanceOf(FwFromSourceClass.class));
+    FwFromSourceClass fromSourceClassA = (FwFromSourceClass) fromA;
+    assertThat(fromSourceClassA.getName(), equalTo("SOURCE-CLASS-A"));
+
+    FwTerm fwTermB = meteringFilter.getTerms().get("METER-B");
+    assertThat(fwTermB.getFroms(), hasSize(1));
+    FwFrom fromB = getOnlyElement(fwTermB.getFroms());
+    assertThat(fromB, instanceOf(FwFromSourceClass.class));
+    FwFromSourceClass fromSourceClassB = (FwFromSourceClass) fromB;
+    assertThat(fromSourceClassB.getName(), equalTo("SOURCE-CLASS-B"));
+
+    // Test undefined source-class reference
+    FwTerm fwTermUndef = meteringFilter.getTerms().get("METER-UNDEF");
+    assertThat(fwTermUndef.getFroms(), hasSize(1));
+    FwFrom fromUndef = getOnlyElement(fwTermUndef.getFroms());
+    assertThat(fromUndef, instanceOf(FwFromSourceClass.class));
+    FwFromSourceClass fromSourceClassUndef = (FwFromSourceClass) fromUndef;
+    assertThat(fromSourceClassUndef.getName(), equalTo("SOURCE-CLASS-UNDEFINED"));
+
+    // Test IPv6 filter with source-class
+    assertThat(filters, hasEntry(equalTo("METERING-V6"), instanceOf(ConcreteFirewallFilter.class)));
+    ConcreteFirewallFilter meteringV6Filter = (ConcreteFirewallFilter) filters.get("METERING-V6");
+    assertThat(meteringV6Filter.getTerms(), hasKeys("METER-A", "ACCEPT"));
+
+    FwTerm fwTermV6 = meteringV6Filter.getTerms().get("METER-A");
+    assertThat(fwTermV6.getFroms(), hasSize(1));
+    FwFrom fromV6 = getOnlyElement(fwTermV6.getFroms());
+    assertThat(fromV6, instanceOf(FwFromSourceClass.class));
+    FwFromSourceClass fromSourceClassV6 = (FwFromSourceClass) fromV6;
+    assertThat(fromSourceClassV6.getName(), equalTo("SOURCE-CLASS-A"));
+  }
+
+  @Test
+  public void testSourceClassDefinitionAndReferences() throws IOException {
+    String hostname = "source-class";
+    String filename = "configs/" + hostname;
+    Batfish batfish = getBatfishForConfigurationNames(hostname);
+    ConvertConfigurationAnswerElement ccae =
+        batfish.loadConvertConfigurationAnswerElementOrReparse(batfish.getSnapshot());
+
+    // Verify source-class definitions are tracked
+    assertThat(ccae, hasDefinedStructure(filename, SOURCE_CLASS, "SOURCE-CLASS-A"));
+    assertThat(ccae, hasDefinedStructure(filename, SOURCE_CLASS, "SOURCE-CLASS-B"));
+
+    // Verify source-class references are tracked
+    // SOURCE-CLASS-A is referenced 2 times (once in inet filter, once in inet6 filter)
+    assertThat(ccae, hasNumReferrers(filename, SOURCE_CLASS, "SOURCE-CLASS-A", 2));
+    // SOURCE-CLASS-B is referenced 1 time (in inet filter)
+    assertThat(ccae, hasNumReferrers(filename, SOURCE_CLASS, "SOURCE-CLASS-B", 1));
+
+    // Verify undefined source-class reference is identified
+    assertThat(ccae, hasUndefinedReference(filename, SOURCE_CLASS, "SOURCE-CLASS-UNDEFINED"));
+  }
+
+  @Test
+  public void testPolicyStatementFromProtocol() {
+    JuniperConfiguration vc = parseJuniperConfig("policy-statement-from-protocol");
+    PolicyStatement ps = vc.getMasterLogicalSystem().getPolicyStatements().get("PS");
+
+    // Helper to extract the single PsFromProtocol from a term
+    java.util.function.Function<String, PsProtocol> getFromProtocol =
+        termName -> {
+          PsTerm term = ps.getTerms().get(termName);
+          assertThat(term.getFroms().getFromProtocols(), hasSize(1));
+          return term.getFroms().getFromProtocols().iterator().next().getProtocol();
+        };
+
+    assertThat(getFromProtocol.apply("ACCESS_INTERNAL"), equalTo(PsProtocol.ACCESS_INTERNAL));
+    assertThat(getFromProtocol.apply("AGGREGATE"), equalTo(PsProtocol.AGGREGATE));
+    assertThat(getFromProtocol.apply("BGP"), equalTo(PsProtocol.BGP));
+    assertThat(getFromProtocol.apply("DIRECT"), equalTo(PsProtocol.DIRECT));
+    assertThat(getFromProtocol.apply("EVPN"), equalTo(PsProtocol.EVPN));
+    assertThat(getFromProtocol.apply("ISIS"), equalTo(PsProtocol.ISIS));
+    assertThat(getFromProtocol.apply("LDP"), equalTo(PsProtocol.LDP));
+    assertThat(getFromProtocol.apply("LOCAL"), equalTo(PsProtocol.LOCAL));
+    assertThat(getFromProtocol.apply("OSPF"), equalTo(PsProtocol.OSPF));
+    assertThat(getFromProtocol.apply("OSPF3"), equalTo(PsProtocol.OSPF3));
+    assertThat(getFromProtocol.apply("RSVP"), equalTo(PsProtocol.RSVP));
+    assertThat(getFromProtocol.apply("STATIC"), equalTo(PsProtocol.STATIC));
+  }
+
+  @Test
+  public void testPolicyStatementToProtocol() {
+    JuniperConfiguration vc = parseJuniperConfig("policy-statement-to-protocol");
+    PolicyStatement ps = vc.getMasterLogicalSystem().getPolicyStatements().get("PS");
+
+    // Helper to extract the single PsToProtocol from a term
+    java.util.function.Function<String, PsProtocol> getToProtocol =
+        termName -> {
+          PsTerm term = ps.getTerms().get(termName);
+          assertThat(term.getTos().getToProtocols(), hasSize(1));
+          return term.getTos().getToProtocols().iterator().next().getProtocol();
+        };
+
+    assertThat(getToProtocol.apply("ACCESS_INTERNAL"), equalTo(PsProtocol.ACCESS_INTERNAL));
+    assertThat(getToProtocol.apply("AGGREGATE"), equalTo(PsProtocol.AGGREGATE));
+    assertThat(getToProtocol.apply("BGP"), equalTo(PsProtocol.BGP));
+    assertThat(getToProtocol.apply("DIRECT"), equalTo(PsProtocol.DIRECT));
+    assertThat(getToProtocol.apply("EVPN"), equalTo(PsProtocol.EVPN));
+    assertThat(getToProtocol.apply("ISIS"), equalTo(PsProtocol.ISIS));
+    assertThat(getToProtocol.apply("LDP"), equalTo(PsProtocol.LDP));
+    assertThat(getToProtocol.apply("LOCAL"), equalTo(PsProtocol.LOCAL));
+    assertThat(getToProtocol.apply("OSPF"), equalTo(PsProtocol.OSPF));
+    assertThat(getToProtocol.apply("OSPF3"), equalTo(PsProtocol.OSPF3));
+    assertThat(getToProtocol.apply("RSVP"), equalTo(PsProtocol.RSVP));
+    assertThat(getToProtocol.apply("STATIC"), equalTo(PsProtocol.STATIC));
+
+    // Verify hasAtLeastOneTo for all terms
+    for (PsTerm term : ps.getTerms().values()) {
+      assertThat(term.getName(), term.hasAtLeastOneTo(), equalTo(true));
+    }
+
+    // Verify that parse-time todo warnings are generated for all to conditions
+    assertThat(
+        vc.getWarnings().getParseWarnings(),
+        hasItem(hasComment("This feature is not currently supported")));
+  }
+
+  @Test
+  public void testPolicyStatementTo() {
+    JuniperConfiguration vc = parseJuniperConfig("policy-statement-to");
+    PolicyStatement ps = vc.getMasterLogicalSystem().getPolicyStatements().get("PS");
+
+    // Verify to level extraction
+    PsTerm levelTerm = ps.getTerms().get("LEVEL");
+    assertThat(levelTerm.getTos().getToLevel(), notNullValue());
+    assertThat(levelTerm.getTos().getToLevel().getLevel(), equalTo(1L));
+
+    PsTerm level2Term = ps.getTerms().get("LEVEL2");
+    assertThat(level2Term.getTos().getToLevel(), notNullValue());
+    assertThat(level2Term.getTos().getToLevel().getLevel(), equalTo(2L));
+
+    // Verify to rib extraction
+    PsTerm ribTerm = ps.getTerms().get("RIB");
+    assertThat(ribTerm.getTos().getToRib(), notNullValue());
+    assertThat(ribTerm.getTos().getToRib().getRibName(), equalTo("inet.0"));
+
+    PsTerm rib6Term = ps.getTerms().get("RIB6");
+    assertThat(rib6Term.getTos().getToRib(), notNullValue());
+    assertThat(rib6Term.getTos().getToRib().getRibName(), equalTo("inet6.0"));
+
+    // Verify to protocol extraction
+    PsTerm protocolTerm = ps.getTerms().get("PROTOCOL");
+    assertThat(protocolTerm.getTos().getToProtocols(), hasSize(1));
+    assertThat(
+        protocolTerm.getTos().getToProtocols().iterator().next().getProtocol(),
+        equalTo(PsProtocol.BGP));
+
+    // Verify hasAtLeastOneTo for all terms
+    for (PsTerm term : ps.getTerms().values()) {
+      assertThat(term.getName(), term.hasAtLeastOneTo(), equalTo(true));
+    }
+
+    // Verify that parse-time todo warnings are generated
+    assertThat(
+        vc.getWarnings().getParseWarnings(),
+        hasItem(hasComment("This feature is not currently supported")));
   }
 
   private final BddTestbed _b = new BddTestbed(ImmutableMap.of(), ImmutableMap.of());

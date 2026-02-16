@@ -220,6 +220,7 @@ pops_to
    TO
    (
       popsto_level
+      | popsto_protocol
       | popsto_rib
    )
 ;
@@ -586,11 +587,7 @@ popst_common
    | popst_install_nexthop
    | popst_local_preference
    | popst_metric
-   | popst_metric_add
-   | popst_metric_expression
-   | popst_metric_igp
    | popst_metric2
-   | popst_metric2_expression
    | popst_multipath_resolve
    | popst_next_hop
    | popst_next_policy
@@ -600,6 +597,7 @@ popst_common
    | popst_preference
    | popst_priority
    | popst_reject
+   | popst_source_class
    | popst_tag
    | popst_tag2
    | popst_tunnel_attribute
@@ -663,34 +661,70 @@ popst_metric
 :
    METRIC
    (
-      metric = dec
+      popstm_add
+      | popstm_expression
+      | popstm_igp
+      | popstm_subtract
+      | popstm_value
       | apply_groups
    )
 ;
 
-popst_metric_add
+popstm_add
 :
-   METRIC ADD metric = dec
+   ADD metric = uint32
+;
+
+popstm_expression
+:
+   EXPRESSION metric_expression
+;
+
+popstm_igp
+:
+   IGP offset = dec?
+;
+
+popstm_subtract
+:
+   SUBTRACT metric = uint32
+;
+
+popstm_value
+:
+   metric = uint32
 ;
 
 popst_metric2
 :
-   METRIC2 metric2 = dec
+   METRIC2
+   (
+      popstm2_add
+      | popstm2_expression
+      | popstm2_subtract
+      | popstm2_value
+      | apply_groups
+   )
 ;
 
-popst_metric_expression
+popstm2_add
 :
-   METRIC EXPRESSION metric_expression
+   ADD metric2 = uint32
 ;
 
-popst_metric_igp
+popstm2_expression
 :
-   METRIC IGP offset = dec?
+   EXPRESSION metric_expression
 ;
 
-popst_metric2_expression
+popstm2_subtract
 :
-   METRIC2 EXPRESSION metric_expression
+   SUBTRACT metric2 = uint32
+;
+
+popstm2_value
+:
+   metric2 = uint32
 ;
 
 popst_multipath_resolve
@@ -768,7 +802,11 @@ popst_origin
 
 popst_preference
 :
-   PREFERENCE preference = dec
+   PREFERENCE
+   (
+      (ADD | SUBTRACT)? preference = uint32
+      | apply_groups
+   )
 ;
 
 popst_priority
@@ -783,6 +821,11 @@ popst_priority
 popst_reject
 :
    REJECT
+;
+
+popst_source_class
+:
+   SOURCE_CLASS name = junos_name
 ;
 
 popst_tag
@@ -811,6 +854,25 @@ popstta_set: SET name = junos_name;
 popsto_level
 :
    LEVEL dec
+;
+
+popsto_protocol
+:
+   PROTOCOL
+   (
+     ACCESS_INTERNAL
+     | AGGREGATE
+     | BGP
+     | DIRECT
+     | EVPN
+     | ISIS
+     | LDP
+     | LOCAL
+     | OSPF
+     | OSPF3
+     | RSVP
+     | STATIC
+   )
 ;
 
 popsto_rib

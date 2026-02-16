@@ -514,7 +514,9 @@ public class Invariant {
 
       return new Invariant(
           tbdd,
-          includeDenied ? acceptedWP.or(TransferBDDUtils.deniedRoutes(paths, tbdd)) : acceptedWP);
+          includeDenied
+              ? acceptedWP.orWith(TransferBDDUtils.deniedRoutes(paths, tbdd))
+              : acceptedWP);
     }
   }
 
@@ -549,7 +551,7 @@ public class Invariant {
    * @return true if implies provided invariant
    */
   public boolean implies(Invariant post) {
-    return (this.getBDD().imp(post.getBDD())).isOne();
+    return (!this.getBDD().diffSat(post.getBDD()));
   }
 
   /**
@@ -559,7 +561,7 @@ public class Invariant {
    * @return true if implied by provided invariant
    */
   public boolean impliedBy(Invariant pre) {
-    return (pre.getBDD().imp(this.getBDD())).isOne();
+    return pre.implies(this);
   }
 
   /**

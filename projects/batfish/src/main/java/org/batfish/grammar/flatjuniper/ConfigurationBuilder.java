@@ -60,6 +60,7 @@ import static org.batfish.representation.juniper.JuniperStructureType.SECURITY_P
 import static org.batfish.representation.juniper.JuniperStructureType.SECURITY_PROFILE;
 import static org.batfish.representation.juniper.JuniperStructureType.SNMP_CLIENT_LIST;
 import static org.batfish.representation.juniper.JuniperStructureType.SNMP_CLIENT_LIST_OR_PREFIX_LIST;
+import static org.batfish.representation.juniper.JuniperStructureType.SOURCE_CLASS;
 import static org.batfish.representation.juniper.JuniperStructureType.SRLG;
 import static org.batfish.representation.juniper.JuniperStructureType.TUNNEL_ATTRIBUTE;
 import static org.batfish.representation.juniper.JuniperStructureType.VLAN;
@@ -122,6 +123,7 @@ import static org.batfish.representation.juniper.JuniperStructureUsage.CLASS_OF_
 import static org.batfish.representation.juniper.JuniperStructureUsage.DHCP_RELAY_GROUP_ACTIVE_SERVER_GROUP;
 import static org.batfish.representation.juniper.JuniperStructureUsage.FIREWALL_FILTER_DESTINATION_PREFIX_LIST;
 import static org.batfish.representation.juniper.JuniperStructureUsage.FIREWALL_FILTER_DSCP;
+import static org.batfish.representation.juniper.JuniperStructureUsage.FIREWALL_FILTER_FROM_SOURCE_CLASS;
 import static org.batfish.representation.juniper.JuniperStructureUsage.FIREWALL_FILTER_PREFIX_LIST;
 import static org.batfish.representation.juniper.JuniperStructureUsage.FIREWALL_FILTER_SOURCE_PREFIX_LIST;
 import static org.batfish.representation.juniper.JuniperStructureUsage.FIREWALL_FILTER_TERM_DEFINITION;
@@ -321,6 +323,7 @@ import org.batfish.grammar.flatjuniper.FlatJuniperParser.B_groupContext;
 import org.batfish.grammar.flatjuniper.FlatJuniperParser.B_importContext;
 import org.batfish.grammar.flatjuniper.FlatJuniperParser.B_keepContext;
 import org.batfish.grammar.flatjuniper.FlatJuniperParser.B_local_addressContext;
+import org.batfish.grammar.flatjuniper.FlatJuniperParser.B_local_preferenceContext;
 import org.batfish.grammar.flatjuniper.FlatJuniperParser.B_multihopContext;
 import org.batfish.grammar.flatjuniper.FlatJuniperParser.B_multipathContext;
 import org.batfish.grammar.flatjuniper.FlatJuniperParser.B_neighborContext;
@@ -392,6 +395,7 @@ import org.batfish.grammar.flatjuniper.FlatJuniperParser.Fftf_port_exceptContext
 import org.batfish.grammar.flatjuniper.FlatJuniperParser.Fftf_prefix_listContext;
 import org.batfish.grammar.flatjuniper.FlatJuniperParser.Fftf_protocolContext;
 import org.batfish.grammar.flatjuniper.FlatJuniperParser.Fftf_source_addressContext;
+import org.batfish.grammar.flatjuniper.FlatJuniperParser.Fftf_source_classContext;
 import org.batfish.grammar.flatjuniper.FlatJuniperParser.Fftf_source_portContext;
 import org.batfish.grammar.flatjuniper.FlatJuniperParser.Fftf_source_port_exceptContext;
 import org.batfish.grammar.flatjuniper.FlatJuniperParser.Fftf_source_prefix_listContext;
@@ -420,7 +424,9 @@ import org.batfish.grammar.flatjuniper.FlatJuniperParser.Fod_groupContext;
 import org.batfish.grammar.flatjuniper.FlatJuniperParser.Fod_server_groupContext;
 import org.batfish.grammar.flatjuniper.FlatJuniperParser.Fodg_interfaceContext;
 import org.batfish.grammar.flatjuniper.FlatJuniperParser.Fods_addressContext;
+import org.batfish.grammar.flatjuniper.FlatJuniperParser.Fp_filter_specificContext;
 import org.batfish.grammar.flatjuniper.FlatJuniperParser.Fp_if_exceedingContext;
+import org.batfish.grammar.flatjuniper.FlatJuniperParser.Fp_logical_interface_policerContext;
 import org.batfish.grammar.flatjuniper.FlatJuniperParser.Fpie_bandwidth_limitContext;
 import org.batfish.grammar.flatjuniper.FlatJuniperParser.Fpie_burst_size_limitContext;
 import org.batfish.grammar.flatjuniper.FlatJuniperParser.Fpt_discardContext;
@@ -643,16 +649,24 @@ import org.batfish.grammar.flatjuniper.FlatJuniperParser.Popst_default_action_ac
 import org.batfish.grammar.flatjuniper.FlatJuniperParser.Popst_default_action_rejectContext;
 import org.batfish.grammar.flatjuniper.FlatJuniperParser.Popst_externalContext;
 import org.batfish.grammar.flatjuniper.FlatJuniperParser.Popst_local_preferenceContext;
-import org.batfish.grammar.flatjuniper.FlatJuniperParser.Popst_metricContext;
-import org.batfish.grammar.flatjuniper.FlatJuniperParser.Popst_metric_addContext;
 import org.batfish.grammar.flatjuniper.FlatJuniperParser.Popst_multipath_resolveContext;
 import org.batfish.grammar.flatjuniper.FlatJuniperParser.Popst_next_policyContext;
 import org.batfish.grammar.flatjuniper.FlatJuniperParser.Popst_next_termContext;
 import org.batfish.grammar.flatjuniper.FlatJuniperParser.Popst_originContext;
 import org.batfish.grammar.flatjuniper.FlatJuniperParser.Popst_preferenceContext;
 import org.batfish.grammar.flatjuniper.FlatJuniperParser.Popst_rejectContext;
+import org.batfish.grammar.flatjuniper.FlatJuniperParser.Popst_source_classContext;
 import org.batfish.grammar.flatjuniper.FlatJuniperParser.Popst_tag2Context;
 import org.batfish.grammar.flatjuniper.FlatJuniperParser.Popst_tagContext;
+import org.batfish.grammar.flatjuniper.FlatJuniperParser.Popstm2_addContext;
+import org.batfish.grammar.flatjuniper.FlatJuniperParser.Popstm2_expressionContext;
+import org.batfish.grammar.flatjuniper.FlatJuniperParser.Popstm2_subtractContext;
+import org.batfish.grammar.flatjuniper.FlatJuniperParser.Popstm2_valueContext;
+import org.batfish.grammar.flatjuniper.FlatJuniperParser.Popstm_addContext;
+import org.batfish.grammar.flatjuniper.FlatJuniperParser.Popstm_expressionContext;
+import org.batfish.grammar.flatjuniper.FlatJuniperParser.Popstm_igpContext;
+import org.batfish.grammar.flatjuniper.FlatJuniperParser.Popstm_subtractContext;
+import org.batfish.grammar.flatjuniper.FlatJuniperParser.Popstm_valueContext;
 import org.batfish.grammar.flatjuniper.FlatJuniperParser.Popstnh_discardContext;
 import org.batfish.grammar.flatjuniper.FlatJuniperParser.Popstnh_ipv4Context;
 import org.batfish.grammar.flatjuniper.FlatJuniperParser.Popstnh_ipv6Context;
@@ -660,6 +674,7 @@ import org.batfish.grammar.flatjuniper.FlatJuniperParser.Popstnh_peer_addressCon
 import org.batfish.grammar.flatjuniper.FlatJuniperParser.Popstnh_rejectContext;
 import org.batfish.grammar.flatjuniper.FlatJuniperParser.Popstnh_selfContext;
 import org.batfish.grammar.flatjuniper.FlatJuniperParser.Popsto_levelContext;
+import org.batfish.grammar.flatjuniper.FlatJuniperParser.Popsto_protocolContext;
 import org.batfish.grammar.flatjuniper.FlatJuniperParser.Popsto_ribContext;
 import org.batfish.grammar.flatjuniper.FlatJuniperParser.Port_numberContext;
 import org.batfish.grammar.flatjuniper.FlatJuniperParser.Port_rangeContext;
@@ -1022,6 +1037,7 @@ import org.batfish.representation.juniper.FwFromProtocol;
 import org.batfish.representation.juniper.FwFromSourceAddress;
 import org.batfish.representation.juniper.FwFromSourceAddressBookEntry;
 import org.batfish.representation.juniper.FwFromSourceAddressExcept;
+import org.batfish.representation.juniper.FwFromSourceClass;
 import org.batfish.representation.juniper.FwFromSourcePort;
 import org.batfish.representation.juniper.FwFromSourcePrefixList;
 import org.batfish.representation.juniper.FwFromSourcePrefixListExcept;
@@ -1132,6 +1148,7 @@ import org.batfish.representation.juniper.PsFromRouteType;
 import org.batfish.representation.juniper.PsFromTag;
 import org.batfish.representation.juniper.PsFromUnsupported;
 import org.batfish.representation.juniper.PsFroms;
+import org.batfish.representation.juniper.PsProtocol;
 import org.batfish.representation.juniper.PsTerm;
 import org.batfish.representation.juniper.PsThen;
 import org.batfish.representation.juniper.PsThenAccept;
@@ -1148,7 +1165,7 @@ import org.batfish.representation.juniper.PsThenDefaultActionReject;
 import org.batfish.representation.juniper.PsThenExternal;
 import org.batfish.representation.juniper.PsThenLocalPreference;
 import org.batfish.representation.juniper.PsThenMetric;
-import org.batfish.representation.juniper.PsThenMetricAdd;
+import org.batfish.representation.juniper.PsThenMetric2;
 import org.batfish.representation.juniper.PsThenNextHopDiscard;
 import org.batfish.representation.juniper.PsThenNextHopIp;
 import org.batfish.representation.juniper.PsThenNextHopPeerAddress;
@@ -1158,10 +1175,14 @@ import org.batfish.representation.juniper.PsThenNextPolicy;
 import org.batfish.representation.juniper.PsThenOrigin;
 import org.batfish.representation.juniper.PsThenPreference;
 import org.batfish.representation.juniper.PsThenReject;
+import org.batfish.representation.juniper.PsThenSourceClass;
 import org.batfish.representation.juniper.PsThenTag;
 import org.batfish.representation.juniper.PsThenTunnelAttributeRemove;
 import org.batfish.representation.juniper.PsThenTunnelAttributeSet;
 import org.batfish.representation.juniper.PsThens;
+import org.batfish.representation.juniper.PsToLevel;
+import org.batfish.representation.juniper.PsToProtocol;
+import org.batfish.representation.juniper.PsToRib;
 import org.batfish.representation.juniper.QualifiedNextHop;
 import org.batfish.representation.juniper.Resolution;
 import org.batfish.representation.juniper.ResolutionRib;
@@ -2848,6 +2869,16 @@ public class ConfigurationBuilder extends FlatJuniperParserBaseListener
   @Override
   public void exitF_policer(F_policerContext ctx) {
     _currentPolicer = null;
+  }
+
+  @Override
+  public void exitFp_filter_specific(Fp_filter_specificContext ctx) {
+    _currentPolicer.setFilterSpecific(true);
+  }
+
+  @Override
+  public void exitFp_logical_interface_policer(Fp_logical_interface_policerContext ctx) {
+    _currentPolicer.setLogicalInterfacePolicer(true);
   }
 
   @Override
@@ -4687,6 +4718,12 @@ public class ConfigurationBuilder extends FlatJuniperParserBaseListener
   }
 
   @Override
+  public void exitB_local_preference(B_local_preferenceContext ctx) {
+    long localPreference = toLong(ctx.localpref);
+    _currentBgpGroup.setLocalPreference(localPreference);
+  }
+
+  @Override
   public void exitB_remove_private(B_remove_privateContext ctx) {
     _currentBgpGroup.setRemovePrivate(true);
   }
@@ -5146,6 +5183,16 @@ public class ConfigurationBuilder extends FlatJuniperParserBaseListener
               : new FwFromSourceAddress(ipWildcard, text);
       _currentFwTerm.getFroms().add(from);
     }
+  }
+
+  @Override
+  public void exitFftf_source_class(Fftf_source_classContext ctx) {
+    todo(ctx);
+    String name = toString(ctx.name);
+    FwFrom from = new FwFromSourceClass(name);
+    _currentFwTerm.getFroms().add(from);
+    _configuration.referenceStructure(
+        SOURCE_CLASS, name, FIREWALL_FILTER_FROM_SOURCE_CLASS, getLine(ctx.name.start));
   }
 
   @Override
@@ -6254,33 +6301,33 @@ public class ConfigurationBuilder extends FlatJuniperParserBaseListener
 
   @Override
   public void exitPopsf_protocol(Popsf_protocolContext ctx) {
-    RoutingProtocol protocol;
+    PsProtocol protocol;
     if (ctx.AGGREGATE() != null) {
-      protocol = RoutingProtocol.AGGREGATE;
+      protocol = PsProtocol.AGGREGATE;
     } else if (ctx.BGP() != null) {
-      protocol = RoutingProtocol.BGP;
+      protocol = PsProtocol.BGP;
     } else if (ctx.DIRECT() != null) {
-      protocol = RoutingProtocol.CONNECTED;
+      protocol = PsProtocol.DIRECT;
     } else if (ctx.ISIS() != null) {
-      protocol = RoutingProtocol.ISIS_ANY;
+      protocol = PsProtocol.ISIS;
     } else if (ctx.EVPN() != null) {
-      protocol = RoutingProtocol.EVPN;
+      protocol = PsProtocol.EVPN;
     } else if (ctx.LDP() != null) {
-      protocol = RoutingProtocol.LDP;
+      protocol = PsProtocol.LDP;
     } else if (ctx.LOCAL() != null) {
-      protocol = RoutingProtocol.LOCAL;
+      protocol = PsProtocol.LOCAL;
     } else if (ctx.OSPF() != null) {
-      protocol = RoutingProtocol.OSPF;
+      protocol = PsProtocol.OSPF;
     } else if (ctx.OSPF3() != null) {
-      protocol = RoutingProtocol.OSPF3;
+      protocol = PsProtocol.OSPF3;
     } else if (ctx.RSVP() != null) {
-      protocol = RoutingProtocol.RSVP;
+      protocol = PsProtocol.RSVP;
     } else if (ctx.STATIC() != null) {
-      protocol = RoutingProtocol.STATIC;
+      protocol = PsProtocol.STATIC;
     } else {
+      assert ctx.ACCESS_INTERNAL() != null;
       todo(ctx);
-      _currentPsTerm.getFroms().setFromUnsupported(new PsFromUnsupported());
-      return;
+      protocol = PsProtocol.ACCESS_INTERNAL;
     }
     _currentPsTerm.getFroms().addFromProtocol(new PsFromProtocol(protocol));
   }
@@ -6355,13 +6402,46 @@ public class ConfigurationBuilder extends FlatJuniperParserBaseListener
   @Override
   public void exitPopsto_level(Popsto_levelContext ctx) {
     todo(ctx);
-    _currentPsTerm.setHasToConditions(true);
+    _currentPsTerm.getTos().setToLevel(new PsToLevel(toLong(ctx.dec())));
+  }
+
+  @Override
+  public void exitPopsto_protocol(Popsto_protocolContext ctx) {
+    todo(ctx);
+    PsProtocol protocol;
+    if (ctx.AGGREGATE() != null) {
+      protocol = PsProtocol.AGGREGATE;
+    } else if (ctx.BGP() != null) {
+      protocol = PsProtocol.BGP;
+    } else if (ctx.DIRECT() != null) {
+      protocol = PsProtocol.DIRECT;
+    } else if (ctx.ISIS() != null) {
+      protocol = PsProtocol.ISIS;
+    } else if (ctx.EVPN() != null) {
+      protocol = PsProtocol.EVPN;
+    } else if (ctx.LDP() != null) {
+      protocol = PsProtocol.LDP;
+    } else if (ctx.LOCAL() != null) {
+      protocol = PsProtocol.LOCAL;
+    } else if (ctx.OSPF() != null) {
+      protocol = PsProtocol.OSPF;
+    } else if (ctx.OSPF3() != null) {
+      protocol = PsProtocol.OSPF3;
+    } else if (ctx.RSVP() != null) {
+      protocol = PsProtocol.RSVP;
+    } else if (ctx.STATIC() != null) {
+      protocol = PsProtocol.STATIC;
+    } else {
+      assert ctx.ACCESS_INTERNAL() != null;
+      protocol = PsProtocol.ACCESS_INTERNAL;
+    }
+    _currentPsTerm.getTos().addToProtocol(new PsToProtocol(protocol));
   }
 
   @Override
   public void exitPopsto_rib(Popsto_ribContext ctx) {
     todo(ctx);
-    _currentPsTerm.setHasToConditions(true);
+    _currentPsTerm.getTos().setToRib(new PsToRib(toString(ctx.rib_name())));
   }
 
   @Override
@@ -6525,16 +6605,60 @@ public class ConfigurationBuilder extends FlatJuniperParserBaseListener
   }
 
   @Override
-  public void exitPopst_metric(Popst_metricContext ctx) {
-    int metric = toInt(ctx.metric);
-    PsThenMetric then = new PsThenMetric(metric);
-    addPsThen(then, ctx);
+  public void exitPopstm_add(Popstm_addContext ctx) {
+    long metric = toLong(ctx.metric);
+    addPsThen(new PsThenMetric(metric, PsThenMetric.Operator.ADD), ctx);
   }
 
   @Override
-  public void exitPopst_metric_add(Popst_metric_addContext ctx) {
-    int metric = toInt(ctx.metric);
-    addPsThen(new PsThenMetricAdd(metric), ctx);
+  public void exitPopstm_expression(Popstm_expressionContext ctx) {
+    // TODO: implement metric expression
+    todo(ctx);
+  }
+
+  @Override
+  public void exitPopstm_igp(Popstm_igpContext ctx) {
+    // TODO: implement metric igp
+    todo(ctx);
+  }
+
+  @Override
+  public void exitPopstm_subtract(Popstm_subtractContext ctx) {
+    long metric = toLong(ctx.metric);
+    addPsThen(new PsThenMetric(metric, PsThenMetric.Operator.SUBTRACT), ctx);
+  }
+
+  @Override
+  public void exitPopstm_value(Popstm_valueContext ctx) {
+    long metric = toLong(ctx.metric);
+    addPsThen(new PsThenMetric(metric, PsThenMetric.Operator.SET), ctx);
+  }
+
+  @Override
+  public void exitPopstm2_add(Popstm2_addContext ctx) {
+    long metric2 = toLong(ctx.metric2);
+    addPsThen(new PsThenMetric2(metric2, PsThenMetric2.Operator.ADD), ctx);
+    todo(ctx); // TODO: implement metric2 in VI model
+  }
+
+  @Override
+  public void exitPopstm2_expression(Popstm2_expressionContext ctx) {
+    // TODO: implement metric2 expression
+    todo(ctx);
+  }
+
+  @Override
+  public void exitPopstm2_subtract(Popstm2_subtractContext ctx) {
+    long metric2 = toLong(ctx.metric2);
+    addPsThen(new PsThenMetric2(metric2, PsThenMetric2.Operator.SUBTRACT), ctx);
+    todo(ctx); // TODO: implement metric2 in VI model
+  }
+
+  @Override
+  public void exitPopstm2_value(Popstm2_valueContext ctx) {
+    long metric2 = toLong(ctx.metric2);
+    addPsThen(new PsThenMetric2(metric2, PsThenMetric2.Operator.SET), ctx);
+    todo(ctx); // TODO: implement metric2 in VI model
   }
 
   @Override
@@ -6604,14 +6728,27 @@ public class ConfigurationBuilder extends FlatJuniperParserBaseListener
 
   @Override
   public void exitPopst_preference(Popst_preferenceContext ctx) {
-    int preference = toInt(ctx.preference);
-    PsThenPreference then = new PsThenPreference(preference);
-    addPsThen(then, ctx);
+    long preference = toLong(ctx.preference);
+    PsThenPreference.Operator op =
+        ctx.ADD() != null
+            ? PsThenPreference.Operator.ADD
+            : (ctx.SUBTRACT() != null
+                ? PsThenPreference.Operator.SUBTRACT
+                : PsThenPreference.Operator.SET);
+    addPsThen(new PsThenPreference(preference, op), ctx);
   }
 
   @Override
   public void exitPopst_reject(Popst_rejectContext ctx) {
     addPsThen(PsThenReject.INSTANCE, ctx);
+  }
+
+  @Override
+  public void exitPopst_source_class(Popst_source_classContext ctx) {
+    todo(ctx);
+    String name = toString(ctx.name);
+    addPsThen(new PsThenSourceClass(name), ctx);
+    _configuration.defineSingleLineStructure(SOURCE_CLASS, name, getLine(ctx.name.start));
   }
 
   @Override

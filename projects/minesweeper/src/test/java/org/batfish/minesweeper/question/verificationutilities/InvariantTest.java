@@ -673,7 +673,7 @@ public class InvariantTest {
         Invariant.clauseBuilder()
             .setCommunities(new RegexConstraints(List.of(RegexConstraint.parse("100:2"))));
 
-    // [1] prefix(PREFIX) /\ comm(100:1) /\ comm(100:2) => {interpolant: prefix(PREFIX)} =>
+    // [1] prefix(PREFIX) /\ comm(100:1) /\ comm(!100:2) => {interpolant: prefix(PREFIX)} =>
     // prefix(PREFIX)
     Invariant Q = Invariant.builder().addClause(clauseP).build(tbdd, exports.get(ALPHANODE));
     Invariant P =
@@ -755,34 +755,33 @@ public class InvariantTest {
             .build(tbdd, exports.get(ALPHANODE));
     assertEquals(AB_expected.getBDD(), AB_interpolant.getBDD());
 
-    // [4]
-    // TODO interpolant algorithm not fine grain enough to distinguish between conjunction of two
-    // prefix negations
-    // The example below is targeting find the interpolant between: (!P /\ !Q) and !P
-    // where P = 'has prefix 2.4.8.0/24' and Q = 'has prefix 100.200.0.0/16' so (!P /\ !Q) => !P
-
-    // EXPLANATION: because both P and Q rely on the BDD variables which correspond to the prefix
-    // and prefix length
-    // our algorithm doesn't work for distinguishing between prefixes for the purpose of
-    // interpolation
-
-    //        Invariant C = Invariant.builder()
-    //                .addClause(Invariant.clauseBuilder()
-    //                        .avoidPrefix(new
-    // PrefixSpace(PrefixRange.fromPrefix(Prefix.parse("2.4.8.0/24"))))
-    //                        .avoidPrefix(new
-    // PrefixSpace(PrefixRange.fromPrefix(Prefix.parse("100.200.0.0/16")))))
-    //                .build(tbdd,exports.get(ALPHANODE));
-    //        Invariant D = Invariant.builder().addClause(Invariant.clauseBuilder()
-    //                        .avoidPrefix(new
-    // PrefixSpace(PrefixRange.fromPrefix(Prefix.parse("2.4.8.0/24")))))
-    //                .build(tbdd,exports.get(ALPHANODE));
-    //        Invariant CD_interpolant = new
-    // Invariant(tbdd,TransferBDDUtils.interpolate(tbdd,C.wellFormedBDD(),D.wellFormedBDD()).get());
-    //        Invariant CD_expected = Invariant.builder().addClause(Invariant.clauseBuilder()
-    //                        .avoidPrefix(new
-    // PrefixSpace(PrefixRange.fromPrefix(Prefix.parse("2.4.8.0/24")))))
-    //                .build(tbdd,exports.get(ALPHANODE));
-
+    // [4] !prefix(2.4.8.0/24) /\ !prefix(100.200.0.0/16) => {interpolant: !prefix(2.4.8.0/24)} =>
+    // !prefix(2.4.8.0/24)
+    Invariant C =
+        Invariant.builder()
+            .addClause(
+                Invariant.clauseBuilder()
+                    .avoidPrefix(
+                        new PrefixSpace(PrefixRange.fromPrefix(Prefix.parse("2.4.8.0/24"))))
+                    .avoidPrefix(
+                        new PrefixSpace(PrefixRange.fromPrefix(Prefix.parse("100.200.0.0/16")))))
+            .build(tbdd, exports.get(ALPHANODE));
+    Invariant D =
+        Invariant.builder()
+            .addClause(
+                Invariant.clauseBuilder()
+                    .avoidPrefix(
+                        new PrefixSpace(PrefixRange.fromPrefix(Prefix.parse("2.4.8.0/24")))))
+            .build(tbdd, exports.get(ALPHANODE));
+    Invariant CD_interpolant =
+        new Invariant(tbdd, TransferBDDUtils.interpolate(tbdd, C.getBDD(), D.getBDD()).get());
+    Invariant CD_expected =
+        Invariant.builder()
+            .addClause(
+                Invariant.clauseBuilder()
+                    .avoidPrefix(
+                        new PrefixSpace(PrefixRange.fromPrefix(Prefix.parse("2.4.8.0/24")))))
+            .build(tbdd, exports.get(ALPHANODE));
+    assertEquals(CD_expected.getBDD(), CD_interpolant.getBDD());
   }
 }

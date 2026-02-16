@@ -20,7 +20,7 @@ BATFISH_MAVEN_ARTIFACTS = [
     "com.google.auto.value:auto-value-annotations:1.11.1",
     "com.google.code.findbugs:jsr305:3.0.2",
     "com.google.code.gson:gson:2.13.2",
-    "com.google.errorprone:error_prone_annotations:2.46.0",
+    "com.google.errorprone:error_prone_annotations:2.47.0",
     "com.google.guava:guava",
     "com.google.guava:guava-testlib",
     "com.google.re2j:re2j:1.8",
@@ -96,18 +96,18 @@ module(
 # Core Bazel dependencies
 bazel_dep(name = "bazel_skylib", version = "1.9.0")
 bazel_dep(name = "rules_license", version = "1.0.0")
-bazel_dep(name = "bazel_features", version = "1.39.0")
+bazel_dep(name = "bazel_features", version = "1.41.0")
 bazel_dep(name = "platforms", version = "1.0.0")
 
 # Java rules and dependencies
-bazel_dep(name = "rules_java", version = "9.3.0")
-bazel_dep(name = "rules_jvm_external", version = "6.9")
+bazel_dep(name = "rules_java", version = "9.5.0")
+bazel_dep(name = "rules_jvm_external", version = "6.10")
 
 # Python rules
-bazel_dep(name = "rules_python", version = "1.8.2")
+bazel_dep(name = "rules_python", version = "1.8.4")
 
 # Development tools
-bazel_dep(name = "buildifier_prebuilt", version = "8.2.1.1", dev_dependency = True)
+bazel_dep(name = "buildifier_prebuilt", version = "8.2.1.2", dev_dependency = True)
 
 bazel_dep(name = "rules_shell", version = "0.6.1")
 

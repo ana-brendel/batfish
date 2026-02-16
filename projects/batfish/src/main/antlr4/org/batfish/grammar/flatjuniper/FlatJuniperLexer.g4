@@ -776,21 +776,15 @@ FAST_INTERVAL: 'fast-interval';
 FASTETHER_OPTIONS: 'fastether-options';
 
 FILE: 'file';
-
-FILTER: 'filter' -> pushMode(M_Filter);
-
-FILTER_DUPLICATES: 'filter-duplicates';
-
-FILTER_INTERFACES: 'filter-interfaces';
 FILL_LEVEL: 'fill-level';
+FILTER: 'filter' -> pushMode(M_Filter);
+FILTER_DUPLICATES: 'filter-duplicates';
+FILTER_INTERFACES: 'filter-interfaces';
+FILTER_SPECIFIC: 'filter-specific';
 FIN_NO_ACK: 'fin-no-ack';
-
 FINGER: 'finger';
-
 FINGERPRINT_HASH: 'fingerprint-hash';
-
 FIREWALL: 'firewall';
-
 FIRST_FRAGMENT: 'first-fragment';
 
 FLAP_PERIOD: 'period';
@@ -1778,6 +1772,7 @@ LOG_LSP_HISTORY: 'log-lsp-history';
 LOG_OUT_ON_DISCONNECT: 'log-out-on-disconnect';
 LOG_PREFIX: 'log-prefix';
 LOG_UPDOWN: 'log-updown';
+LOGICAL_INTERFACE_POLICER: 'logical-interface-policer';
 LOGICAL_SYSTEM: 'logical-system' -> pushMode(M_Name);
 LOGICAL_SYSTEMS: 'logical-systems' -> pushMode(M_Name);
 LOGIN: 'login';
@@ -2743,7 +2738,6 @@ SOFT_PREEMPTION: 'soft-preemption';
 SONET_OPTIONS: 'sonet-options';
 
 SOURCE: 'source';
-
 SOURCE_ADDRESS
 :
   'source-address'
@@ -2753,41 +2747,24 @@ SOURCE_ADDRESS
      }
    }
 ;
-
 SOURCE_ADDRESS_EXCLUDED: 'source-address-excluded';
-
 SOURCE_ADDRESS_FILTER: 'source-address-filter';
-
 SOURCE_ADDRESS_NAME: 'source-address-name' -> pushMode(M_Name);
-
+SOURCE_CLASS: 'source-class' -> pushMode(M_Name);
 SOURCE_HOST_ISOLATED: 'source-host-isolated';
-
 SOURCE_IDENTITY: 'source-identity' -> pushMode(M_SourceIdentity);
-
-SOURCE_INTERFACE
-:
-   'source-interface' -> pushMode(M_Interface)
-;
-
+SOURCE_INTERFACE: 'source-interface' -> pushMode(M_Interface);
 SOURCE_IP_BASED: 'source-ip-based';
-
 SOURCE_MAC_ADDRESS: 'source-mac-address' -> pushMode(M_MacAddressAndLength);
-
 SOURCE_NAT: 'source-nat';
-
 SOURCE_PORT: 'source-port' -> pushMode(M_Port);
 SOURCE_PORT_EXCEPT: 'source-port-except' -> pushMode(M_Port);
 SOURCE_PORT_RANGE_OPTIMIZE: 'source-port-range-optimize';
-
 SOURCE_PREFIX_LIST: 'source-prefix-list' -> pushMode(M_Name);
-
-SOURCE_ROUTE_FAILED: 'source-route-failed';
-
-SOURCE_ROUTE_OPTION: 'source-route-option';
-
-SOURCE_THRESHOLD: 'source-threshold';
-
 SOURCE_QUENCH: 'source-quench';
+SOURCE_ROUTE_FAILED: 'source-route-failed';
+SOURCE_ROUTE_OPTION: 'source-route-option';
+SOURCE_THRESHOLD: 'source-threshold';
 
 SPEED
 :

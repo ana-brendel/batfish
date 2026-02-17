@@ -145,38 +145,25 @@ public class Setup {
     return "Bgpv4Route{" + String.join(", ", features.build()) + "}";
   }
 
-  // Constants for metadata definitions
-  public static final String LOCATION_COL = "Network_Location";
-  public static final String ASSUMPTION_COL = "Initial_Assumption";
-  public static final String TARGET_COL = "Target_Property";
-  public static final String INFERRED_INVARIANTS_COL = "Inferred_Invariant";
-  public static final String VERIFICATION_VIOLATION_COL = "Verification_Violation";
+  // columns for displaying results
   public static final String LOCATION_RELEVANCE_COL = "Location_Relevance";
   public static final String PROVIDED_INVARIANT_COL = "Provided_Invariant";
+  public static final String LOCATIONS_COL = "Network_Locations";
+  public static final String INFERRED_INVARIANTS_COL = "Inferred_Invariant";
   public static final String COUNTEREXAMPLE_COL = "Counterexample";
+
+  // columns for just displaying the locations
   public static final String NODES_COL = "Nodes_in_Network";
   public static final String NEIGHBORS_COL = "Neighbors_to_Node";
 
-  /// TableMetadata for safety property which displays all invariants inferred across network
+  /// TableMetadata for safety property which displays target properties and assumptions and any
+  /// counterexamples
   public static TableMetadata metadata_safety() {
     List<ColumnMetadata> columnMetadata =
         ImmutableList.of(
-            new ColumnMetadata(LOCATION_COL, STRING, "InDev", true, false),
-            new ColumnMetadata(ASSUMPTION_COL, STRING, "InDev", true, false),
-            new ColumnMetadata(TARGET_COL, STRING, "InDev", true, false),
-            new ColumnMetadata(INFERRED_INVARIANTS_COL, STRING, "InDev", true, false),
-            new ColumnMetadata(VERIFICATION_VIOLATION_COL, STRING, "InDev", true, false));
-    return new TableMetadata(columnMetadata, "Invariant Inference and Verification Results");
-  }
-
-  /// TableMetadata for safety property which displays target properties and assumptions and any
-  // counterexamples
-  public static TableMetadata metadata_safety_limited() {
-    List<ColumnMetadata> columnMetadata =
-        ImmutableList.of(
-            new ColumnMetadata(LOCATION_COL, STRING, "InDev", true, false),
             new ColumnMetadata(LOCATION_RELEVANCE_COL, STRING, "InDev", true, false),
             new ColumnMetadata(PROVIDED_INVARIANT_COL, STRING, "InDev", true, false),
+            new ColumnMetadata(LOCATIONS_COL, STRING, "InDev", true, false),
             new ColumnMetadata(INFERRED_INVARIANTS_COL, STRING, "InDev", true, false),
             new ColumnMetadata(COUNTEREXAMPLE_COL, STRING, "InDev", true, false));
     return new TableMetadata(columnMetadata, "Invariant Inference and Verification Results");

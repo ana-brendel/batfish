@@ -31,7 +31,6 @@ import java.util.Set;
 import static org.batfish.minesweeper.question.verificationutilities.Setup.buildInvariant;
 import static org.batfish.minesweeper.question.verificationutilities.Setup.getConfigAtomicPredicates;
 import static org.batfish.minesweeper.question.verificationutilities.Setup.metadata_safety;
-import static org.batfish.minesweeper.question.verificationutilities.Setup.metadata_safety_limited;
 import static org.batfish.minesweeper.question.verificationutilities.Setup.nonDefaultRoute;
 
 // Currently the question takes in a single target location-invariant pair whereas the assumptions
@@ -95,106 +94,154 @@ public final class SafetyAnswerer extends Answerer {
       Map<Location, Invariant> targets,
       Refine.Result refinement,
       Optional<Infer.CounterExample> inferenceCounter) {
+
+    private void addGroupsToTAE(
+        TableAnswerElement tae,
+        boolean isAssumptions,
+        Map<String, Map<String, Map<String, Set<String>>>> groupings) {
+      groupings.keySet().stream()
+          .sorted()
+          .forEach(
+              assumption -> {
+                groupings
+                    .get(assumption)
+                    .forEach(
+                        (inferred, m2) -> {
+                          m2.forEach(
+                              (cex, locations) -> {
+                                tae.addRow(
+                                    Row.builder()
+                                        .put(
+                                            Setup.LOCATION_RELEVANCE_COL,
+                                            isAssumptions ? "Assumption" : "Intermediate")
+                                        .put(Setup.PROVIDED_INVARIANT_COL, assumption)
+                                        .put(Setup.LOCATIONS_COL, locations)
+                                        .put(Setup.INFERRED_INVARIANTS_COL, inferred)
+                                        .put(Setup.COUNTEREXAMPLE_COL, cex)
+                                        .build());
+                              });
+                        });
+              });
+    }
+
+    private void addTargetToTAE(
+        TableAnswerElement tae,
+        Location location,
+        Invariant provided,
+        Invariant inferred,
+        Map<BDD, String> cache) {
+      tae.addRow(
+          Row.builder()
+              .put(Setup.LOCATION_RELEVANCE_COL, "Target")
+              .put(Setup.PROVIDED_INVARIANT_COL, provided.toString(refinementOccurred, cache))
+              .put(Setup.LOCATIONS_COL, info.locationStr(location))
+              .put(Setup.INFERRED_INVARIANTS_COL, inferred.toString(refinementOccurred, cache))
+              .put(Setup.COUNTEREXAMPLE_COL, "")
+              .build());
+    }
+
     /// Gather the answer element needed for a question return
     public TableAnswerElement getAnswerElementAll() {
       Map<Location, Invariant> results = refinement.refined;
       Map<BDD, String> cache = new HashMap<>();
       TableAnswerElement tae = new TableAnswerElement(metadata_safety());
+      // assumption -> inferred invariant -> counterexample -> set of locations
+      Map<String, Map<String, Map<String, Set<String>>>> assumptionGroups = new HashMap<>();
+      Map<String, Map<String, Set<String>>> intermediateGroups = new HashMap<>();
+
+      // group the results and add the target first
       results
           .keySet()
           .forEach(
-              loc ->
-                  tae.addRow(
-                      Row.builder()
-                          .put(Setup.LOCATION_COL, info.locationStr(loc))
-                          .put(
-                              Setup.ASSUMPTION_COL,
-                              info.getAssumptions().containsKey(loc)
-                                  ? info.getAssumptions()
-                                      .get(loc)
-                                      .toString(refinementOccurred, cache)
-                                  : "-")
-                          .put(
-                              Setup.TARGET_COL,
-                              targets.containsKey(loc)
-                                  ? targets.get(loc).toString(refinementOccurred, cache)
-                                  : "-")
-                          .put(
-                              Setup.INFERRED_INVARIANTS_COL,
-                              results.get(loc).toString(refinementOccurred, cache))
-                          .put(
-                              Setup.VERIFICATION_VIOLATION_COL,
-                              checks.containsKey(loc) && checks.get(loc).isPresent()
-                                  ? nonDefaultRoute(checks.get(loc).get())
-                                  : (results.get(loc).isFalse() && !refinementOccurred
-                                      ? "Inferred False - probable bug"
-                                      : ""))
-                          .build()));
+              loc -> {
+                if (targets.containsKey(loc)) {
+                  addTargetToTAE(tae, loc, targets.get(loc), results.get(loc), cache);
+                } else {
+                  String assumption_str =
+                      info.getAssumptions().containsKey(loc)
+                          ? info.getAssumptions().get(loc).toString(refinementOccurred, cache)
+                          : "";
+                  String inferred_str = results.get(loc).toString(true, cache);
+                  String counterexample_str =
+                      checks.containsKey(loc) && checks.get(loc).isPresent()
+                          ? nonDefaultRoute(checks.get(loc).get())
+                          : (refinement.refined.get(loc).isFalse() && !refinementOccurred
+                              ? "any route is counterexample"
+                              : "");
+
+                  // add the specific result to the map
+                  if (assumption_str.isEmpty()) {
+                    intermediateGroups
+                        .computeIfAbsent(inferred_str, k -> new HashMap<>())
+                        .computeIfAbsent(counterexample_str, k -> new HashSet<>())
+                        .add(info.locationStr(loc));
+                  } else {
+                    assumptionGroups
+                        .computeIfAbsent(assumption_str, k -> new HashMap<>())
+                        .computeIfAbsent(inferred_str, k -> new HashMap<>())
+                        .computeIfAbsent(counterexample_str, k -> new HashSet<>())
+                        .add(info.locationStr(loc));
+                  }
+                }
+              });
+
+      // next add the groups of assumptions
+      addGroupsToTAE(tae, true, assumptionGroups);
+
+      // last add the intermediate nodes
+      addGroupsToTAE(tae, false, Map.of("", intermediateGroups));
+
       return tae;
     }
 
     /// Gather the answer element needed for a question return, only include information associated
-    // with
-    /// assumptions and targets, only include intermediate invariants if false inferred
+    /// with assumptions and targets, only include intermediate invariants if false inferred
     public TableAnswerElement getAnswerElementLimited() {
       Map<BDD, String> cache = new HashMap<>();
-      TableAnswerElement tae = new TableAnswerElement(metadata_safety_limited());
-      // include all targets, refinement included if it occurred
-      targets
-          .keySet()
-          .forEach(
-              loc ->
-                  tae.addRow(
-                      Row.builder()
-                          .put(Setup.LOCATION_COL, info.locationStr(loc))
-                          .put(Setup.LOCATION_RELEVANCE_COL, "Target")
-                          .put(
-                              Setup.PROVIDED_INVARIANT_COL,
-                              targets.get(loc).toString(refinementOccurred, cache))
-                          .put(
-                              Setup.INFERRED_INVARIANTS_COL,
-                              refinementOccurred
-                                  ? refinement.refined.get(loc).toString(true, cache)
-                                  : "same as provided")
-                          .put(Setup.COUNTEREXAMPLE_COL, "")
-                          .build()));
-      // if there is an inference counterexamples, return that
+      TableAnswerElement tae = new TableAnswerElement(metadata_safety());
+      // at the target to the top, refinement included if it occurred
+      assert targets.size() == 1 : "Currently we only support one target property.";
+      Map.Entry<Location, Invariant> target = targets.entrySet().stream().findFirst().get();
+      addTargetToTAE(
+          tae, target.getKey(), target.getValue(), refinement.refined.get(target.getKey()), cache);
+
+      // if there is an inference counterexamples, return those
       if (inferenceCounter.isPresent()) {
         Infer.CounterExample cex = inferenceCounter.get();
         tae.addRow(
             Row.builder()
-                .put(Setup.LOCATION_COL, info.locationStr(cex.location()))
                 .put(Setup.LOCATION_RELEVANCE_COL, "Intermediate")
-                .put(Setup.PROVIDED_INVARIANT_COL, "n/a")
-                .put(Setup.INFERRED_INVARIANTS_COL, cex.post().toString(true, cache))
-                .put(Setup.COUNTEREXAMPLE_COL, "Any route")
+                .put(Setup.PROVIDED_INVARIANT_COL, "")
+                .put(Setup.LOCATIONS_COL, info.locationStr(cex.location()))
+                .put(Setup.INFERRED_INVARIANTS_COL, cex.post().toString(false, cache))
+                .put(Setup.COUNTEREXAMPLE_COL, "any route is counterexample")
                 .build());
       } else {
-        info.getAssumptions().entrySet().stream()
-            .filter(entry -> refinement.refined.containsKey(entry.getKey()))
+        // otherwise, report whether the assumptions were satisfied
+        // assumption -> inferred invariant -> counterexample -> set of locations
+        Map<String, Map<String, Map<String, Set<String>>>> groupings = new HashMap<>();
+        info.getAssumptions()
             .forEach(
-                entry ->
-                    tae.addRow(
-                        Row.builder()
-                            .put(Setup.LOCATION_COL, info.locationStr(entry.getKey()))
-                            .put(Setup.LOCATION_RELEVANCE_COL, "Assumption")
-                            .put(
-                                Setup.PROVIDED_INVARIANT_COL,
-                                entry.getValue().toString(refinementOccurred, cache))
-                            .put(
-                                Setup.INFERRED_INVARIANTS_COL,
-                                entry.getValue().equals(refinement.refined.get(entry.getKey()))
-                                    ? "same as provided"
-                                    : refinement.refined.get(entry.getKey()).toString(true, cache))
-                            .put(
-                                Setup.COUNTEREXAMPLE_COL,
-                                checks.containsKey(entry.getKey())
-                                        && checks.get(entry.getKey()).isPresent()
-                                    ? nonDefaultRoute(checks.get(entry.getKey()).get())
-                                    : (refinement.refined.get(entry.getKey()).isFalse()
-                                        ? "Any route"
-                                        : ""))
-                            .build()));
+                (loc, assumption) -> {
+                  String assumption_str = assumption.toString(refinementOccurred, cache);
+                  assert refinement.refined.containsKey(loc);
+                  String inferred_str = refinement.refined.get(loc).toString(true, cache);
+                  String counterexample_str =
+                      checks.containsKey(loc) && checks.get(loc).isPresent()
+                          ? nonDefaultRoute(checks.get(loc).get())
+                          : (refinement.refined.get(loc).isFalse()
+                              ? "any route is counterexample"
+                              : "");
+
+                  // add the specific result to the map
+                  groupings
+                      .computeIfAbsent(assumption_str, k -> new HashMap<>())
+                      .computeIfAbsent(inferred_str, k -> new HashMap<>())
+                      .computeIfAbsent(counterexample_str, k -> new HashSet<>())
+                      .add(info.locationStr(loc));
+                });
+        // add groupings to the table answer element
+        addGroupsToTAE(tae, true, groupings);
       }
       return tae;
     }

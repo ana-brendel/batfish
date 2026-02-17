@@ -444,7 +444,7 @@ public class Invariant {
 
   /// Returns the BDD stored in this invariant (with well-formed constraint applied)
   public BDD getBDD() {
-    return bdd;
+    return bdd.id();
   }
 
   /// Returns true if the invariant is false

@@ -263,7 +263,7 @@ public class Refine {
     enteringNetwork.forEach(
         e -> {
           if (assumptions.containsKey(e)) {
-            inferred.put(e, assumptions.get(e));
+            inferred.put(e, assumptions.get(e).copy());
           }
         });
 

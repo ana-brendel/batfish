@@ -21,13 +21,17 @@ class LocationPropertyPair:
         return "".join(map(lambda c: c.format(),self.property))
 
 class VerificationQuery:
-    def __init__(self, target:LocationPropertyPair,assumptions:list[LocationPropertyPair],refine:bool=False):
+    def __init__(self, target:LocationPropertyPair,assumptions:list[LocationPropertyPair],default:list[Clause]=[],refine:bool=False):
         self.target = target
         self.assumptions = assumptions
+        self.default = default
         self.refine = refine
 
     def refines(self):
         return self.refine
+    
+    def defaultAssumption(self):
+        return "".join(map(lambda c: c.format(),self.default)) 
 
     def format(self) -> dict:
         result = { "target" : self.target.formatProperty(), "location" : self.target.location }

@@ -38,7 +38,6 @@ public abstract class Location implements Comparable<Location> {
         _head = node;
         _tail = null;
       } else {
-        assert src != null && dst != null;
         _head = src;
         _tail = dst;
       }
@@ -55,14 +54,16 @@ public abstract class Location implements Comparable<Location> {
       } else {
         throw new BatfishException(
             "String parsing into location (NetworkLocation) failed. "
-                + "An edge should be 'src -> dst' and a node should just be 'nodeName'.");
+                + "An edge should be 'src -> dst' and a node should just be 'nodeName' or 'ipAddress'. "
+                + "Ip addresses or node names can be used for edge specification when appropriate.");
       }
     }
 
     /// Gets the Location based on the Verifier (which is based on Network Snapshot)
     /// -- maybe change to only succeed if provided with IPs
     public Location instantiate(NetworkInfo info) {
-      if (_head != null && _tail != null) {
+      assert _head != null : "Expect non-null 'head' field for Location.Builder.";
+      if (_tail != null) {
         Collection<Ip> heads =
             info.ipsFromNodeName(_head)
                 .orElse(Ip.tryParse(_head).<Collection<Ip>>map(Set::of).orElse(null));
@@ -77,16 +78,14 @@ public abstract class Location implements Comparable<Location> {
                   + _tail
                   + ") within network.");
         } else {
-          // look for edge in location set to guarantee ips used are correct (specifically, when
-          // just provided with node's name)
+          // look for edge in location set to get correct IP connection (regardless of node names)
           Optional<Edge> edge =
               heads.stream()
                   .flatMap(head -> tails.stream().map(tail -> new Edge(head, tail)))
-                  .filter(info::containsPolicy)
+                  .filter(info::containsEdge)
                   .findFirst();
           if (edge.isEmpty()) {
-            // if there is no policies found for provided edge, we can do best guess (might throw
-            // error)
+            // no explicit location found in network, so we make a best effort
             Ip head =
                 Ip.tryParse(_head)
                     .orElse(
@@ -99,14 +98,20 @@ public abstract class Location implements Comparable<Location> {
                         info.ipsFromNodeName(_tail).orElse(Set.of()).stream()
                             .findFirst()
                             .orElse(null));
-            assert head != null && tail != null;
+            if (head == null || tail == null) {
+              throw new BatfishException(
+                  "Location.instantiate() - Unable to parse edge corresponding to input ("
+                      + _head
+                      + " -> "
+                      + _tail
+                      + ") within network.");
+            }
             return new Edge(head, tail);
           } else {
             return edge.get();
           }
         }
       } else {
-        assert _head != null;
         Collection<Ip> ips =
             info.ipsFromNodeName(_head)
                 .orElse(Ip.tryParse(_head).<Collection<Ip>>map(Set::of).orElse(null));
@@ -138,7 +143,9 @@ public abstract class Location implements Comparable<Location> {
       String[] splits = value.trim().split(",");
       ImmutableList.Builder<Builder> builders = ImmutableList.builder();
       for (String location : splits) {
-        builders.add(Builder.forValue(location.trim()));
+        if (!location.trim().isEmpty()) {
+          builders.add(Builder.forValue(location.trim()));
+        }
       }
       return new Builders(builders.build());
     }

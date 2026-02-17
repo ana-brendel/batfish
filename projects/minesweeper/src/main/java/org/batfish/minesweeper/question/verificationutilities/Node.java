@@ -13,8 +13,8 @@ import java.util.Optional;
 import java.util.stream.Collectors;
 
 public class Node extends Location {
-  private final List<Ip> ips;
-  private final String name;
+  private final @Nonnull List<Ip> ips;
+  private final @Nonnull String name;
 
   public Node(@Nonnull Ip ip, @Nonnull String name) {
     this.ips = List.of(ip);
@@ -31,33 +31,40 @@ public class Node extends Location {
     this.name = name;
   }
 
-  public Ip getSingleIp() {
-    if (ips.size() != 1) {
-      throw new BatfishException(
-          "Node.getIp() - Trying to get distinct Ip address from node with multiple.");
-    }
-    return Ip.create(ips.get(0).asLong());
-  }
-
+  @Nonnull
   public Optional<Ip> getRepresentativeIp() {
     return ips.isEmpty() ? Optional.empty() : Optional.of(Ip.create(ips.get(0).asLong()));
   }
 
+  @Nonnull
+  public Ip getSingleIp() {
+    // used mainly for testing and edge creation - in edge creation, we want to know which explicit
+    // ip addresses are connected
+    if (this.ips.size() == 1) {
+      return Ip.create(ips.get(0).asLong());
+    } else {
+      throw new BatfishException(
+          "Node.getIp() - Trying to get distinct Ip address from node with multiple.");
+    }
+  }
+
+  @Nonnull
   public Collection<Ip> getIps() {
     return new ArrayList<>(ips);
   }
 
+  @Nonnull
   public String getName() {
     return name;
   }
 
   /// Returns true if the provided edge is outgoing from this node
-  public boolean outgoing(Edge edge) {
+  public boolean outgoing(@Nonnull Edge edge) {
     return ips.stream().anyMatch(ip -> ip.equals(edge.getSrc()));
   }
 
   /// Returns true if the provided edge is incoming to this node
-  public boolean incoming(Edge edge) {
+  public boolean incoming(@Nonnull Edge edge) {
     return ips.stream().anyMatch(ip -> ip.equals(edge.getDst()));
   }
 

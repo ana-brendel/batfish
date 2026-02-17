@@ -3,7 +3,6 @@ package org.batfish.minesweeper.question.verificationutilities;
 import static org.apache.commons.lang3.ObjectUtils.firstNonNull;
 import static org.batfish.minesweeper.bdd.TransferBDD.isRelevantForDestination;
 import static org.batfish.minesweeper.bdd.TransferBDDUtils.makeRoutePairing;
-import static org.batfish.minesweeper.question.searchroutepolicies.SearchRoutePoliciesAnswerer.routeConstraintsToBDD;
 
 import com.fasterxml.jackson.annotation.JsonCreator;
 import com.fasterxml.jackson.annotation.JsonProperty;
@@ -29,7 +28,6 @@ import org.batfish.common.BatfishException;
 import org.batfish.datamodel.LineAction;
 import org.batfish.datamodel.PrefixRange;
 import org.batfish.datamodel.PrefixSpace;
-import org.batfish.datamodel.routing_policy.Environment;
 import org.batfish.datamodel.routing_policy.RoutingPolicy;
 import org.batfish.datamodel.routing_policy.communities.CommunityMatchExpr;
 import org.batfish.minesweeper.bdd.BDDRoute;
@@ -38,7 +36,6 @@ import org.batfish.minesweeper.bdd.CommunitySetMatchExprToBDD;
 import org.batfish.minesweeper.bdd.TransferBDD;
 import org.batfish.minesweeper.bdd.TransferBDDUtils;
 import org.batfish.minesweeper.bdd.TransferReturn;
-import org.batfish.minesweeper.question.searchroutepolicies.BgpRouteConstraints;
 import org.batfish.minesweeper.question.searchroutepolicies.RegexConstraint;
 import org.batfish.minesweeper.question.searchroutepolicies.RegexConstraints;
 
@@ -112,41 +109,10 @@ public class Invariant {
     }
   }
 
-  /**
-   * Creates an invariant type from a BgpRouteConstraint (constants used for routeConstraintsToBDD
-   * expect that this invariant will be used to start the weakest precondition based inference)
-   *
-   * @param tbdd the TransferBDD to be used
-   * @param constraint constraint to be reflected by invariant
-   * @param direction IN for invariant on node, OUT for invariant on edge (inherited from
-   *     routeConstraintsToBDD)
-   * @param context context used (inherited from routeConstraintsToBDD)
-   * @return invariant representative of constraint
-   */
-  // TODO check if this makes sense
-  public static Invariant ofBgpRouteConstraints(
-      TransferBDD tbdd,
-      BgpRouteConstraints constraint,
-      Environment.Direction direction,
-      TransferBDD.Context context) {
-    BDDRoute base = new BDDRoute(tbdd.getFactory(), tbdd.getConfigAtomicPredicates());
-    // outputRoute fixed to true because if an invariant is created this way, we will be using it as
-    // a post constraint
-    return new Invariant(
-        tbdd, routeConstraintsToBDD(constraint, base.deepCopy(), true, tbdd, context, direction));
-  }
-
   public static final class Builder {
-    private final String str;
     private final List<ClauseBuilder> clauses = new ArrayList<>();
 
-    private Builder() {
-      this.str = null;
-    }
-
-    private Builder(String str) {
-      this.str = str;
-    }
+    private Builder() {}
 
     public Builder addClause(ClauseBuilder clause) {
       clauses.add(clause);
@@ -157,28 +123,26 @@ public class Invariant {
       return clauses;
     }
 
-    public Invariant build(TransferBDD tbdd) {
-      return this.build(tbdd, null);
-    }
-
-    public Invariant build(TransferBDD tbdd, RoutingPolicy policy) {
+    public Invariant build(@Nonnull TransferBDD tbdd, @Nullable RoutingPolicy policy) {
       if (clauses.isEmpty()) {
         return new Invariant(tbdd);
       } else {
+        String string =
+            String.join(
+                " OR ",
+                clauses.stream()
+                    .map(ClauseBuilder::createDesiredStringRepresentation)
+                    .collect(Collectors.toSet()));
         Collection<BDD> BDDs =
             clauses.stream().map(clause -> clause.build(tbdd, policy)).collect(Collectors.toSet());
-        if (this.str == null) {
-          return new Invariant(tbdd, tbdd.getFactory().orAll(BDDs));
-        } else {
-          return new Invariant(tbdd, tbdd.getFactory().orAll(BDDs), this.str);
-        }
+        return new Invariant(tbdd, tbdd.getFactory().orAll(BDDs), string);
       }
     }
 
     @JsonCreator
     @VisibleForTesting
     static Builder forValue(@Nonnull String value) {
-      Builder builder = new Builder(value);
+      Builder builder = new Builder();
       if (value.equals("[]")) {
         return builder;
       }
@@ -233,7 +197,7 @@ public class Invariant {
 
     private ClauseBuilder() {}
 
-    public ClauseBuilder matchPrefix(PrefixSpace prefix) {
+    public ClauseBuilder matchPrefix(@Nonnull PrefixSpace prefix) {
       if (!prefix.isEmpty()) {
         if (_positivePrefix == null) {
           _positivePrefix = prefix;
@@ -244,7 +208,7 @@ public class Invariant {
       return this;
     }
 
-    public ClauseBuilder avoidPrefix(PrefixSpace prefix) {
+    public ClauseBuilder avoidPrefix(@Nonnull PrefixSpace prefix) {
       if (!prefix.isEmpty()) {
         if (_negativePrefix == null) {
           _negativePrefix = prefix;
@@ -255,13 +219,16 @@ public class Invariant {
       return this;
     }
 
-    public ClauseBuilder setCommunities(RegexConstraints communities) {
+    public ClauseBuilder setCommunities(@Nonnull RegexConstraints communities) {
       _communities = communities;
       return this;
     }
 
     private static BDD communityBDD(
-        RegexConstraint regex, TransferBDD tbdd, BDDRoute route, TransferBDD.Context context) {
+        @Nonnull RegexConstraint regex,
+        @Nonnull TransferBDD tbdd,
+        @Nonnull BDDRoute route,
+        @Nonnull Optional<TransferBDD.Context> context) {
       return switch (regex.getRegexType()) {
         case REGEX -> {
           Map<String, Set<Integer>> stringKeys = new HashMap<>();
@@ -271,8 +238,9 @@ public class Invariant {
               .forEach((key, value) -> stringKeys.put(key.getRegex(), value));
           Set<Integer> cvi = stringKeys.get(regex.getRegex());
           if (cvi == null) {
-            // The comparison on the CV directly doesn't seem to work, so I matched with the regex
-            throw new BatfishException("Null variable list for regex " + regex.getRegex());
+            throw new BatfishException(
+                "Null variable list for community regex (regex not considered) "
+                    + regex.getRegex());
           }
           Collection<BDD> bdds =
               cvi.stream()
@@ -281,24 +249,25 @@ public class Invariant {
           yield tbdd.getFactory().orAll(bdds);
         }
         case STRUCTURE_NAME -> {
-          if (context == null) {
-            throw new BatfishException("-- require context (from policy) to get community BDD");
+          if (context.isPresent()) {
+            CommunityMatchExpr matcher =
+                context.get().config().getCommunityMatchExprs().get(regex.getRegex());
+            yield matcher.accept(
+                new CommunityMatchExprToBDD(),
+                new CommunitySetMatchExprToBDD.Arg(tbdd, route, context.get()));
+          } else {
+            throw new BatfishException(
+                "No context provided for this community BDD and it is needed: " + regex.getRegex());
           }
-          CommunityMatchExpr matcher =
-              context.config().getCommunityMatchExprs().get(regex.getRegex());
-          yield matcher.accept(
-              new CommunityMatchExprToBDD(),
-              new CommunitySetMatchExprToBDD.Arg(tbdd, route, context));
         }
       };
     }
 
     private static BDD communitiesToBDD(
-        RegexConstraints communities,
-        TransferBDD tbdd,
-        BDDRoute route,
-        TransferBDD.Context context) {
-      // assumes that all constraints should be true at the same time
+        @Nonnull RegexConstraints communities,
+        @Nonnull TransferBDD tbdd,
+        @Nonnull BDDRoute route,
+        @Nonnull Optional<TransferBDD.Context> context) {
       BDDFactory factory = tbdd.getFactory();
       BDD positiveBDD =
           communities.getPositiveRegexConstraints().isEmpty()
@@ -319,7 +288,8 @@ public class Invariant {
       }
     }
 
-    private static BDD prefixSpaceToBDD(PrefixSpace space, BDDRoute r, boolean positive) {
+    private static BDD prefixSpaceToBDD(
+        @Nonnull PrefixSpace space, @Nonnull BDDRoute r, boolean positive) {
       BDDFactory factory = r.getPrefix().getFactory();
       if (space.isEmpty()) {
         return factory.one();
@@ -336,9 +306,11 @@ public class Invariant {
       }
     }
 
-    public BDD build(TransferBDD tbdd, RoutingPolicy policy) {
+    @Nonnull
+    public BDD build(@Nonnull TransferBDD tbdd, @Nullable RoutingPolicy policy) {
       BDDRoute base = new BDDRoute(tbdd.getFactory(), tbdd.getConfigAtomicPredicates());
-      TransferBDD.Context context = policy == null ? null : TransferBDD.Context.forPolicy(policy);
+      Optional<TransferBDD.Context> context =
+          policy == null ? Optional.empty() : Optional.of(TransferBDD.Context.forPolicy(policy));
       BDD clauseBDD = tbdd.getFactory().one();
       if (_positivePrefix != null && !_positivePrefix.isEmpty()) {
         clauseBDD.andWith(prefixSpaceToBDD(_positivePrefix, base, true));
@@ -350,6 +322,37 @@ public class Invariant {
         clauseBDD.andWith(communitiesToBDD(_communities, tbdd, base, context));
       }
       return clauseBDD;
+    }
+
+    public String createDesiredStringRepresentation() {
+      StringBuilder builder = new StringBuilder();
+      if (_communities != null && !_communities.isEmpty()) {
+        _communities
+            .getNegativeRegexConstraints()
+            .forEach(
+                rgx ->
+                    builder
+                        .append(",!comm(")
+                        .append(BDDString.trimRegex(rgx.getRegex()))
+                        .append(")"));
+      }
+      if (_negativePrefix != null && !_negativePrefix.isEmpty()) {
+        builder.append(",!prefix(").append(_negativePrefix).append(")");
+      }
+      if (_communities != null && !_communities.isEmpty()) {
+        _communities
+            .getPositiveRegexConstraints()
+            .forEach(
+                rgx ->
+                    builder
+                        .append(",comm(")
+                        .append(BDDString.trimRegex(rgx.getRegex()))
+                        .append(")"));
+      }
+      if (_positivePrefix != null && !_positivePrefix.isEmpty()) {
+        builder.append(",prefix(").append(_positivePrefix).append(")");
+      }
+      return builder.isEmpty() ? "True" : builder.substring(1);
     }
 
     /// Added to help parse a string corresponding to a single clause
@@ -421,8 +424,9 @@ public class Invariant {
           positivePrefix, negativePrefix, new RegexConstraints(communities.build()));
     }
 
+    @Nonnull
     public RegexConstraints getCommunities() {
-      return _communities;
+      return firstNonNull(_communities, new RegexConstraints());
     }
   }
 
@@ -442,8 +446,12 @@ public class Invariant {
         .setCommunities(firstNonNull(comms, new RegexConstraints()));
   }
 
-  /// Returns the BDD stored in this invariant (with well-formed constraint applied)
+  /// Returns a copy of the BDD
   public BDD getBDD() {
+    return bdd.id();
+  }
+
+  public BDD peakAtBDD() {
     return bdd;
   }
 

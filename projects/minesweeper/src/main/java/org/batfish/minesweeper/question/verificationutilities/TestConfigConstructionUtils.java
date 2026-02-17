@@ -36,6 +36,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
+/// Class created to help construct unit tests using Batfishes AST classes
 public class TestConfigConstructionUtils {
   public record Network(
       TransferBDD tbdd,
@@ -90,7 +91,6 @@ public class TestConfigConstructionUtils {
 
   ///  Intended to return statements which clear all communities on a route
   public static List<Statement> clearCommunities() {
-    // throw new BatfishException("INCORRECTLY IMPLEMENTED");
     return ImmutableList.of(
         new SetCommunities(
             new CommunitySetDifference(

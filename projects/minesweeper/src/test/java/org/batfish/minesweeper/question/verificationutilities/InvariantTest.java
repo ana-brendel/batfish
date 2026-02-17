@@ -686,7 +686,7 @@ public class InvariantTest {
                 .matchPrefix(PREFIX)
                 .build(tbdd, exports.get(ALPHANODE)));
     Invariant interp =
-        new Invariant(tbdd, TransferBDDUtils.interpolate(tbdd, P.getBDD(), Q.getBDD()).get());
+        new Invariant(tbdd, TransferBDDUtils.interpolate(tbdd, P.getBDD(), Q.getBDD(), 64).get());
     assertEquals(interp.getBDD(), Q.getBDD());
 
     // [2] prefix(PREFIX) /\ (comm(100:1) \/ comm(100:2)) => {interpolant: comm(100:1) \/
@@ -720,7 +720,7 @@ public class InvariantTest {
             .build(tbdd, exports.get(BETANODE));
     assertTrue(PorQ_and_R.implies(SorPorQ));
     BDD interpolant =
-        TransferBDDUtils.interpolate(tbdd, PorQ_and_R.getBDD(), SorPorQ.getBDD()).get();
+        TransferBDDUtils.interpolate(tbdd, PorQ_and_R.getBDD(), SorPorQ.getBDD(), 64).get();
     Invariant i = new Invariant(tbdd, interpolant);
     assertEquals(expected2.getBDD(), i.getBDD());
 
@@ -745,7 +745,7 @@ public class InvariantTest {
                         new PrefixSpace(PrefixRange.fromPrefix(Prefix.parse("100.200.0.0/16")))))
             .build(tbdd, exports.get(ALPHANODE));
     Invariant AB_interpolant =
-        new Invariant(tbdd, TransferBDDUtils.interpolate(tbdd, A.getBDD(), B.getBDD()).get());
+        new Invariant(tbdd, TransferBDDUtils.interpolate(tbdd, A.getBDD(), B.getBDD(), 64).get());
     Invariant AB_expected =
         Invariant.builder()
             .addClause(
@@ -774,7 +774,7 @@ public class InvariantTest {
                         new PrefixSpace(PrefixRange.fromPrefix(Prefix.parse("2.4.8.0/24")))))
             .build(tbdd, exports.get(ALPHANODE));
     Invariant CD_interpolant =
-        new Invariant(tbdd, TransferBDDUtils.interpolate(tbdd, C.getBDD(), D.getBDD()).get());
+        new Invariant(tbdd, TransferBDDUtils.interpolate(tbdd, C.getBDD(), D.getBDD(), 64).get());
     Invariant CD_expected =
         Invariant.builder()
             .addClause(

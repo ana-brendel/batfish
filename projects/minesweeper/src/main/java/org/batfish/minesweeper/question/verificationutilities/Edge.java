@@ -8,8 +8,8 @@ import java.util.Map;
 import java.util.Objects;
 
 public class Edge extends Location {
-  private final Ip src;
-  private final Ip dst;
+  private final @Nonnull Ip src;
+  private final @Nonnull Ip dst;
 
   public Edge(@Nonnull Ip src, @Nonnull Ip dst) {
     assert !src.equals(dst);
@@ -18,34 +18,35 @@ public class Edge extends Location {
   }
 
   public Edge(@Nonnull String src, @Nonnull String dst) {
-    assert !src.equals(dst);
-    this.src = Ip.parse(src);
-    this.dst = Ip.parse(dst);
+    this(Ip.parse(src), Ip.parse(dst));
   }
 
+  /// Will throw error if the nodes provided have more than Ip address, need to provide the explicit
+  /// connection represented by this edge
   public Edge(@Nonnull Node src, @Nonnull Node dst) {
-    assert !src.equals(dst);
-    this.src = Ip.create(src.getSingleIp().asLong());
-    this.dst = Ip.create(dst.getSingleIp().asLong());
+    this(Ip.create(src.getSingleIp().asLong()), Ip.create(dst.getSingleIp().asLong()));
   }
 
+  @Nonnull
   public Ip getSrc() {
     return src;
   }
 
+  @Nonnull
   public Ip getDst() {
     return dst;
   }
 
+  @Nonnull
   public Edge flipEdge() {
     return new Edge(dst, src);
   }
 
-  public boolean isSrc(Node node) {
+  public boolean isSrc(@Nonnull Node node) {
     return node.getIps().stream().anyMatch(ip -> ip.equals(src));
   }
 
-  public boolean isDst(Node node) {
+  public boolean isDst(@Nonnull Node node) {
     return node.getIps().stream().anyMatch(ip -> ip.equals(dst));
   }
 
@@ -98,7 +99,7 @@ public class Edge extends Location {
       }
     } else {
       throw new BatfishException(
-          "Edge.compareTo() - Only two implementations of Location, should never reach here.");
+          "Edge.compareTo() - Only two handled implementations of Location, should never reach here.");
     }
   }
 }

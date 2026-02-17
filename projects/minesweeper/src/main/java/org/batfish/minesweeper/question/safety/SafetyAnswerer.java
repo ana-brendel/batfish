@@ -4,7 +4,6 @@ import net.sf.javabdd.BDD;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.batfish.common.Answerer;
-import org.batfish.common.BatfishException;
 import org.batfish.common.NetworkSnapshot;
 import org.batfish.common.plugin.IBatfish;
 import org.batfish.datamodel.Bgpv4Route;
@@ -29,11 +28,9 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 
-import static com.google.common.base.Preconditions.checkArgument;
 import static org.batfish.minesweeper.question.verificationutilities.Setup.buildInvariant;
 import static org.batfish.minesweeper.question.verificationutilities.Setup.getConfigAtomicPredicates;
 import static org.batfish.minesweeper.question.verificationutilities.Setup.metadata_safety;
-import static org.batfish.minesweeper.question.verificationutilities.Setup.metadata_safety_limited;
 import static org.batfish.minesweeper.question.verificationutilities.Setup.nonDefaultRoute;
 
 // Currently the question takes in a single target location-invariant pair whereas the assumptions
@@ -43,6 +40,7 @@ public final class SafetyAnswerer extends Answerer {
 
   private final @Nonnull Map<Location.Builder, Invariant.Builder> _targets;
   private final @Nonnull Map<Location.Builder, Invariant.Builder> _assumptions;
+  private final @Nonnull Optional<Invariant.Builder> _default_assumption;
   private final @Nonnull Set<RegexConstraint> _communityRegexes;
   private final @Nonnull Set<RegexConstraint> _asPathRegexes;
   private final boolean _showAll;
@@ -53,6 +51,7 @@ public final class SafetyAnswerer extends Answerer {
     _showAll = question.get_show_all();
     _targets = question.get_targets();
     _refine = question.get_refine();
+    _default_assumption = question.get_default_assumption();
 
     // this is added because the assumptions are taken as two lists with corresponding inputs
     List<Invariant.Builder> invAssumptions =
@@ -63,21 +62,23 @@ public final class SafetyAnswerer extends Answerer {
         question.get_assumption_locations().isPresent()
             ? question.get_assumption_locations().get().get_builders()
             : List.of();
-    checkArgument(
-        invAssumptions.size() == locAssumptions.size(),
-        "Must have the same number of assumptions and assumption locations");
+
+    assert invAssumptions.size() == locAssumptions.size()
+        : "Arguments checked in question, if this fails there is bug in code.";
+
     _assumptions = new HashMap<>();
     for (int i = 0; i < invAssumptions.size(); i++) {
       _assumptions.put(locAssumptions.get(i), invAssumptions.get(i));
     }
 
     _communityRegexes = new HashSet<>();
+    _asPathRegexes = new HashSet<>(); // not included in the NetworkClause nor Invariant class yet
+
     invAssumptions.forEach(
         clauses ->
             clauses
                 .getClauses()
                 .forEach(c -> _communityRegexes.addAll(c.getCommunities().getRegexConstraints())));
-    _asPathRegexes = new HashSet<>(); // not included in the NetworkClause nor Invariant class yet
     _targets
         .values()
         .forEach(
@@ -95,106 +96,162 @@ public final class SafetyAnswerer extends Answerer {
       Map<Location, Invariant> targets,
       Refine.Result refinement,
       Optional<Infer.CounterExample> inferenceCounter) {
+
+    private void addGroupsToTAE(
+        TableAnswerElement tae,
+        boolean isAssumptions,
+        Map<String, Map<String, Map<String, Set<String>>>> groupings) {
+      groupings.keySet().stream()
+          .sorted()
+          .forEach(
+              assumption -> {
+                groupings
+                    .get(assumption)
+                    .forEach(
+                        (inferred, m2) -> {
+                          m2.forEach(
+                              (cex, locations) -> {
+                                tae.addRow(
+                                    Row.builder()
+                                        .put(
+                                            Setup.LOCATION_RELEVANCE_COL,
+                                            isAssumptions ? "Assumption" : "Intermediate")
+                                        .put(Setup.PROVIDED_INVARIANT_COL, assumption)
+                                        .put(Setup.LOCATIONS_COL, locations)
+                                        .put(Setup.INFERRED_INVARIANTS_COL, inferred)
+                                        .put(Setup.COUNTEREXAMPLE_COL, cex)
+                                        .build());
+                              });
+                        });
+              });
+    }
+
+    private void addTargetToTAE(
+        TableAnswerElement tae,
+        Location location,
+        Invariant provided,
+        Invariant inferred,
+        Map<BDD, String> cache) {
+      tae.addRow(
+          Row.builder()
+              .put(Setup.LOCATION_RELEVANCE_COL, "Target")
+              .put(Setup.PROVIDED_INVARIANT_COL, provided.toString(refinementOccurred, cache))
+              .put(Setup.LOCATIONS_COL, info.locationStr(location))
+              .put(Setup.INFERRED_INVARIANTS_COL, inferred.toString(refinementOccurred, cache))
+              .put(Setup.COUNTEREXAMPLE_COL, "")
+              .build());
+    }
+
     /// Gather the answer element needed for a question return
     public TableAnswerElement getAnswerElementAll() {
       Map<Location, Invariant> results = refinement.refined;
       Map<BDD, String> cache = new HashMap<>();
       TableAnswerElement tae = new TableAnswerElement(metadata_safety());
+      // assumption -> inferred invariant -> counterexample -> set of locations
+      Map<String, Map<String, Map<String, Set<String>>>> assumptionGroups = new HashMap<>();
+      Map<String, Map<String, Set<String>>> intermediateGroups = new HashMap<>();
+      Map<BDD, String> stringLimits = new HashMap<>();
+
+      // group the results and add the target first
       results
           .keySet()
           .forEach(
-              loc ->
-                  tae.addRow(
-                      Row.builder()
-                          .put(Setup.LOCATION_COL, info.locationStr(loc))
-                          .put(
-                              Setup.ASSUMPTION_COL,
-                              info.getAssumptions().containsKey(loc)
-                                  ? info.getAssumptions()
-                                      .get(loc)
-                                      .toString(refinementOccurred, cache)
-                                  : "-")
-                          .put(
-                              Setup.TARGET_COL,
-                              targets.containsKey(loc)
-                                  ? targets.get(loc).toString(refinementOccurred, cache)
-                                  : "-")
-                          .put(
-                              Setup.INFERRED_INVARIANTS_COL,
-                              results.get(loc).toString(refinementOccurred, cache))
-                          .put(
-                              Setup.VERIFICATION_VIOLATION_COL,
-                              checks.containsKey(loc) && checks.get(loc).isPresent()
-                                  ? nonDefaultRoute(checks.get(loc).get())
-                                  : (results.get(loc).isFalse() && !refinementOccurred
-                                      ? "Inferred False - probable bug"
-                                      : ""))
-                          .build()));
+              loc -> {
+                if (targets.containsKey(loc)) {
+                  addTargetToTAE(tae, loc, targets.get(loc), results.get(loc), cache);
+                } else {
+                  String assumption_str =
+                      info.getAssumptions().containsKey(loc)
+                          ? info.getAssumptions().get(loc).toString(refinementOccurred, cache)
+                          : "";
+
+                  String inferred_str = results.get(loc).toString(true, cache);
+                  if (inferred_str.equals("LIMIT (Complex BDD)")) {
+                    inferred_str =
+                        stringLimits.computeIfAbsent(
+                            results.get(loc).peakAtBDD(),
+                            k -> "LIMIT (Complex BDD) [" + (stringLimits.size() + 1) + "]");
+                  }
+                  String counterexample_str =
+                      checks.containsKey(loc) && checks.get(loc).isPresent()
+                          ? nonDefaultRoute(checks.get(loc).get())
+                          : (refinement.refined.get(loc).isFalse() && !refinementOccurred
+                              ? "any route is counterexample"
+                              : "");
+
+                  // add the specific result to the map
+                  if (assumption_str.isEmpty()) {
+                    intermediateGroups
+                        .computeIfAbsent(inferred_str, k -> new HashMap<>())
+                        .computeIfAbsent(counterexample_str, k -> new HashSet<>())
+                        .add(info.locationStr(loc));
+                  } else {
+                    assumptionGroups
+                        .computeIfAbsent(assumption_str, k -> new HashMap<>())
+                        .computeIfAbsent(inferred_str, k -> new HashMap<>())
+                        .computeIfAbsent(counterexample_str, k -> new HashSet<>())
+                        .add(info.locationStr(loc));
+                  }
+                }
+              });
+
+      // next add the groups of assumptions
+      addGroupsToTAE(tae, true, assumptionGroups);
+
+      // last add the intermediate nodes
+      addGroupsToTAE(tae, false, Map.of("", intermediateGroups));
+
       return tae;
     }
 
     /// Gather the answer element needed for a question return, only include information associated
-    // with
-    /// assumptions and targets, only include intermediate invariants if false inferred
+    /// with assumptions and targets, only include intermediate invariants if false inferred
     public TableAnswerElement getAnswerElementLimited() {
       Map<BDD, String> cache = new HashMap<>();
-      TableAnswerElement tae = new TableAnswerElement(metadata_safety_limited());
-      // include all targets, refinement included if it occurred
-      targets
-          .keySet()
-          .forEach(
-              loc ->
-                  tae.addRow(
-                      Row.builder()
-                          .put(Setup.LOCATION_COL, info.locationStr(loc))
-                          .put(Setup.LOCATION_RELEVANCE_COL, "Target")
-                          .put(
-                              Setup.PROVIDED_INVARIANT_COL,
-                              targets.get(loc).toString(refinementOccurred, cache))
-                          .put(
-                              Setup.INFERRED_INVARIANTS_COL,
-                              refinementOccurred
-                                  ? refinement.refined.get(loc).toString(true, cache)
-                                  : "same as provided")
-                          .put(Setup.COUNTEREXAMPLE_COL, "")
-                          .build()));
-      // if there is an inference counterexamples, return that
+      TableAnswerElement tae = new TableAnswerElement(metadata_safety());
+      // at the target to the top, refinement included if it occurred
+      assert targets.size() == 1 : "Currently we only support one target property.";
+      Map.Entry<Location, Invariant> target = targets.entrySet().stream().findFirst().get();
+      addTargetToTAE(
+          tae, target.getKey(), target.getValue(), refinement.refined.get(target.getKey()), cache);
+
+      // if there is an inference counterexamples, return those
       if (inferenceCounter.isPresent()) {
         Infer.CounterExample cex = inferenceCounter.get();
         tae.addRow(
             Row.builder()
-                .put(Setup.LOCATION_COL, info.locationStr(cex.location()))
                 .put(Setup.LOCATION_RELEVANCE_COL, "Intermediate")
-                .put(Setup.PROVIDED_INVARIANT_COL, "n/a")
-                .put(Setup.INFERRED_INVARIANTS_COL, cex.post().toString(true, cache))
-                .put(Setup.COUNTEREXAMPLE_COL, "Any route")
+                .put(Setup.PROVIDED_INVARIANT_COL, "")
+                .put(Setup.LOCATIONS_COL, info.locationStr(cex.location()))
+                .put(Setup.INFERRED_INVARIANTS_COL, cex.post().toString(false, cache))
+                .put(Setup.COUNTEREXAMPLE_COL, "any route is counterexample")
                 .build());
       } else {
-        info.getAssumptions().entrySet().stream()
-            .filter(entry -> refinement.refined.containsKey(entry.getKey()))
+        // otherwise, report whether the assumptions were satisfied
+        // assumption -> inferred invariant -> counterexample -> set of locations
+        Map<String, Map<String, Map<String, Set<String>>>> groupings = new HashMap<>();
+        info.getAssumptions()
             .forEach(
-                entry ->
-                    tae.addRow(
-                        Row.builder()
-                            .put(Setup.LOCATION_COL, info.locationStr(entry.getKey()))
-                            .put(Setup.LOCATION_RELEVANCE_COL, "Assumption")
-                            .put(
-                                Setup.PROVIDED_INVARIANT_COL,
-                                entry.getValue().toString(refinementOccurred, cache))
-                            .put(
-                                Setup.INFERRED_INVARIANTS_COL,
-                                entry.getValue().equals(refinement.refined.get(entry.getKey()))
-                                    ? "same as provided"
-                                    : refinement.refined.get(entry.getKey()).toString(true, cache))
-                            .put(
-                                Setup.COUNTEREXAMPLE_COL,
-                                checks.containsKey(entry.getKey())
-                                        && checks.get(entry.getKey()).isPresent()
-                                    ? nonDefaultRoute(checks.get(entry.getKey()).get())
-                                    : (refinement.refined.get(entry.getKey()).isFalse()
-                                        ? "Any route"
-                                        : ""))
-                            .build()));
+                (loc, assumption) -> {
+                  String assumption_str = assumption.toString(refinementOccurred, cache);
+                  assert refinement.refined.containsKey(loc);
+                  String inferred_str = refinement.refined.get(loc).toString(true, cache);
+                  String counterexample_str =
+                      checks.containsKey(loc) && checks.get(loc).isPresent()
+                          ? nonDefaultRoute(checks.get(loc).get())
+                          : (refinement.refined.get(loc).isFalse()
+                              ? "any route is counterexample"
+                              : "");
+
+                  // add the specific result to the map
+                  groupings
+                      .computeIfAbsent(assumption_str, k -> new HashMap<>())
+                      .computeIfAbsent(inferred_str, k -> new HashMap<>())
+                      .computeIfAbsent(counterexample_str, k -> new HashSet<>())
+                      .add(info.locationStr(loc));
+                });
+        // add groupings to the table answer element
+        addGroupsToTAE(tae, true, groupings);
       }
       return tae;
     }
@@ -214,11 +271,8 @@ public final class SafetyAnswerer extends Answerer {
     Refine.Result refined;
     boolean refinementOccurred = true;
 
-    // we only want to refine if the inference verifies the property, or if the refinement flag is
-    // set
-    // TODO determine if we still want to do refinement even when the incoming assumptions don't
-    // imply the needed invariant
     if (result.counter.isPresent() || !refine || !result.verified) {
+      // should only refine if verification succeeds and flag is set to refine
       LOGGER.info("No invariant refinement.");
       refinementOccurred = false;
       refined = inference.refiner().noRefinement();
@@ -228,11 +282,7 @@ public final class SafetyAnswerer extends Answerer {
       LOGGER.info("Finished refining invariants.");
     }
 
-    // sanity check that refinement didn't change verification result
-    if (result.verified != refined.verified) {
-      throw new BatfishException(
-          "SafetyAnswerer.run() - Inference and refinement final verification results inconsistent.");
-    }
+    assert result.verified == refined.verified : "Refine should NOT change verification outcome.";
 
     return new Result(
         info, refinementOccurred, result.checks, Map.of(location, target), refined, result.counter);
@@ -248,19 +298,19 @@ public final class SafetyAnswerer extends Answerer {
     ConfigAtomicPredicates configAPs =
         getConfigAtomicPredicates(_communityRegexes, _asPathRegexes, configs.values());
     TransferBDD tbdd = new TransferBDD(configAPs);
-    NetworkInfo info = new NetworkInfo(tbdd, configs);
+    NetworkInfo info =
+        _default_assumption
+            .map(builder -> new NetworkInfo(tbdd, configs, builder.build(tbdd, null)))
+            .orElseGet(() -> new NetworkInfo(tbdd, configs));
     _assumptions.forEach(info::addAssumption);
     LOGGER.info(info.displayNodes());
 
-    // if there is no provided target, return a list of the network locations (check for more than
-    // one)
+    // if there is no provided target, return a list of the network locations
     if (_targets.isEmpty()) {
       return info.getAnswerElement();
-    } else if (_targets.size() != 1) {
-      throw new BatfishException(
-          "SafetyAnswerer.answer() - Expects exactly one property to verify, provided with "
-              + _targets.size());
     }
+
+    assert _targets.size() == 1 : "Current API limits to a single property to verify";
 
     // determine the target and run the inference algorithm
     Map.Entry<Location, Invariant> target =

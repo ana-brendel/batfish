@@ -1,64 +1,72 @@
 {
-    "class": "org.batfish.minesweeper.question.safety.SafetyQuestion",
-    "differential": false,
-    "target": "${target}",
-    "location": "${location}",
-    "assumption_locations": "${assumption_locations}",
-    "assumptions": "${assumptions}",
-    "show_all": "${show_all}",
-    "refine": "${refine}",
-    "instance": {
-        "description": "...",
-        "instanceName": "safety",
-        "longDescription": "This question...",
-        "orderedVariableNames": [
-            "target",
-            "location",
-            "assumption_locations",
-            "assumptions",
-            "show_all",
-            "refine"
-        ],
-        "tags": [
-            "routing"
-        ],
-        "variables": {
-            "target": {
-                "description": "Safety property to verify",
-                "type": "string",
-                "optional": true,
-                "displayName": "Target Property"
-            },
-            "location": {
-                "description": "Location to verify property at within network",
-                "type": "string",
-                "optional": true,
-                "displayName": "Location"
-            },
-            "assumption_locations": {
-              "description": "Locations where you make assumption about traffic",
-              "type": "string",
-              "optional": true,
-              "displayName": "Locations for Assumptions"
-            },
-            "assumptions": {
-                "description": "Assumptions made about traffic, should be one-to-one with assumption_locations",
-                "type": "string",
-                "optional": true,
-                "displayName": "Assumptions"
-            },
-            "show_all": {
-              "description": "Flag indicating if you want all of the inferred invariants displayed",
-              "type": "boolean",
-              "optional": true,
-              "displayName": "Weak Print"
-            },
-            "refine": {
-              "description": "Flag indicating if refinement of invariants should occur.",
-              "type": "boolean",
-              "optional": true,
-              "displayName": "Perform refinement"
-            }
-        }
+  "class": "org.batfish.minesweeper.question.safety.SafetyQuestion",
+  "differential": false,
+  "target": "${target}",
+  "location": "${location}",
+  "assumption_locations": "${assumption_locations}",
+  "assumptions": "${assumptions}",
+  "default_assumption": "${default_assumption}",
+  "show_all": "${show_all}",
+  "refine": "${refine}",
+  "instance": {
+    "description": "...",
+    "instanceName": "safety",
+    "longDescription": "This question...",
+    "orderedVariableNames": [
+      "target",
+      "location",
+      "assumption_locations",
+      "assumptions",
+      "default_assumption",
+      "show_all",
+      "refine"
+    ],
+    "tags": [
+      "routing"
+    ],
+    "variables": {
+      "target": {
+        "description": "Safety property to verify",
+        "type": "string",
+        "optional": true,
+        "displayName": "Target Property"
+      },
+      "location": {
+        "description": "Location to verify property at within network",
+        "type": "string",
+        "optional": true,
+        "displayName": "Location"
+      },
+      "assumption_locations": {
+        "description": "Locations where you make assumption about traffic",
+        "type": "string",
+        "optional": true,
+        "displayName": "Locations for Assumptions"
+      },
+      "assumptions": {
+        "description": "Assumptions made about traffic, should be one-to-one with assumption_locations",
+        "type": "string",
+        "optional": true,
+        "displayName": "Assumptions"
+      },
+      "default_assumption": {
+        "description": "Default assumption on incoming edges, if not specified",
+        "type": "string",
+        "optional": true,
+        "displayName": "Default Incoming Assumptions"
+      },
+      "show_all": {
+        "description": "Flag indicating if you want all of the inferred invariants displayed",
+        "type": "boolean",
+        "optional": true,
+        "displayName": "Weak Print"
+      },
+      "refine": {
+        "description": "Flag indicating if refinement of invariants should occur.",
+        "type": "boolean",
+        "optional": true,
+        "displayName": "Perform refinement"
+      }
     }
+  }
 }

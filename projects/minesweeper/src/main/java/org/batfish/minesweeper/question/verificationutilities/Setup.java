@@ -2,7 +2,6 @@ package org.batfish.minesweeper.question.verificationutilities;
 
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableSet;
-import org.batfish.common.BatfishException;
 import org.batfish.datamodel.BgpRoute;
 import org.batfish.datamodel.Bgpv4Route;
 import org.batfish.datamodel.Configuration;
@@ -55,8 +54,7 @@ public class Setup {
     return communityVars;
   }
 
-  /// Returns relevant ConfigAtomicPredicates (code copied from SearchRoutePoliciesAnswerer and
-  // modified)
+  /// Returns relevant ConfigAtomicPredicates (contains code from SearchRoutePoliciesAnswerer)
   public static ConfigAtomicPredicates getConfigAtomicPredicates(
       Set<RegexConstraint> communityRegexes,
       Set<RegexConstraint> asPathRegexes,
@@ -71,13 +69,10 @@ public class Setup {
                       new AbstractMap.SimpleImmutableEntry<>(config, policies);
                 })
             .toList(),
-        getCommunityVars(
-            communityRegexes,
-            configs), // need to add atomic predicates for communities exclusive to the provided
-        // properties
+        getCommunityVars(communityRegexes, configs),
         asPathRegexes.stream()
             .map(RegexConstraint::getRegex)
-            .collect(ImmutableSet.toImmutableSet())); // should be empty, not handling as path yet
+            .collect(ImmutableSet.toImmutableSet()));
   }
 
   /// This function takes the provided invariants and builds them in the context of the current
@@ -86,19 +81,19 @@ public class Setup {
       NetworkInfo info, boolean wpQuery, Map.Entry<Location.Builder, Invariant.Builder> entry) {
     RoutingPolicy policy;
     Location location = entry.getKey().instantiate(info);
+    assert location instanceof Edge || location instanceof Node;
     boolean getImportPolicy = (location instanceof Edge) != wpQuery;
-    if (location instanceof Edge edge) {
-      policy = info.getPolicy(edge, getImportPolicy);
-    } else if (location instanceof Node node) {
+    if (location instanceof Node node) {
       policy = info.getPolicy(info.getAnyIncomingEdge(node), getImportPolicy);
     } else {
-      throw new BatfishException("This should be unreachable.");
+      policy = info.getPolicy((Edge) location, getImportPolicy);
     }
     return new AbstractMap.SimpleEntry<>(
         entry.getKey().instantiate(info), entry.getValue().build(info.tbdd, policy));
   }
 
   /// In cases where there is some counterexample, format counterexample in a more readable manner
+  /// (There might be some oversimplification or inaccurate simplifications - always include IP.)
   public static String nonDefaultRoute(Bgpv4Route route) {
     ImmutableList.Builder<String> features = ImmutableList.builder();
     // Always include the IP address
@@ -150,36 +145,25 @@ public class Setup {
     return "Bgpv4Route{" + String.join(", ", features.build()) + "}";
   }
 
-  // Constants for metadata definitions
-  public static final String LOCATION_COL = "Network_Location";
-  public static final String ASSUMPTION_COL = "Initial_Assumption";
-  public static final String TARGET_COL = "Target_Property";
-  public static final String INFERRED_INVARIANTS_COL = "Inferred_Invariant";
-  public static final String VERIFICATION_VIOLATION_COL = "Verification_Violation";
+  // columns for displaying results
   public static final String LOCATION_RELEVANCE_COL = "Location_Relevance";
   public static final String PROVIDED_INVARIANT_COL = "Provided_Invariant";
+  public static final String LOCATIONS_COL = "Network_Locations";
+  public static final String INFERRED_INVARIANTS_COL = "Inferred_Invariant";
   public static final String COUNTEREXAMPLE_COL = "Counterexample";
 
-  /// TableMetadata for safety property which displays all invariants inferred across network
+  // columns for just displaying the locations
+  public static final String NODES_COL = "Nodes_in_Network";
+  public static final String NEIGHBORS_COL = "Neighbors_to_Node";
+
+  /// TableMetadata for safety property which displays target properties and assumptions and any
+  /// counterexamples
   public static TableMetadata metadata_safety() {
     List<ColumnMetadata> columnMetadata =
         ImmutableList.of(
-            new ColumnMetadata(LOCATION_COL, STRING, "InDev", true, false),
-            new ColumnMetadata(ASSUMPTION_COL, STRING, "InDev", true, false),
-            new ColumnMetadata(TARGET_COL, STRING, "InDev", true, false),
-            new ColumnMetadata(INFERRED_INVARIANTS_COL, STRING, "InDev", true, false),
-            new ColumnMetadata(VERIFICATION_VIOLATION_COL, STRING, "InDev", true, false));
-    return new TableMetadata(columnMetadata, "Invariant Inference and Verification Results");
-  }
-
-  /// TableMetadata for safety property which displays target properties and assumptions and any
-  // counterexamples
-  public static TableMetadata metadata_safety_limited() {
-    List<ColumnMetadata> columnMetadata =
-        ImmutableList.of(
-            new ColumnMetadata(LOCATION_COL, STRING, "InDev", true, false),
             new ColumnMetadata(LOCATION_RELEVANCE_COL, STRING, "InDev", true, false),
             new ColumnMetadata(PROVIDED_INVARIANT_COL, STRING, "InDev", true, false),
+            new ColumnMetadata(LOCATIONS_COL, STRING, "InDev", true, false),
             new ColumnMetadata(INFERRED_INVARIANTS_COL, STRING, "InDev", true, false),
             new ColumnMetadata(COUNTEREXAMPLE_COL, STRING, "InDev", true, false));
     return new TableMetadata(columnMetadata, "Invariant Inference and Verification Results");
@@ -188,7 +172,9 @@ public class Setup {
   /// TableMetadata for displaying just the locations within the network
   public static TableMetadata metadata_locations() {
     List<ColumnMetadata> columnMetadata =
-        ImmutableList.of(new ColumnMetadata(LOCATION_COL, STRING, "InDev", true, false));
+        ImmutableList.of(
+            new ColumnMetadata(NODES_COL, STRING, "InDev", true, false),
+            new ColumnMetadata(NEIGHBORS_COL, STRING, "InDev", true, false));
     return new TableMetadata(columnMetadata, "Invariant Inference and Verification Results");
   }
 }

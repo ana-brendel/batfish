@@ -3,12 +3,12 @@ package org.batfish.minesweeper.question.safety;
 import net.sf.javabdd.BDD;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
-import org.batfish.common.BatfishException;
 import org.batfish.datamodel.Ip;
 import org.batfish.datamodel.routing_policy.RoutingPolicy;
 import org.batfish.minesweeper.bdd.TransferBDD;
 import org.batfish.minesweeper.question.verificationutilities.Edge;
 import org.batfish.minesweeper.question.verificationutilities.Invariant;
+import org.batfish.minesweeper.question.verificationutilities.Lightyear;
 import org.batfish.minesweeper.question.verificationutilities.Location;
 import org.batfish.minesweeper.question.verificationutilities.Node;
 
@@ -78,7 +78,8 @@ public class Refine {
     }
 
     public Builder setIncoming(Set<Location> incoming) {
-      assert incoming.stream().allMatch(l -> l instanceof Edge);
+      assert incoming.stream().allMatch(l -> l instanceof Edge)
+          : "Some incoming location is not an edge.";
       this.incoming = incoming.stream().map(l -> (Edge) l).collect(Collectors.toSet());
       return this;
     }
@@ -89,6 +90,8 @@ public class Refine {
     }
 
     public Refine build() {
+      assert this.incoming.stream().noneMatch(e -> this.nodes.containsKey(e.getSrc()))
+          : "Incoming edges set contains an edge originating from within the network.";
       return new Refine(
           this.tbdd,
           this.nodes,
@@ -157,8 +160,11 @@ public class Refine {
   }
 
   ///  Performs iterative invariant refinement using the strongest postcondition, interpolation and
-  // inferred invariants
+  /// inferred invariants
   private Map<Location, Invariant> strengtheningLoop() {
+    // included to prevent runtime memory/efficiency issues
+    int REFINEMENT_THRESHOLD = 64;
+
     // we assume that the working list includes the correct starting points for refinement, that
     // is specifically ingress edges
     Map<Location, Invariant> refinements = new HashMap<>();
@@ -176,10 +182,8 @@ public class Refine {
       LOGGER.info("Working to refine the property following: {}", lastKnown);
       if (lastKnown instanceof Edge edge && nodes.containsKey(edge.getDst())) {
         Node toRefine = nodes.get(edge.getDst());
-        if (!inferred.containsKey(toRefine)) {
-          throw new BatfishException(
-              "This should not happen - any reachable node should have inferred invariant");
-        }
+        assert inferred.containsKey(toRefine)
+            : "Any reachable node should have a corresponding inferred invariant.";
         Invariant weakest = inferred.get(toRefine).copy();
         RoutingPolicy importPolicy = imports.get(edge);
         Invariant strongest =
@@ -187,7 +191,8 @@ public class Refine {
                 ? refinements.get(edge).copy()
                 : refinements.get(edge).strongestPostcondition(importPolicy);
         BDD interpolant =
-            interpolate(tbdd, strongest.getBDD(), weakest.getBDD()).orElse(weakest.getBDD());
+            interpolate(tbdd, strongest.getBDD(), weakest.getBDD(), REFINEMENT_THRESHOLD)
+                .orElse(weakest.getBDD());
         Invariant previous = refinements.get(toRefine);
         refinements.put(toRefine, new Invariant(tbdd, interpolant.or(previous.getBDD())));
         if (!refinements.get(toRefine).equals(previous)) {
@@ -198,10 +203,8 @@ public class Refine {
         // should try to use neighbor mapping to improve runtime
         for (Location neighbor : inferred.keySet()) {
           if (neighbor instanceof Edge toRefine && toRefine.isSrc(source)) {
-            if (!inferred.containsKey(toRefine)) {
-              throw new BatfishException(
-                  "This should not happen - any reachable edge should have inferred invariant");
-            }
+            assert inferred.containsKey(toRefine)
+                : "Any reachable edge should have a corresponding inferred invariant.";
             Invariant weakest = inferred.get(toRefine).copy();
             RoutingPolicy exportPolicy = exports.get(toRefine);
             Invariant strongest =
@@ -209,7 +212,8 @@ public class Refine {
                     ? precondition.copy()
                     : precondition.strongestPostcondition(exportPolicy);
             BDD interpolant =
-                interpolate(tbdd, strongest.getBDD(), weakest.getBDD()).orElse(weakest.getBDD());
+                interpolate(tbdd, strongest.getBDD(), weakest.getBDD(), REFINEMENT_THRESHOLD)
+                    .orElse(weakest.getBDD());
             Invariant previous = refinements.put(toRefine, new Invariant(tbdd, interpolant));
             if (previous == null || !refinements.get(toRefine).equals(previous)) {
               // if there is already an edge entering this destination, we don't need to add it
@@ -237,14 +241,16 @@ public class Refine {
 
   /// Driving method to perform invariant refinement
   public Result refine() {
+    // These checks might be overkill - but if the asserts only run during testing, these will just
+    // complain if we try to refine an "unverified" network which we don't want to happen
+    assert assumptions.entrySet().stream()
+            .allMatch(a -> a.getValue().implies(inferred.get(a.getKey())))
+        : "Whenever we call refine, we want all the assumptions to sufficiently imply the inferred invariants.";
+    assert (new Lightyear(this.nodes, this.imports, this.exports)).check(inferred).isEmpty()
+        : "Checks that all invariants are sufficient as preconditions to imply the following postcondition";
+
     working.clear();
-    // TODO determine if we want to include assumptions as ingress nodes (or maybe have option for
-    // user to specify ingress)
-    // right now we just use any edge entering the network, not including assumptions within
-    // network... maybe we should swap
-    // any inferred invariant specifically with the assumption as the assumption would be stronger
-    // (if verification didn't
-    // produce any counterexample)
+
     working.addAll(enteringNetwork);
     if (working.isEmpty()) {
       boolean verified =
@@ -255,38 +261,30 @@ public class Refine {
       return new Result(verified, inferred, inferred);
     }
 
-    // need to update the inferred invariants to include the stronger assumption - safe update via
-    // previous check
-    // TODO if we add refinement even when assumptions don't imply inferred condition, we should
-    // tweak something here
+    // keep track of the originally inferred invariants, use the assumptions as the starting points
+    // for traffic that enters the network to start refinement from a stronger assumption, if
+    // possible
     Map<Location, Invariant> original = copyInferred(inferred);
     enteringNetwork.forEach(
         e -> {
           if (assumptions.containsKey(e)) {
-            inferred.put(e, assumptions.get(e));
+            inferred.put(e, assumptions.get(e).copy());
           }
         });
+
+    assert inferred.keySet().stream().allMatch(loc -> inferred.get(loc).implies(original.get(loc)))
+        : "Provided assumption does not imply the necessary invariant inferred - suggests unverified property and should not be refining.";
 
     Map<Location, Invariant> finalized = strengtheningLoop();
 
-    finalized.forEach(
-        (loc, inv) -> {
-          assert inv.implies(inferred.get(loc));
-        });
-    finalized.forEach(
-        (loc, inv) -> {
-          if (!inv.implies(original.get(loc))) {
-            // based on our algorithm, this should never happen
-            throw new BatfishException(
-                "Inferred invariant does not imply the weakest condition that was needed @ location "
-                    + loc);
-          }
-        });
+    assert finalized.entrySet().stream()
+            .allMatch(pair -> pair.getValue().implies(inferred.get(pair.getKey())))
+        : "A refined invariant does not imply the necessary condition for the target to be verified.";
 
-    targets.forEach(
-        (loc, i) -> {
-          assert finalized.containsKey(loc);
-        });
+    assert targets.keySet().stream().allMatch(finalized::containsKey)
+        : "Some target property not included in the final refined results.";
+
+    // checks that all provided assumptions satisfy the inferred invariant
     boolean verified =
         assumptions.keySet().stream()
             .allMatch(

@@ -26,7 +26,7 @@ public abstract class Location implements Comparable<Location> {
     private final String PROP_DST = "destination";
     private final String PROP_NODE = "nodeName";
 
-    public final @Nonnull String _head;
+    public final String _head;
     public final String _tail;
 
     @JsonCreator
@@ -38,10 +38,6 @@ public abstract class Location implements Comparable<Location> {
         _head = node;
         _tail = null;
       } else {
-        if (src == null || dst == null) {
-          throw new BatfishException(
-              "Node is null, so we expect non-null for both the src and dst of an edge.");
-        }
         _head = src;
         _tail = dst;
       }
@@ -66,6 +62,7 @@ public abstract class Location implements Comparable<Location> {
     /// Gets the Location based on the Verifier (which is based on Network Snapshot)
     /// -- maybe change to only succeed if provided with IPs
     public Location instantiate(NetworkInfo info) {
+      assert _head != null : "Expect non-null 'head' field for Location.Builder.";
       if (_tail != null) {
         Collection<Ip> heads =
             info.ipsFromNodeName(_head)
@@ -146,7 +143,9 @@ public abstract class Location implements Comparable<Location> {
       String[] splits = value.trim().split(",");
       ImmutableList.Builder<Builder> builders = ImmutableList.builder();
       for (String location : splits) {
-        builders.add(Builder.forValue(location.trim()));
+        if (!location.trim().isEmpty()) {
+          builders.add(Builder.forValue(location.trim()));
+        }
       }
       return new Builders(builders.build());
     }

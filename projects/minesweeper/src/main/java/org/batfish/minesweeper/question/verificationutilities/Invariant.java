@@ -119,25 +119,19 @@ public class Invariant {
       return clauses;
     }
 
-    @Nonnull
-    private String getString() {
-      return clauses.isEmpty()
-          ? "True"
-          : String.join(
-              "", clauses.stream().map(c -> "[" + c.getString() + "]").collect(Collectors.toSet()));
-    }
-
-    //    public Invariant build(TransferBDD tbdd) {
-    //      return this.build(tbdd, null);
-    //    }
-
-    public Invariant build(@Nonnull TransferBDD tbdd, @Nonnull RoutingPolicy policy) {
+    public Invariant build(@Nonnull TransferBDD tbdd, @Nullable RoutingPolicy policy) {
       if (clauses.isEmpty()) {
         return new Invariant(tbdd);
       } else {
+        String string =
+            String.join(
+                " OR ",
+                clauses.stream()
+                    .map(ClauseBuilder::createDesiredStringRepresentation)
+                    .collect(Collectors.toSet()));
         Collection<BDD> BDDs =
             clauses.stream().map(clause -> clause.build(tbdd, policy)).collect(Collectors.toSet());
-        return new Invariant(tbdd, tbdd.getFactory().orAll(BDDs), this.getString());
+        return new Invariant(tbdd, tbdd.getFactory().orAll(BDDs), string);
       }
     }
 
@@ -230,7 +224,7 @@ public class Invariant {
         @Nonnull RegexConstraint regex,
         @Nonnull TransferBDD tbdd,
         @Nonnull BDDRoute route,
-        @Nonnull TransferBDD.Context context) {
+        @Nonnull Optional<TransferBDD.Context> context) {
       return switch (regex.getRegexType()) {
         case REGEX -> {
           Map<String, Set<Integer>> stringKeys = new HashMap<>();
@@ -251,11 +245,16 @@ public class Invariant {
           yield tbdd.getFactory().orAll(bdds);
         }
         case STRUCTURE_NAME -> {
-          CommunityMatchExpr matcher =
-              context.config().getCommunityMatchExprs().get(regex.getRegex());
-          yield matcher.accept(
-              new CommunityMatchExprToBDD(),
-              new CommunitySetMatchExprToBDD.Arg(tbdd, route, context));
+          if (context.isPresent()) {
+            CommunityMatchExpr matcher =
+                context.get().config().getCommunityMatchExprs().get(regex.getRegex());
+            yield matcher.accept(
+                new CommunityMatchExprToBDD(),
+                new CommunitySetMatchExprToBDD.Arg(tbdd, route, context.get()));
+          } else {
+            throw new BatfishException(
+                "No context provided for this community BDD and it is needed: " + regex.getRegex());
+          }
         }
       };
     }
@@ -264,7 +263,7 @@ public class Invariant {
         @Nonnull RegexConstraints communities,
         @Nonnull TransferBDD tbdd,
         @Nonnull BDDRoute route,
-        @Nonnull TransferBDD.Context context) {
+        @Nonnull Optional<TransferBDD.Context> context) {
       BDDFactory factory = tbdd.getFactory();
       BDD positiveBDD =
           communities.getPositiveRegexConstraints().isEmpty()
@@ -304,9 +303,10 @@ public class Invariant {
     }
 
     @Nonnull
-    public BDD build(@Nonnull TransferBDD tbdd, @Nonnull RoutingPolicy policy) {
+    public BDD build(@Nonnull TransferBDD tbdd, @Nullable RoutingPolicy policy) {
       BDDRoute base = new BDDRoute(tbdd.getFactory(), tbdd.getConfigAtomicPredicates());
-      TransferBDD.Context context = TransferBDD.Context.forPolicy(policy);
+      Optional<TransferBDD.Context> context =
+          policy == null ? Optional.empty() : Optional.of(TransferBDD.Context.forPolicy(policy));
       BDD clauseBDD = tbdd.getFactory().one();
       if (_positivePrefix != null && !_positivePrefix.isEmpty()) {
         clauseBDD.andWith(prefixSpaceToBDD(_positivePrefix, base, true));
@@ -318,6 +318,37 @@ public class Invariant {
         clauseBDD.andWith(communitiesToBDD(_communities, tbdd, base, context));
       }
       return clauseBDD;
+    }
+
+    public String createDesiredStringRepresentation() {
+      StringBuilder builder = new StringBuilder();
+      if (_communities != null && !_communities.isEmpty()) {
+        _communities
+            .getNegativeRegexConstraints()
+            .forEach(
+                rgx ->
+                    builder
+                        .append(",!comm(")
+                        .append(BDDString.trimRegex(rgx.getRegex()))
+                        .append(")"));
+      }
+      if (_negativePrefix != null && !_negativePrefix.isEmpty()) {
+        builder.append(",!prefix(").append(_negativePrefix).append(")");
+      }
+      if (_communities != null && !_communities.isEmpty()) {
+        _communities
+            .getPositiveRegexConstraints()
+            .forEach(
+                rgx ->
+                    builder
+                        .append(",comm(")
+                        .append(BDDString.trimRegex(rgx.getRegex()))
+                        .append(")"));
+      }
+      if (_positivePrefix != null && !_positivePrefix.isEmpty()) {
+        builder.append(",prefix(").append(_positivePrefix).append(")");
+      }
+      return builder.isEmpty() ? "True" : builder.substring(1);
     }
 
     /// Added to help parse a string corresponding to a single clause
@@ -392,39 +423,6 @@ public class Invariant {
     @Nonnull
     public RegexConstraints getCommunities() {
       return firstNonNull(_communities, new RegexConstraints());
-    }
-
-    @Nonnull
-    public String getString() {
-      StringBuilder builder = new StringBuilder();
-      if (_communities != null) {
-        _communities
-            .getNegativeRegexConstraints()
-            .forEach(
-                rgx ->
-                    builder
-                        .append(",!comm(")
-                        .append(BDDString.trimRegex(rgx.getRegex()))
-                        .append(")"));
-      }
-      if (_negativePrefix != null && !_negativePrefix.isEmpty()) {
-        builder.append(",!prefix(").append(_negativePrefix.toString()).append(")");
-      }
-      if (_positivePrefix != null && !_positivePrefix.isEmpty()) {
-        builder.append(",prefix(").append(_positivePrefix.toString()).append(")");
-      }
-      if (_communities != null) {
-        _communities
-            .getPositiveRegexConstraints()
-            .forEach(
-                rgx ->
-                    builder
-                        .append(",comm(")
-                        .append(BDDString.trimRegex(rgx.getRegex()))
-                        .append(")"));
-      }
-      // start with one because we don't want to include the initial comma
-      return builder.isEmpty() ? "True" : builder.substring(1);
     }
   }
 

@@ -252,8 +252,38 @@ public class NetworkInfo {
   /// property is provided)
   public TableAnswerElement getAnswerElement() {
     TableAnswerElement tae = new TableAnswerElement(metadata_locations());
+    Map<String, Set<String>> nodeNameToEdges = new HashMap<>();
+    nodes.values().forEach(node -> nodeNameToEdges.put(node.contextString(nodes), new HashSet<>()));
+
     locations.forEach(
-        loc -> tae.addRow(Row.builder().put(Setup.LOCATION_COL, this.locationStr(loc)).build()));
+        loc -> {
+          if (loc instanceof Edge edge) {
+            String src =
+                nodes.containsKey(edge.getSrc())
+                    ? nodes.get(edge.getSrc()).contextString(nodes)
+                    : edge.getSrc().toString();
+            String dst =
+                nodes.containsKey(edge.getDst())
+                    ? nodes.get(edge.getDst()).contextString(nodes)
+                    : edge.getDst().toString();
+            if (nodeNameToEdges.containsKey(src)) {
+              nodeNameToEdges.get(src).add(dst);
+            }
+            if (nodeNameToEdges.containsKey(dst)) {
+              nodeNameToEdges.get(dst).add(src);
+            }
+          }
+        });
+
+    nodeNameToEdges.keySet().stream()
+        .sorted()
+        .forEach(
+            node ->
+                tae.addRow(
+                    Row.builder()
+                        .put(Setup.NODES_COL, node)
+                        .put(Setup.NEIGHBORS_COL, nodeNameToEdges.get(node))
+                        .build()));
     return tae;
   }
 

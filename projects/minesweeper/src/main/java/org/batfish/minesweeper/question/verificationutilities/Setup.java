@@ -154,6 +154,8 @@ public class Setup {
   public static final String LOCATION_RELEVANCE_COL = "Location_Relevance";
   public static final String PROVIDED_INVARIANT_COL = "Provided_Invariant";
   public static final String COUNTEREXAMPLE_COL = "Counterexample";
+  public static final String NODES_COL = "Nodes_in_Network";
+  public static final String NEIGHBORS_COL = "Neighbors_to_Node";
 
   /// TableMetadata for safety property which displays all invariants inferred across network
   public static TableMetadata metadata_safety() {
@@ -183,7 +185,9 @@ public class Setup {
   /// TableMetadata for displaying just the locations within the network
   public static TableMetadata metadata_locations() {
     List<ColumnMetadata> columnMetadata =
-        ImmutableList.of(new ColumnMetadata(LOCATION_COL, STRING, "InDev", true, false));
+        ImmutableList.of(
+            new ColumnMetadata(NODES_COL, STRING, "InDev", true, false),
+            new ColumnMetadata(NEIGHBORS_COL, STRING, "InDev", true, false));
     return new TableMetadata(columnMetadata, "Invariant Inference and Verification Results");
   }
 }

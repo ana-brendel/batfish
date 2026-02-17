@@ -32,12 +32,12 @@ public class Infer {
 
   private final Map<Ip, Node> nodes = new HashMap<>();
   // for better runtime, should switch locations to a neighbors map
-  private final Map<Node, Set<Edge>> edgesByDestination = new HashMap<>();
-  private final Map<Edge, RoutingPolicy> imports = new HashMap<>();
-  private final Map<Edge, RoutingPolicy> exports = new HashMap<>();
+  private final Map<Node, Set<Edge>> edgesByDestination;
+  private final Map<Edge, RoutingPolicy> imports;
+  private final Map<Edge, RoutingPolicy> exports;
 
   private final Map<Location, Invariant> targets = new HashMap<>();
-  private final Map<Location, Invariant> assumptions = new HashMap<>();
+  private final Map<Location, Invariant> assumptions;
   private final Queue<Location> working = new LinkedList<>();
   private final Map<Location, Invariant> inferred = new HashMap<>();
 
@@ -83,10 +83,10 @@ public class Infer {
       @Nonnull Map<Node, Set<Edge>> edgesByDestination) {
     this.tbdd = context.tbdd();
     this.nodes.putAll(nodes);
-    this.edgesByDestination.putAll(edgesByDestination);
-    this.imports.putAll(context.imports());
-    this.exports.putAll(context.exports());
-    this.assumptions.putAll(context.assumptions());
+    this.edgesByDestination = edgesByDestination;
+    this.imports = context.imports();
+    this.exports = context.exports();
+    this.assumptions = context.assumptions();
   }
 
   /**
@@ -124,9 +124,7 @@ public class Infer {
   /// Initializes all target invariants
   private void initializeInvariants() {
     for (Location location : targets.keySet()) {
-      if (!inferred.containsKey(location)) {
-        inferred.put(location, this.targets.get(location).copy());
-      }
+      inferred.putIfAbsent(location, this.targets.get(location).copy());
     }
   }
 
@@ -155,6 +153,8 @@ public class Infer {
         } else if ((firstVisit || !existing.equals(updated)) && !working.contains(src)) {
           working.add(src);
         }
+        wp.free();
+        existing.free();
       } else if (location instanceof Node node) {
         for (Location l : edgesByDestination.get(node)) {
           if (l instanceof Edge edge && edge.isDst(node)) {
@@ -170,6 +170,8 @@ public class Infer {
             } else if ((firstVisit || !existing.equals(updated)) && !working.contains(edge)) {
               working.add(edge);
             }
+            wp.free();
+            existing.free();
           }
         }
       }
@@ -200,6 +202,8 @@ public class Infer {
         Bgpv4Route counter =
             ModelGeneration.satAssignmentToBgpInputRoute(model, tbdd.getConfigAtomicPredicates());
         checks.put(location, Optional.of(counter));
+        constraint.free();
+        model.free();
       }
     }
     return checks;
@@ -224,7 +228,7 @@ public class Infer {
     Map<Location, Optional<Bgpv4Route>> checks = verificationAssumptionCheck();
     return new Result(
         counter.isEmpty() && checks.values().stream().allMatch(Optional::isEmpty),
-        copyInferred(inferred),
+        inferred,
         counter,
         checks);
   }

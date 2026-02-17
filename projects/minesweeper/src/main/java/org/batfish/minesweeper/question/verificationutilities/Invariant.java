@@ -442,9 +442,13 @@ public class Invariant {
         .setCommunities(firstNonNull(comms, new RegexConstraints()));
   }
 
-  /// Returns the BDD stored in this invariant (with well-formed constraint applied)
+  /// Returns a copy of the BDD
   public BDD getBDD() {
     return bdd.id();
+  }
+
+  public BDD peakAtBDD() {
+    return bdd;
   }
 
   /// Returns true if the invariant is false

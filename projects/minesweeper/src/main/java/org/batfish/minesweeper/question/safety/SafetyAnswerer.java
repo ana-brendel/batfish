@@ -150,6 +150,7 @@ public final class SafetyAnswerer extends Answerer {
       // assumption -> inferred invariant -> counterexample -> set of locations
       Map<String, Map<String, Map<String, Set<String>>>> assumptionGroups = new HashMap<>();
       Map<String, Map<String, Set<String>>> intermediateGroups = new HashMap<>();
+      Map<BDD, String> stringLimits = new HashMap<>();
 
       // group the results and add the target first
       results
@@ -163,7 +164,14 @@ public final class SafetyAnswerer extends Answerer {
                       info.getAssumptions().containsKey(loc)
                           ? info.getAssumptions().get(loc).toString(refinementOccurred, cache)
                           : "";
+
                   String inferred_str = results.get(loc).toString(true, cache);
+                  if (inferred_str.equals("LIMIT (Complex BDD)")) {
+                    inferred_str =
+                        stringLimits.computeIfAbsent(
+                            results.get(loc).peakAtBDD(),
+                            k -> "LIMIT (Complex BDD) [" + (stringLimits.size() + 1) + "]");
+                  }
                   String counterexample_str =
                       checks.containsKey(loc) && checks.get(loc).isPresent()
                           ? nonDefaultRoute(checks.get(loc).get())

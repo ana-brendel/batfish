@@ -160,8 +160,11 @@ public class Refine {
   }
 
   ///  Performs iterative invariant refinement using the strongest postcondition, interpolation and
-  // inferred invariants
+  /// inferred invariants
   private Map<Location, Invariant> strengtheningLoop() {
+    // included to prevent runtime memory/efficiency issues
+    int REFINEMENT_THRESHOLD = 64;
+
     // we assume that the working list includes the correct starting points for refinement, that
     // is specifically ingress edges
     Map<Location, Invariant> refinements = new HashMap<>();
@@ -188,7 +191,8 @@ public class Refine {
                 ? refinements.get(edge).copy()
                 : refinements.get(edge).strongestPostcondition(importPolicy);
         BDD interpolant =
-            interpolate(tbdd, strongest.getBDD(), weakest.getBDD()).orElse(weakest.getBDD());
+            interpolate(tbdd, strongest.getBDD(), weakest.getBDD(), REFINEMENT_THRESHOLD)
+                .orElse(weakest.getBDD());
         Invariant previous = refinements.get(toRefine);
         refinements.put(toRefine, new Invariant(tbdd, interpolant.or(previous.getBDD())));
         if (!refinements.get(toRefine).equals(previous)) {
@@ -208,7 +212,8 @@ public class Refine {
                     ? precondition.copy()
                     : precondition.strongestPostcondition(exportPolicy);
             BDD interpolant =
-                interpolate(tbdd, strongest.getBDD(), weakest.getBDD()).orElse(weakest.getBDD());
+                interpolate(tbdd, strongest.getBDD(), weakest.getBDD(), REFINEMENT_THRESHOLD)
+                    .orElse(weakest.getBDD());
             Invariant previous = refinements.put(toRefine, new Invariant(tbdd, interpolant));
             if (previous == null || !refinements.get(toRefine).equals(previous)) {
               // if there is already an edge entering this destination, we don't need to add it

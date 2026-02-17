@@ -195,9 +195,10 @@ public class TransferBDDUtils {
    *     paths
    * @param p first formula (BDD) for interpolation
    * @param q second formula (BDD) for interpolation
+   * @param gas limit on satisyfing assignments to consider for runtime/memory reasons
    * @return interpolant between the two provided formulas as BDD
    */
-  public static Optional<BDD> interpolate(TransferBDD tbdd, BDD p, BDD q) {
+  public static Optional<BDD> interpolate(TransferBDD tbdd, BDD p, BDD q, int gas) {
     assert p.varProfile().length == q.varProfile().length;
     Invariant p_inv = new Invariant(tbdd, p);
     Invariant q_inv = new Invariant(tbdd, q);
@@ -210,10 +211,10 @@ public class TransferBDDUtils {
 
     // STEP 1: Simplify q by pruning disjuncts that are incompatible with p; and
     // do the same dually for p
-    BDD q_pruned = simplifyRight(tbdd, p, q);
+    BDD q_pruned = simplifyRight(tbdd, p, q, gas).orElse(q);
     BDD q_not = q.not();
     BDD p_not = p.not();
-    BDD p_pruned = simplifyRight(tbdd, q_not, p_not).notEq();
+    BDD p_pruned = simplifyRight(tbdd, q_not, p_not, gas).orElse(p_not.id()).notEq();
     q_not.free();
     p_not.free();
 
@@ -231,8 +232,6 @@ public class TransferBDDUtils {
 
     // STEP 3: In the case that we keep the prefix length but have no prefix, remove length
     // variables
-    // TODO This is an edge case - might be a bug on my end related to the well-formedness
-    // constraint stuff, might be unnecessary
     if (!p_pruned.testsVars(tbdd.getOriginalRoute().getPrefix().support())) {
       p_pruned.existEq(tbdd.getOriginalRoute().getPrefixLength().support());
     }
@@ -251,10 +250,17 @@ public class TransferBDDUtils {
   // is not issue)
   // ex. P = A /\ B and  Q = A \/ !B, then P /\ A is satisfiable but P /\ !B is unsatisfiable so we
   // simplify Q to just A
-  private static BDD simplifyRight(TransferBDD tbdd, BDD p, BDD q) {
+  private static Optional<BDD> simplifyRight(TransferBDD tbdd, BDD p, BDD q, int gas) {
     BDD q_pruned = tbdd.getFactory().zero();
     BDD.AllSatIterator qit = q.allsat();
+    int counter = gas;
     while (qit.hasNext()) {
+      if (counter == 0) {
+        q_pruned.free();
+        return Optional.empty();
+      } else {
+        counter -= 1;
+      }
       byte[] arr = qit.next();
       Set<BDD> running = new HashSet<>();
       for (int v = 0; v < arr.length; v++) {
@@ -266,10 +272,12 @@ public class TransferBDDUtils {
       }
       BDD q_assignment = tbdd.getFactory().andAllAndFree(running);
 
-      if (!p.and(q_assignment).isZero()) {
+      // idea - maybe move this up to early return from assignment if we reach an un-sat point...
+      // might be more inefficient, might save time depending on how expensive "and-ing" is
+      if (p.andSat(q_assignment)) {
         q_pruned.orWith(q_assignment);
       }
     }
-    return q_pruned;
+    return Optional.of(q_pruned);
   }
 }

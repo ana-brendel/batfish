@@ -105,6 +105,13 @@ public class NetworkInfo {
   }
 
   public NetworkInfo(@Nonnull TransferBDD tbdd, @Nonnull Map<String, Configuration> configs) {
+    this(tbdd, configs, new Invariant(tbdd));
+  }
+
+  public NetworkInfo(
+      @Nonnull TransferBDD tbdd,
+      @Nonnull Map<String, Configuration> configs,
+      @Nonnull Invariant defaultIncoming) {
     this.tbdd = tbdd;
     processConfigs(configs);
     // default assumption of True for incoming edges
@@ -112,7 +119,7 @@ public class NetworkInfo {
       if (location instanceof Edge edge) {
         // if the edge's source is not in the set of nodes (i.e. out of network)
         if (!nodes.containsKey(edge.getSrc())) {
-          assumptions.put(edge, new Invariant(tbdd));
+          assumptions.put(edge, defaultIncoming.copy());
         }
       }
     }

@@ -40,6 +40,7 @@ public final class SafetyAnswerer extends Answerer {
 
   private final @Nonnull Map<Location.Builder, Invariant.Builder> _targets;
   private final @Nonnull Map<Location.Builder, Invariant.Builder> _assumptions;
+  private final @Nonnull Optional<Invariant.Builder> _default_assumption;
   private final @Nonnull Set<RegexConstraint> _communityRegexes;
   private final @Nonnull Set<RegexConstraint> _asPathRegexes;
   private final boolean _showAll;
@@ -50,6 +51,7 @@ public final class SafetyAnswerer extends Answerer {
     _showAll = question.get_show_all();
     _targets = question.get_targets();
     _refine = question.get_refine();
+    _default_assumption = question.get_default_assumption();
 
     // this is added because the assumptions are taken as two lists with corresponding inputs
     List<Invariant.Builder> invAssumptions =
@@ -288,7 +290,10 @@ public final class SafetyAnswerer extends Answerer {
     ConfigAtomicPredicates configAPs =
         getConfigAtomicPredicates(_communityRegexes, _asPathRegexes, configs.values());
     TransferBDD tbdd = new TransferBDD(configAPs);
-    NetworkInfo info = new NetworkInfo(tbdd, configs);
+    NetworkInfo info =
+        _default_assumption
+            .map(builder -> new NetworkInfo(tbdd, configs, builder.build(tbdd, null)))
+            .orElseGet(() -> new NetworkInfo(tbdd, configs));
     _assumptions.forEach(info::addAssumption);
     LOGGER.info(info.displayNodes());
 

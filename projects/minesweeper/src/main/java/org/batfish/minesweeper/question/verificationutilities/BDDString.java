@@ -27,9 +27,9 @@ public class BDDString {
 
   // Integer representation used for easier simplification/reduction
   /// Maps integers to the string that describes that property
-  private final Map<Integer, String> atomicPredicateBank = new HashMap<>();
+  private final Map<Integer, String> integerToStringMap = new HashMap<>();
   /// Maps string description of property to the integer used to represent it
-  private final Map<String, Integer> stringBank = new HashMap<>();
+  private final Map<String, Integer> stringToIntegerMap = new HashMap<>();
 
   /// Returns string representation of the provided BDD
   public static String get(TransferBDD tbdd, BDD bdd) {
@@ -74,37 +74,36 @@ public class BDDString {
 
   /// Generates (or if it exists, find) the integer which represents the string property provided
   private Integer addStringToBank(String label) {
-    if (stringBank.containsKey(label)) {
-      assert atomicPredicateBank.containsKey(stringBank.get(label));
-      return stringBank.get(label);
+    if (stringToIntegerMap.containsKey(label)) {
+      assert label.equals(integerToStringMap.get(stringToIntegerMap.get(label)))
+          : "Stored integer and string relation is not reflexive.";
+      return stringToIntegerMap.get(label);
     } else {
-      int var = atomicPredicateBank.size() + 1;
-      atomicPredicateBank.put(var, label);
-      stringBank.put(label, var);
+      int var = integerToStringMap.size() + 1;
+      integerToStringMap.put(var, label);
+      stringToIntegerMap.put(label, var);
       return var;
     }
   }
 
   /// Returns the property associated with the variable. If the variable is negative, this is
-  // associated
-  /// with the negation of that property. A zero corresponds to '+' which means there is some
-  // information
-  /// which we are not effectively representing.
+  /// associated with the negation of that property. A zero corresponds to '+' which means there is
+  /// some information which we are not effectively representing.
   private String getFromStringBank(Integer var) {
     if (var < 0) {
-      return "!" + this.atomicPredicateBank.get(-var);
+      return "!" + this.integerToStringMap.get(-var);
     } else {
-      return var == 0 ? "+" : this.atomicPredicateBank.get(var);
+      // var = 0 corresponds to some extra BDD information not reflected accurately
+      return var == 0 ? "+" : this.integerToStringMap.get(var);
     }
   }
 
-  private static String trimRegex(String regex) {
+  public static String trimRegex(String regex) {
     return regex.replaceAll("\\^", "").replaceAll("\\$", "");
   }
 
   /// Returns mapping of BDD to the string representation of the atomic predicates satisfied by that
-  // BDD.
-  /// Currently, the only atomic predicates which are considered are communities (not AS paths).
+  /// BDD. Currently, the only atomic predicates which are considered are communities.
   private Pair<BDD, Set<Integer>> fetchAtomicPredicateBDD(byte[] assignment) {
     Set<Integer> strings = new HashSet<>();
     Set<BDD> running = new HashSet<>();
@@ -134,7 +133,7 @@ public class BDDString {
   }
 
   /// Converts byte[] corresponding to variable assignments to bdd, bdd size is limited by total
-  // variable count
+  /// variable count
   private BDD bddOfByteArr(byte[] arr) {
     Set<BDD> running = new HashSet<>();
     for (int v = 0; v < arr.length; v++) {
@@ -247,7 +246,8 @@ public class BDDString {
     if (set.size() == 1 && single.get().isOne()) {
       return new HashSet<>();
     } else {
-      assert single.isEmpty() || !single.get().isZero();
+      assert single.isEmpty() || !single.get().isZero()
+          : "Expect that BDD set is empty or not a single false BDD.";
       BDD disjunction = this.factory.orAll(set);
       if (disjunction.isOne()) {
         return new HashSet<>();
@@ -316,14 +316,17 @@ public class BDDString {
 
       // if we haven't seen this set of atomic predicates yet, add to maps
       if (!disjunctsByAtomicPredicates.containsKey(atoms.getLeft())) {
-        assert !bddToDisplays.containsKey(atoms.getLeft());
+        assert !bddToDisplays.containsKey(atoms.getLeft())
+            : "At this point, we should only have a bddToDisplay if we've added to the disjunctsByAtomicPredicates.";
         bddToDisplays.put(atoms.getLeft(), atoms.getRight());
         disjunctsByAtomicPredicates.put(atoms.getLeft(), new HashSet<>());
       }
 
-      // assert that the both are present, update the atomic predicates to include the disjunction
-      assert disjunctsByAtomicPredicates.containsKey(atoms.getLeft());
-      assert bddToDisplays.containsKey(atoms.getLeft());
+      assert disjunctsByAtomicPredicates.containsKey(atoms.getLeft())
+              && bddToDisplays.containsKey(atoms.getLeft())
+          : "This BDD is not mapped in disjunctsByAtomicPredicates or bddToDisplays";
+
+      // add this leftover BDD to the correct set of remaining disjuncts
       disjunctsByAtomicPredicates.get(atoms.getLeft()).add(remaining);
     }
     // AFTER STEP 1: disjunctsByAtomicPredicates should hold a map of Pi -> Qi1,...,Qin
@@ -371,6 +374,7 @@ public class BDDString {
 
     // STEP 3: Sanity check against returning an incorrect string representation by our metric (with
     // respect to the BDD being projected onto prefixes and atomic predicates (communities))
+    // TODO might want to change this to an assert to save on computations outside of testing
     if (!(this.factory.orAll(
             pullPrefixes.entrySet().stream()
                 .map(
@@ -405,7 +409,7 @@ public class BDDString {
         .collect(Collectors.joining(" OR "));
   }
 
-  /// Invokes algorithm to generate string
+  /// Invokes algorithm to generate string, only considers prefixes and communities
   private String getString() {
     BDD variablesToProjectOn = this.prefixInfoSupport.id();
     this.communities

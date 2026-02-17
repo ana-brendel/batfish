@@ -140,9 +140,9 @@ public class NetworkInfo {
     return Optional.empty();
   }
 
-  /// Returns boolean indicating if the provided edge has a policy associated with it
-  public boolean containsPolicy(Edge edge) {
-    return imports.containsKey(edge) || exports.containsKey(edge);
+  /// Returns boolean indicating if network contains this edge
+  public boolean containsEdge(Edge edge) {
+    return imports.containsKey(edge) || exports.containsKey(edge) || locations.contains(edge);
   }
 
   /// Returns the policy (getImport flag indicates import or export) associated with the provided
@@ -174,14 +174,19 @@ public class NetworkInfo {
 
   /// Used to add an assumption pertaining to traffic at provided location
   public NetworkInfo addAssumption(@Nonnull Location location, @Nonnull Invariant assumption) {
+    assert locations.contains(location)
+        : "Assumption must be on incoming edge or within the network.";
     assumptions.put(location, assumption);
     return this;
   }
 
-  /// Used to add an assumption pertaining to traffic at provided location
+  /// Used to add an assumption pertaining to traffic at provided location, need to build location
+  /// and invariant in the context of this network
   public void addAssumption(
       @Nonnull Location.Builder locationBuilder, @Nonnull Invariant.Builder assumption) {
     Location location = locationBuilder.instantiate(this);
+    assert location instanceof Edge || location instanceof Node;
+    // finding most relevant policy to help build invariant (for community from BDD function)
     RoutingPolicy policy;
     if (location instanceof Node node) {
       Optional<Edge> incoming = imports.keySet().stream().filter(e -> e.isDst(node)).findFirst();
@@ -192,7 +197,6 @@ public class NetworkInfo {
         policy = outgoing.map(imports::get).orElse(null);
       }
     } else {
-      assert location instanceof Edge;
       policy = exports.getOrDefault(location, imports.getOrDefault(location, null));
     }
     this.addAssumption(location, assumption.build(tbdd, policy));
@@ -218,7 +222,7 @@ public class NetworkInfo {
   }
 
   /// Returns an Infer object reflective of the network which can be used for safety property
-  // verification
+  /// verification
   public Infer toInfer() {
     Path.Context context =
         new Path.Context(this.tbdd, this.assumptions, this.imports, this.exports);
@@ -226,8 +230,7 @@ public class NetworkInfo {
   }
 
   /// Returns a PathAnalyzer objective reflective of the network which can be used for verification
-  // of the provided
-  /// liveness property (pertaining to the provided prefix space)
+  /// of the provided liveness property (pertaining to the provided prefix space)
   public PathAnalyzer toPathAnalyzer(PrefixSpace prefix, Location location, Invariant target) {
     Path.Context context =
         new Path.Context(this.tbdd, this.assumptions, this.imports, this.exports);
@@ -236,8 +239,7 @@ public class NetworkInfo {
   }
 
   /// Returns a PathAnalyzer objective reflective of the network which can be used for interference
-  // of the provided
-  /// liveness property (pertaining to the provided prefix space)
+  /// of the provided liveness property (pertaining to the provided prefix space)
   public InterferenceCheck toInterferenceCheck(
       PrefixSpace prefix, Location location, Invariant target) {
     Path.Context context =
@@ -247,7 +249,7 @@ public class NetworkInfo {
   }
 
   /// Returns TableAnswerElement which lists all locations within the network (used when no target
-  // property is provided)
+  /// property is provided)
   public TableAnswerElement getAnswerElement() {
     TableAnswerElement tae = new TableAnswerElement(metadata_locations());
     locations.forEach(

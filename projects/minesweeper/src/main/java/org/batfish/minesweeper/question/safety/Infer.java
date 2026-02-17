@@ -12,6 +12,7 @@ import org.batfish.minesweeper.bdd.TransferBDD;
 import org.batfish.minesweeper.question.liveness.Path;
 import org.batfish.minesweeper.question.verificationutilities.Edge;
 import org.batfish.minesweeper.question.verificationutilities.Invariant;
+import org.batfish.minesweeper.question.verificationutilities.Lightyear;
 import org.batfish.minesweeper.question.verificationutilities.Location;
 import org.batfish.minesweeper.question.verificationutilities.Node;
 
@@ -24,6 +25,7 @@ import java.util.Queue;
 import java.util.Set;
 import java.util.stream.Collectors;
 
+import static com.google.common.base.Preconditions.checkArgument;
 import static org.batfish.minesweeper.question.verificationutilities.Invariant.strongestCommonImplicant;
 
 public class Infer {
@@ -98,25 +100,28 @@ public class Infer {
    * @return updated Verified object
    */
   public Infer addProperty(Location loc, Invariant inv) {
+    checkArgument(
+        loc instanceof Edge || loc instanceof Node,
+        "Only implementations of Location that should be provided are nodes or edges.");
+
     if (loc instanceof Edge edge) {
       // we only need to check source because if the source is outside the network we cannot verify
       // anything
       if (!nodes.containsKey(edge.getSrc())) {
         throw new BatfishException(
-            "Infer.addProperty() - Edge's source node is not within network.");
+            "Infer.addProperty() - Edge's source node is not within network. We cannot verify properties originating from outside our network.");
       } else {
         targets.put(loc, inv);
       }
-    } else if (loc instanceof Node node) {
+    } else {
+      Node node = (Node) loc;
       Optional<Ip> ipWithNode = node.getIps().stream().filter(nodes::containsKey).findFirst();
       if (ipWithNode.isEmpty()) {
-        throw new BatfishException("Infer.addProperty() - Node provided not within network.");
+        throw new BatfishException(
+            "Infer.addProperty() - Node provided not within network. We cannot verify a property on a node that is not within our network.");
       } else {
         targets.put(nodes.get(ipWithNode.get()), inv);
       }
-    } else {
-      throw new BatfishException(
-          "Infer.addProperty() - Location neither edge nor node, should not be reachable.");
     }
     return this;
   }
@@ -134,10 +139,8 @@ public class Infer {
   private Optional<CounterExample> inferenceLoop() {
     while (!working.isEmpty()) {
       Location location = working.remove();
-      if (!inferred.containsKey(location)) {
-        throw new BatfishException(
-            "Trying to get existing invariant for unvisited location: " + location);
-      }
+      assert inferred.containsKey(location)
+          : "Trying to get existing invariant for unvisited location: " + location;
       Invariant property = inferred.get(location);
       LOGGER.info("Working to weakest precondition for property to hold at: {}", location);
       assert !property.isFalse();
@@ -222,6 +225,12 @@ public class Infer {
     Optional<CounterExample> counter = inferenceLoop();
     LOGGER.info("Inference loop terminated.");
     Map<Location, Optional<Bgpv4Route>> checks = verificationAssumptionCheck();
+
+    // Lightyear style check to only run during testing
+    assert counter.isPresent()
+            || (new Lightyear(this.nodes, this.imports, this.exports)).check(inferred).isEmpty()
+        : "Checks that all invariants are sufficient as preconditions to imply the following postcondition";
+
     return new Result(
         counter.isEmpty() && checks.values().stream().allMatch(Optional::isEmpty),
         copyInferred(inferred),

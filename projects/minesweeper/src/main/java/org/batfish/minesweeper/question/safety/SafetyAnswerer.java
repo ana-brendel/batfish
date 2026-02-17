@@ -4,7 +4,6 @@ import net.sf.javabdd.BDD;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.batfish.common.Answerer;
-import org.batfish.common.BatfishException;
 import org.batfish.common.NetworkSnapshot;
 import org.batfish.common.plugin.IBatfish;
 import org.batfish.datamodel.Bgpv4Route;
@@ -29,7 +28,6 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 
-import static com.google.common.base.Preconditions.checkArgument;
 import static org.batfish.minesweeper.question.verificationutilities.Setup.buildInvariant;
 import static org.batfish.minesweeper.question.verificationutilities.Setup.getConfigAtomicPredicates;
 import static org.batfish.minesweeper.question.verificationutilities.Setup.metadata_safety;
@@ -63,21 +61,23 @@ public final class SafetyAnswerer extends Answerer {
         question.get_assumption_locations().isPresent()
             ? question.get_assumption_locations().get().get_builders()
             : List.of();
-    checkArgument(
-        invAssumptions.size() == locAssumptions.size(),
-        "Must have the same number of assumptions and assumption locations");
+
+    assert invAssumptions.size() == locAssumptions.size()
+        : "Arguments checked in question, if this fails there is bug in code.";
+
     _assumptions = new HashMap<>();
     for (int i = 0; i < invAssumptions.size(); i++) {
       _assumptions.put(locAssumptions.get(i), invAssumptions.get(i));
     }
 
     _communityRegexes = new HashSet<>();
+    _asPathRegexes = new HashSet<>(); // not included in the NetworkClause nor Invariant class yet
+
     invAssumptions.forEach(
         clauses ->
             clauses
                 .getClauses()
                 .forEach(c -> _communityRegexes.addAll(c.getCommunities().getRegexConstraints())));
-    _asPathRegexes = new HashSet<>(); // not included in the NetworkClause nor Invariant class yet
     _targets
         .values()
         .forEach(
@@ -214,11 +214,8 @@ public final class SafetyAnswerer extends Answerer {
     Refine.Result refined;
     boolean refinementOccurred = true;
 
-    // we only want to refine if the inference verifies the property, or if the refinement flag is
-    // set
-    // TODO determine if we still want to do refinement even when the incoming assumptions don't
-    // imply the needed invariant
     if (result.counter.isPresent() || !refine || !result.verified) {
+      // should only refine if verification succeeds and flag is set to refine
       LOGGER.info("No invariant refinement.");
       refinementOccurred = false;
       refined = inference.refiner().noRefinement();
@@ -228,11 +225,7 @@ public final class SafetyAnswerer extends Answerer {
       LOGGER.info("Finished refining invariants.");
     }
 
-    // sanity check that refinement didn't change verification result
-    if (result.verified != refined.verified) {
-      throw new BatfishException(
-          "SafetyAnswerer.run() - Inference and refinement final verification results inconsistent.");
-    }
+    assert result.verified == refined.verified : "Refine should NOT change verification outcome.";
 
     return new Result(
         info, refinementOccurred, result.checks, Map.of(location, target), refined, result.counter);
@@ -252,15 +245,12 @@ public final class SafetyAnswerer extends Answerer {
     _assumptions.forEach(info::addAssumption);
     LOGGER.info(info.displayNodes());
 
-    // if there is no provided target, return a list of the network locations (check for more than
-    // one)
+    // if there is no provided target, return a list of the network locations
     if (_targets.isEmpty()) {
       return info.getAnswerElement();
-    } else if (_targets.size() != 1) {
-      throw new BatfishException(
-          "SafetyAnswerer.answer() - Expects exactly one property to verify, provided with "
-              + _targets.size());
     }
+
+    assert _targets.size() == 1 : "Current API limits to a single property to verify";
 
     // determine the target and run the inference algorithm
     Map.Entry<Location, Invariant> target =

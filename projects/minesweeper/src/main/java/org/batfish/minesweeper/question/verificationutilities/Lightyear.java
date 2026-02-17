@@ -32,6 +32,7 @@ public class Lightyear {
     Map<Map.Entry<Location, Location>, Boolean> checkResults = new HashMap<>();
     for (Location location : invariants.keySet()) {
       Invariant precondition = invariants.get(location);
+      // we only check precondition / postcondition agreement if the postcondition is in the network
       if (location instanceof Edge edge && nodes.containsKey(edge.getDst())) {
         assert invariants.containsKey(nodes.get(edge.getDst()));
         Invariant postcondition = invariants.get(nodes.get(edge.getDst()));
@@ -44,6 +45,7 @@ public class Lightyear {
       } else if (location instanceof Node node) {
         for (Location e : invariants.keySet()) {
           if (e instanceof Edge edge && edge.isSrc(node)) {
+            assert invariants.containsKey(edge);
             Invariant postcondition = invariants.get(edge);
             Map.Entry<Location, Location> evaluated = new AbstractMap.SimpleEntry<>(node, edge);
             checkResults.put(

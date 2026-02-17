@@ -14,6 +14,8 @@ import java.util.HashMap;
 import java.util.Map;
 import java.util.Optional;
 
+import static com.google.common.base.Preconditions.checkArgument;
+
 @ParametersAreNonnullByDefault
 public final class SafetyQuestion extends Question {
   private static final String PROP_PROPERTY = "target";
@@ -43,8 +45,18 @@ public final class SafetyQuestion extends Question {
     if (target != null && location != null) {
       _targets.put(location, target);
     }
+
+    checkArgument(
+        assumptions_locations == null
+            ? assumptions == null
+            : assumptions != null
+                && (assumptions_locations.get_builders().size()
+                    == assumptions.get_builders().size()),
+        "Must have the same number of assumptions and assumption locations");
+
     _assumption_locations = assumptions_locations;
     _assumptions = assumptions;
+
     _show_all = show_all;
     _refine = refine;
   }
@@ -57,8 +69,7 @@ public final class SafetyQuestion extends Question {
       @JsonProperty(PROP_ASSUMPTIONS) @Nullable Invariant.Builders assumptions,
       @JsonProperty(PROP_SHOW_ALL) @Nullable Boolean show_all,
       @JsonProperty(PROP_REFINE) @Nullable Boolean refine) {
-    // default for show_all is false (as it is not efficient), default for refine is false (as it is
-    // not efficient)
+    // default for show_all and refine is false (to run faster in default case)
     return new SafetyQuestion(
         target,
         location,
@@ -81,10 +92,12 @@ public final class SafetyQuestion extends Question {
     return _refine;
   }
 
+  @Nonnull
   public Optional<Location.Builders> get_assumption_locations() {
     return _assumption_locations == null ? Optional.empty() : Optional.of(_assumption_locations);
   }
 
+  @Nonnull
   public Optional<Invariant.Builders> get_assumptions() {
     return _assumptions == null ? Optional.empty() : Optional.of(_assumptions);
   }

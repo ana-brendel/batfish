@@ -2,7 +2,6 @@ package org.batfish.minesweeper.question.verificationutilities;
 
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableSet;
-import org.batfish.common.BatfishException;
 import org.batfish.datamodel.BgpRoute;
 import org.batfish.datamodel.Bgpv4Route;
 import org.batfish.datamodel.Configuration;
@@ -55,8 +54,7 @@ public class Setup {
     return communityVars;
   }
 
-  /// Returns relevant ConfigAtomicPredicates (code copied from SearchRoutePoliciesAnswerer and
-  // modified)
+  /// Returns relevant ConfigAtomicPredicates (contains code from SearchRoutePoliciesAnswerer)
   public static ConfigAtomicPredicates getConfigAtomicPredicates(
       Set<RegexConstraint> communityRegexes,
       Set<RegexConstraint> asPathRegexes,
@@ -71,13 +69,10 @@ public class Setup {
                       new AbstractMap.SimpleImmutableEntry<>(config, policies);
                 })
             .toList(),
-        getCommunityVars(
-            communityRegexes,
-            configs), // need to add atomic predicates for communities exclusive to the provided
-        // properties
+        getCommunityVars(communityRegexes, configs),
         asPathRegexes.stream()
             .map(RegexConstraint::getRegex)
-            .collect(ImmutableSet.toImmutableSet())); // should be empty, not handling as path yet
+            .collect(ImmutableSet.toImmutableSet()));
   }
 
   /// This function takes the provided invariants and builds them in the context of the current
@@ -86,19 +81,19 @@ public class Setup {
       NetworkInfo info, boolean wpQuery, Map.Entry<Location.Builder, Invariant.Builder> entry) {
     RoutingPolicy policy;
     Location location = entry.getKey().instantiate(info);
+    assert location instanceof Edge || location instanceof Node;
     boolean getImportPolicy = (location instanceof Edge) != wpQuery;
-    if (location instanceof Edge edge) {
-      policy = info.getPolicy(edge, getImportPolicy);
-    } else if (location instanceof Node node) {
+    if (location instanceof Node node) {
       policy = info.getPolicy(info.getAnyIncomingEdge(node), getImportPolicy);
     } else {
-      throw new BatfishException("This should be unreachable.");
+      policy = info.getPolicy((Edge) location, getImportPolicy);
     }
     return new AbstractMap.SimpleEntry<>(
         entry.getKey().instantiate(info), entry.getValue().build(info.tbdd, policy));
   }
 
   /// In cases where there is some counterexample, format counterexample in a more readable manner
+  /// (There might be some oversimplification or inaccurate simplifications - always include IP.)
   public static String nonDefaultRoute(Bgpv4Route route) {
     ImmutableList.Builder<String> features = ImmutableList.builder();
     // Always include the IP address

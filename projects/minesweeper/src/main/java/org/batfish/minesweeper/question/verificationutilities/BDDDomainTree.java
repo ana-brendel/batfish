@@ -11,15 +11,11 @@ import java.util.Optional;
 import java.util.Queue;
 import java.util.Set;
 
-public record BDDDomainTree<T,D>(BDDDomainTreeNode<T> root) {
-  private static <T,D> BDDDomainTree<T,D> updateUniqueValues(
-      BDDDomainTree<T,D> tree,
-      BDDDomain<D> domain,
-      Map<T, Set<D>> valuesToDomain) {
-    //    BDDDomain<Integer> domain = tbdd.getOriginalRoute().getAsPathRegexAtomicPredicates();
-    //    tbdd.getConfigAtomicPredicates()
-    //        .getAsPathRegexAtomicPredicates()
-    //        .getRegexAtomicPredicates()
+/// Class not used - designed to help easily translate byte[] assignments to the AS
+/// path/corresponding BDDDomain assignment
+public record BDDDomainTree<T, D>(BDDDomainTreeNode<T> root) {
+  private static <T, D> BDDDomainTree<T, D> updateUniqueValues(
+      BDDDomainTree<T, D> tree, BDDDomain<D> domain, Map<T, Set<D>> valuesToDomain) {
     valuesToDomain.forEach(
         (rgx, ints) -> {
           Optional<D> value = ints.stream().findFirst();
@@ -43,11 +39,11 @@ public record BDDDomainTree<T,D>(BDDDomainTreeNode<T> root) {
     return tree;
   }
 
-  public static <T, D> BDDDomainTree<T, D> build(TransferBDD tbdd, BDDDomain<D> domain, Map<T, Set<D>> valuesToDomain) {
-    //    BDDDomain<Integer> domain = tbdd.getOriginalRoute().getAsPathRegexAtomicPredicates();
+  public static <T, D> BDDDomainTree<T, D> build(
+      TransferBDD tbdd, BDDDomain<D> domain, Map<T, Set<D>> valuesToDomain) {
     int depth = domain.getInteger().size();
     if (depth == 0) {
-      return new BDDDomainTree<T,D>(null);
+      return new BDDDomainTree<T, D>(null);
     }
     int first = domain.getInteger().support().var();
     BDDDomainTreeNode<T> root = new BDDDomainTreeNode<T>(first);
@@ -68,10 +64,11 @@ public record BDDDomainTree<T,D>(BDDDomainTreeNode<T> root) {
         }
       }
     }
-    return updateUniqueValues(new BDDDomainTree<T,D>(root),domain,valuesToDomain);
+    return updateUniqueValues(new BDDDomainTree<T, D>(root), domain, valuesToDomain);
   }
 
   public Set<T> valuesFromByteAssignment(byte[] assignment) {
+    // TODO better support for when byte[] doesn't mention the BDDDomain var (ie all -1)
     BDDDomainTreeNode<T> curr = this.root;
     if (curr == null) {
       return Set.of();

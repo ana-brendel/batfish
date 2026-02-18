@@ -77,6 +77,10 @@ public class Invariant {
     return new Invariant(tbdd, bdd.not());
   }
 
+  public void free() {
+    bdd.free();
+  }
+
   @Override
   public String toString() {
     return this.toString(false);
@@ -498,7 +502,7 @@ public class Invariant {
     if (policy.getStatements().isEmpty()) {
       if (policy.getOwner() == null
           || policy.getOwner().getDefaultInboundAction() == LineAction.PERMIT) {
-        return this.copy(); // default is permit, so invariant itself is the weakest precondition
+        return this; // default is permit, so invariant itself is the weakest precondition
       } else {
         return new Invariant(tbdd); // default is deny so the weakest precondition is true
       }
@@ -506,7 +510,7 @@ public class Invariant {
       TransferBDD.Context context = TransferBDD.Context.forPolicy(policy);
       List<TransferReturn> paths;
       try {
-        paths = tbdd.computePaths(policy.getStatements(), context, true);
+        paths = tbdd.computePaths(policy.getStatements(), context, false);
       } catch (Exception e) {
         String name =
             policy.getOwner() != null ? policy.getOwner().getHostname() : "policy owner null";

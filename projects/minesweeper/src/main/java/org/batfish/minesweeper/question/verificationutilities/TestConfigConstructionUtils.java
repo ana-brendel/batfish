@@ -1,6 +1,7 @@
 package org.batfish.minesweeper.question.verificationutilities;
 
 import com.google.common.collect.ImmutableList;
+import com.google.common.collect.ImmutableSortedMap;
 import org.batfish.datamodel.BgpActivePeerConfig;
 import org.batfish.datamodel.Configuration;
 import org.batfish.datamodel.bgp.Ipv4UnicastAddressFamily;
@@ -32,9 +33,11 @@ import org.batfish.datamodel.routing_policy.statement.Statement;
 import org.batfish.datamodel.routing_policy.statement.Statements;
 import org.batfish.minesweeper.bdd.TransferBDD;
 
+import java.util.Comparator;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.SortedMap;
 
 /// Class created to help construct unit tests using Batfishes AST classes
 public class TestConfigConstructionUtils {
@@ -61,12 +64,13 @@ public class TestConfigConstructionUtils {
       Map<Node, Configuration> configs,
       RoutingPolicy template,
       List<String> prefixes) {
-    private Map<String, Configuration> configInput() {
-      Map<String, Configuration> result = new HashMap<>();
+    public SortedMap<String, Configuration> configInput() {
+      ImmutableSortedMap.Builder<String, Configuration> builder =
+          new ImmutableSortedMap.Builder<>(Comparator.naturalOrder());
       for (Node node : configs.keySet()) {
-        result.put(node.getName(), configs.get(node));
+        builder.put(node.getName(), configs.get(node));
       }
-      return result;
+      return builder.build();
     }
 
     public NetworkInfo getInfo() {

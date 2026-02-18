@@ -117,7 +117,7 @@ public final class SafetyAnswerer extends Answerer {
                                             Setup.LOCATION_RELEVANCE_COL,
                                             isAssumptions ? "Assumption" : "Intermediate")
                                         .put(Setup.PROVIDED_INVARIANT_COL, assumption)
-                                        .put(Setup.LOCATIONS_COL, locations)
+                                        .put(Setup.LOCATIONS_COL, String.join(", ", locations))
                                         .put(Setup.INFERRED_INVARIANTS_COL, inferred)
                                         .put(Setup.COUNTEREXAMPLE_COL, cex)
                                         .build());

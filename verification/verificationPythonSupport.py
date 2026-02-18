@@ -9,6 +9,13 @@ class Clause:
         prefixStrings = list(map(lambda p: f"prefix = {p}",self.prefixes))
         joined = " & ".join(communityStrings+prefixStrings)
         return f"[{joined}]"
+    
+class Property:
+    def __init__(self,clauses:list[Clause]):
+        self.clauses = clauses
+
+    def formatProperty(self) -> str:
+        return "".join(map(lambda c: c.format(),self.clauses))
 
 class LocationPropertyPair:
     # location should be either: ip -> ip for edge or ip for node (already formatted)
@@ -21,7 +28,7 @@ class LocationPropertyPair:
         return "".join(map(lambda c: c.format(),self.property))
 
 class VerificationQuery:
-    def __init__(self, target:LocationPropertyPair,assumptions:list[LocationPropertyPair],default:list[Clause]=[],refine:bool=False):
+    def __init__(self, target:LocationPropertyPair,assumptions:list[LocationPropertyPair],default:Property=Property([]),refine:bool=False):
         self.target = target
         self.assumptions = assumptions
         self.default = default
@@ -31,10 +38,16 @@ class VerificationQuery:
         return self.refine
     
     def defaultAssumption(self):
-        return "".join(map(lambda c: c.format(),self.default)) 
-
-    def format(self) -> dict:
-        result = { "target" : self.target.formatProperty(), "location" : self.target.location }
-        result["assumption_locations"] = ",".join(map(lambda a: a.location,self.assumptions))
-        result["assumptions"] = ",".join(map(lambda a: a.formatProperty(),self.assumptions))
-        return result
+        return self.default.formatProperty()
+    
+    def targetProperty(self):
+        return self.target.formatProperty()
+    
+    def targetLocation(self):
+        return self.target.location
+    
+    def assumptionLocations(self):
+        return ",".join(map(lambda a: a.location,self.assumptions))
+    
+    def assumptionProperties(self):
+        return ",".join(map(lambda a: a.formatProperty(),self.assumptions))

@@ -439,7 +439,7 @@ public class Invariant {
   }
 
   public static ClauseBuilder createClause(
-      PrefixSpace pos, PrefixSpace neg, RegexConstraints comms) {
+      @Nullable PrefixSpace pos, @Nullable PrefixSpace neg, @Nullable RegexConstraints comms) {
     return clauseBuilder()
         .matchPrefix(firstNonNull(pos, new PrefixSpace()))
         .avoidPrefix(firstNonNull(neg, new PrefixSpace()))

@@ -37,7 +37,7 @@ public final class SafetyQuestion extends Question {
     this(null, null, null, null, null, false, false);
   }
 
-  private SafetyQuestion(
+  public SafetyQuestion(
       @Nullable Invariant.Builder target,
       @Nullable Location.Builder location,
       @Nullable Location.Builders assumptions_locations,

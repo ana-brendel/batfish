@@ -169,7 +169,7 @@ public final class SafetyAnswerer extends Answerer {
                   if (inferred_str.equals("LIMIT (Complex BDD)")) {
                     inferred_str =
                         stringLimits.computeIfAbsent(
-                            results.get(loc).peakAtBDD(),
+                            results.get(loc).getBDD(),
                             k -> "LIMIT (Complex BDD) [" + (stringLimits.size() + 1) + "]");
                   }
                   String counterexample_str =

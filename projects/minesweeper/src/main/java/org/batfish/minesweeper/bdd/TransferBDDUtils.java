@@ -14,7 +14,6 @@ import net.sf.javabdd.BDDFactory;
 import net.sf.javabdd.BDDPairing;
 import org.batfish.common.BatfishException;
 import org.batfish.minesweeper.ConfigAtomicPredicates;
-import org.batfish.minesweeper.question.verificationutilities.Invariant;
 
 /**
  * Various utility methods for working with the results of the symbolic routing analysis {@link
@@ -193,19 +192,17 @@ public class TransferBDDUtils {
    *
    * @param tbdd an object containing the state of the symbolic route analysis that produced the
    *     paths
-   * @param p first formula (BDD) for interpolation
-   * @param q second formula (BDD) for interpolation
+   * @param p first formula (BDD) for interpolation; not consumed or destroyed
+   * @param q second formula (BDD) for interpolation; not consumed or destroyed
    * @param gas limit on satisyfing assignments to consider for runtime/memory reasons
-   * @return interpolant between the two provided formulas as BDD
+   * @return interpolant between the two provided formulas as BDD; the BDD is a newly created object
    */
   public static Optional<BDD> interpolate(TransferBDD tbdd, BDD p, BDD q, int gas) {
     assert p.varProfile().length == q.varProfile().length;
-    Invariant p_inv = new Invariant(tbdd, p);
-    Invariant q_inv = new Invariant(tbdd, q);
 
     // Not sure if this is necessary, for our current purposes we wouldn't want to interpolate is P
     // does not imply Q
-    if (!p_inv.implies(q_inv)) {
+    if (p.diffSat(q)) {
       return Optional.empty();
     }
 

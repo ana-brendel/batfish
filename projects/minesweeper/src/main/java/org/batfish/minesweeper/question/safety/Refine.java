@@ -192,12 +192,15 @@ public class Refine {
                 : refinements.get(edge).strongestPostcondition(importPolicy);
         BDD interpolant =
             interpolate(tbdd, strongest.getBDD(), weakest.getBDD(), REFINEMENT_THRESHOLD)
-                .orElse(weakest.getBDD());
+                .orElse(weakest.getBDDCopy());
         Invariant previous = refinements.get(toRefine);
-        refinements.put(toRefine, new Invariant(tbdd, interpolant.or(previous.getBDD())));
+        refinements.put(toRefine, new Invariant(tbdd, interpolant.orEq(previous.getBDD())));
         if (!refinements.get(toRefine).equals(previous)) {
           working.add(toRefine);
         }
+        weakest.free();
+        strongest.free();
+        previous.free();
       } else if (lastKnown instanceof Node source) {
         Invariant precondition = refinements.get(source);
         // should try to use neighbor mapping to improve runtime
@@ -213,7 +216,7 @@ public class Refine {
                     : precondition.strongestPostcondition(exportPolicy);
             BDD interpolant =
                 interpolate(tbdd, strongest.getBDD(), weakest.getBDD(), REFINEMENT_THRESHOLD)
-                    .orElse(weakest.getBDD());
+                    .orElse(weakest.getBDDCopy());
             Invariant previous = refinements.put(toRefine, new Invariant(tbdd, interpolant));
             if (previous == null || !refinements.get(toRefine).equals(previous)) {
               // if there is already an edge entering this destination, we don't need to add it
@@ -221,6 +224,11 @@ public class Refine {
               if (!working.contains(nodes.get(toRefine.getDst()))) {
                 working.add(toRefine);
               }
+            }
+            weakest.free();
+            strongest.free();
+            if (previous != null) {
+              previous.free();
             }
           }
         }
@@ -249,8 +257,6 @@ public class Refine {
     assert (new Lightyear(this.nodes, this.imports, this.exports)).check(inferred).isEmpty()
         : "Checks that all invariants are sufficient as preconditions to imply the following postcondition";
 
-    working.clear();
-
     working.addAll(enteringNetwork);
     if (working.isEmpty()) {
       boolean verified =
@@ -268,12 +274,14 @@ public class Refine {
     enteringNetwork.forEach(
         e -> {
           if (assumptions.containsKey(e)) {
-            inferred.put(e, assumptions.get(e).copy());
+            inferred.put(e, assumptions.get(e));
           }
         });
 
     assert inferred.keySet().stream().allMatch(loc -> inferred.get(loc).implies(original.get(loc)))
         : "Provided assumption does not imply the necessary invariant inferred - suggests unverified property and should not be refining.";
+
+    // STOPPED HERE
 
     Map<Location, Invariant> finalized = strengtheningLoop();
 

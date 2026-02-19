@@ -119,7 +119,7 @@ public class NetworkInfo {
       if (location instanceof Edge edge) {
         // if the edge's source is not in the set of nodes (i.e. out of network)
         if (!nodes.containsKey(edge.getSrc())) {
-          assumptions.put(edge, defaultIncoming.copy());
+          assumptions.put(edge, defaultIncoming);
         }
       }
     }

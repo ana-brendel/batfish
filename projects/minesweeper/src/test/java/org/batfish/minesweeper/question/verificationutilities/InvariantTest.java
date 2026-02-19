@@ -315,17 +315,17 @@ public class InvariantTest {
     BDD match_100_2 = commBDDString("100:2");
 
     Invariant matchInv = new Invariant(tbdd, match.build(tbdd, policyUsed));
-    assertEquals(matchInv.getBDD(), match_100_2.id());
+    assertEquals(matchInv.getBDDCopy(), match_100_2.id());
 
     Invariant avoidInv = new Invariant(tbdd, avoid.build(tbdd, policyUsed));
-    assertEquals(avoidInv.getBDD(), match_100_1.id().not());
+    assertEquals(avoidInv.getBDDCopy(), match_100_1.id().not());
 
     Invariant bothInv = new Invariant(tbdd, both.build(tbdd, policyUsed));
-    assertEquals(bothInv.getBDD(), match_100_2.id().and(match_100_1.id().not()));
+    assertEquals(bothInv.getBDDCopy(), match_100_2.id().and(match_100_1.id().not()));
 
     Invariant eitherInv =
         Invariant.builder().addClause(match).addClause(avoid).build(tbdd, policyUsed);
-    assertEquals(eitherInv.getBDD(), match_100_2.id().or(match_100_1.id().not()));
+    assertEquals(eitherInv.getBDDCopy(), match_100_2.id().or(match_100_1.id().not()));
   }
 
   @Test
@@ -348,19 +348,19 @@ public class InvariantTest {
     BDD intersectionBDD = prefixSpaceToBDD(matchesP, base, false).and(checkedBDD);
 
     Invariant checkedInv = new Invariant(tbdd, checked.build(tbdd, policyUsed));
-    assertEquals(checkedBDD, checkedInv.getBDD());
+    assertEquals(checkedBDD, checkedInv.getBDDCopy());
 
     Invariant avoidInv = new Invariant(tbdd, avoided.build(tbdd, policyUsed));
-    assertEquals(avoidCheckedBDD, avoidInv.getBDD());
+    assertEquals(avoidCheckedBDD, avoidInv.getBDDCopy());
 
     Invariant matchesInv = new Invariant(tbdd, matches.build(tbdd, policyUsed));
-    assertEquals(matchesBDD, matchesInv.getBDD());
+    assertEquals(matchesBDD, matchesInv.getBDDCopy());
 
     Invariant subInv = new Invariant(tbdd, sub.build(tbdd, policyUsed));
-    assertEquals(checkedBDD.diff(matchesBDD), subInv.getBDD());
+    assertEquals(checkedBDD.diff(matchesBDD), subInv.getBDDCopy());
 
     Invariant excludedInv = new Invariant(tbdd, excluded.build(tbdd, policyUsed));
-    assertEquals(intersectionBDD, excludedInv.getBDD());
+    assertEquals(intersectionBDD, excludedInv.getBDDCopy());
 
     // TODO - This implication fails because I think it has to do with overfitting
     // assertTrue(prefixSpaceToBDD(checkedP, base, true)
@@ -391,7 +391,7 @@ public class InvariantTest {
             .addClause(clauseP)
             .addClause(match_100_2)
             .build(tbdd, exports.get(GAMMANODE));
-    assertEquals(wp1.getBDD(), expected1.getBDD());
+    assertEquals(wp1.getBDDCopy(), expected1.getBDDCopy());
 
     // [2] False = WP(Export_alpha,prefix /\ 100:1 not in Comm)
     BDD avoid_100_1_match_prefix =
@@ -411,7 +411,7 @@ public class InvariantTest {
             .addClause(match_100_1)
             .addClause(match_100_2)
             .build(tbdd, exports.get(BETANODE));
-    assertEquals(wp3.getBDD(), expected3.getBDD());
+    assertEquals(wp3.getBDDCopy(), expected3.getBDDCopy());
 
     // [4] not_prefix \/ 100:2 in Comm \/ 100:1 in Comm = WP(Export_beta,not_prefix \/ 100:2 in
     // Comm)
@@ -427,14 +427,14 @@ public class InvariantTest {
             .addClause(match_100_1)
             .addClause(match_100_2)
             .build(tbdd, exports.get(BETANODE));
-    assertEquals(wp4.getBDD(), expected4.getBDD());
+    assertEquals(wp4.getBDDCopy(), expected4.getBDDCopy());
 
     // [5] 100:2 in Comm = WP(Export_gamma,100:2 in Comm)
     Invariant T = Invariant.builder().addClause(match_100_2).build(tbdd, exports.get(GAMMANODE));
     Invariant wp5 = T.weakestPrecondition(exports.get(GAMMANODE));
     Invariant expected5 =
         Invariant.builder().addClause(match_100_2).build(tbdd, exports.get(GAMMANODE));
-    assertEquals(wp5.getBDD(), expected5.getBDD());
+    assertEquals(wp5.getBDDCopy(), expected5.getBDDCopy());
 
     // [6] True (well-formed) = WP(Export_gamma,100:2 not in Comm)
     Invariant U = Invariant.builder().addClause(avoid_100_2).build(tbdd, exports.get(GAMMANODE));
@@ -449,7 +449,7 @@ public class InvariantTest {
             .addClause(match_100_2)
             .addClause(avoidPrefix)
             .build(tbdd, exports.get(GAMMANODE));
-    assertEquals(wp7.getBDD(), expected7.getBDD());
+    assertEquals(wp7.getBDDCopy(), expected7.getBDDCopy());
   }
 
   @Test
@@ -609,14 +609,14 @@ public class InvariantTest {
                 .matchPrefix(PREFIX)
                 .build(tbdd, exports.get(ALPHANODE))
                 .and(tbdd.getFactory().ithVar(0).not()));
-    assertEquals(sp1.getBDD(), expected1.getBDD());
+    assertEquals(sp1.getBDDCopy(), expected1.getBDDCopy());
 
     // [2] not P \/  (P /\ 100:1 /\ no other community (specifically 100:2 and match any)) =
     // SP(Export_alpha,True)
     Invariant T = new Invariant(tbdd);
     Invariant sp2 = T.strongestPostcondition(exports.get(ALPHANODE));
-    BDD expected2 = avoidPrefix.build(tbdd, exports.get(ALPHANODE)).or(expected1.getBDD());
-    assertEquals(sp2.getBDD(), expected2);
+    BDD expected2 = avoidPrefix.build(tbdd, exports.get(ALPHANODE)).or(expected1.getBDDCopy());
+    assertEquals(sp2.getBDDCopy(), expected2);
 
     // [3] False = SP(Export_gamma,has comm 100:2)
     Invariant Q = Invariant.builder().addClause(match_100_2).build(tbdd, exports.get(GAMMANODE));
@@ -626,16 +626,16 @@ public class InvariantTest {
     // [4] does not have comm 100:2 = SP(Export_gamma,does not have comm 100:2)
     Invariant R = Invariant.builder().addClause(avoid_100_2).build(tbdd, exports.get(GAMMANODE));
     Invariant sp4 = R.strongestPostcondition(exports.get(GAMMANODE));
-    assertEquals(sp4.getBDD(), R.getBDD());
+    assertEquals(sp4.getBDDCopy(), R.getBDDCopy());
 
     // [5] does not have comm 100:2 = SP(Export_gamma,True)
     Invariant sp5 = T.strongestPostcondition(exports.get(GAMMANODE));
-    assertEquals(sp5.getBDD(), R.getBDD());
+    assertEquals(sp5.getBDDCopy(), R.getBDDCopy());
 
     // [6] does not have comm 100:1 = SP(Export_beta,does not have comm 100:1)
     Invariant W = Invariant.builder().addClause(avoid_100_1).build(tbdd, exports.get(BETANODE));
     Invariant sp6 = W.strongestPostcondition(exports.get(BETANODE));
-    assertEquals(sp6.getBDD(), W.getBDD());
+    assertEquals(sp6.getBDDCopy(), W.getBDDCopy());
 
     // [7] does not have comm 100:1 \/ (has 100:2 and no others) = SP(Export_beta,True)
     Invariant sp7 = T.strongestPostcondition(exports.get(BETANODE));
@@ -648,13 +648,13 @@ public class InvariantTest {
                         List.of(RegexConstraint.parse("!100:1"), RegexConstraint.parse("100:2"))))
                 .build(tbdd, exports.get(BETANODE))
                 .and(tbdd.getFactory().ithVar(0).not()));
-    BDD expected7 = avoid_100_1.build(tbdd, exports.get(BETANODE)).or(noneBut1002.getBDD());
-    assertEquals(sp7.getBDD(), expected7);
+    BDD expected7 = avoid_100_1.build(tbdd, exports.get(BETANODE)).or(noneBut1002.getBDDCopy());
+    assertEquals(sp7.getBDDCopy(), expected7);
 
     // [8] has 100:2 and no others = SP(Export_beta,has comm 100:1)
     Invariant V = Invariant.builder().addClause(match_100_1).build(tbdd, exports.get(BETANODE));
     Invariant sp8 = V.strongestPostcondition(exports.get(BETANODE));
-    assertEquals(sp8.getBDD(), noneBut1002.getBDD());
+    assertEquals(sp8.getBDDCopy(), noneBut1002.getBDDCopy());
   }
 
   @Test
@@ -686,8 +686,9 @@ public class InvariantTest {
                 .matchPrefix(PREFIX)
                 .build(tbdd, exports.get(ALPHANODE)));
     Invariant interp =
-        new Invariant(tbdd, TransferBDDUtils.interpolate(tbdd, P.getBDD(), Q.getBDD(), 64).get());
-    assertEquals(interp.getBDD(), Q.getBDD());
+        new Invariant(
+            tbdd, TransferBDDUtils.interpolate(tbdd, P.getBDDCopy(), Q.getBDDCopy(), 64).get());
+    assertEquals(interp.getBDDCopy(), Q.getBDDCopy());
 
     // [2] prefix(PREFIX) /\ (comm(100:1) \/ comm(100:2)) => {interpolant: comm(100:1) \/
     // comm(100:2))}
@@ -720,9 +721,9 @@ public class InvariantTest {
             .build(tbdd, exports.get(BETANODE));
     assertTrue(PorQ_and_R.implies(SorPorQ));
     BDD interpolant =
-        TransferBDDUtils.interpolate(tbdd, PorQ_and_R.getBDD(), SorPorQ.getBDD(), 64).get();
+        TransferBDDUtils.interpolate(tbdd, PorQ_and_R.getBDDCopy(), SorPorQ.getBDDCopy(), 64).get();
     Invariant i = new Invariant(tbdd, interpolant);
-    assertEquals(expected2.getBDD(), i.getBDD());
+    assertEquals(expected2.getBDDCopy(), i.getBDDCopy());
 
     // [3] prefix(2.4.8.0/24) => {interpolant: prefix(2.4.8.0/24)} => prefix(2.4.8.0/24) \/
     // prefix(100.200.0.0/16)
@@ -745,7 +746,8 @@ public class InvariantTest {
                         new PrefixSpace(PrefixRange.fromPrefix(Prefix.parse("100.200.0.0/16")))))
             .build(tbdd, exports.get(ALPHANODE));
     Invariant AB_interpolant =
-        new Invariant(tbdd, TransferBDDUtils.interpolate(tbdd, A.getBDD(), B.getBDD(), 64).get());
+        new Invariant(
+            tbdd, TransferBDDUtils.interpolate(tbdd, A.getBDDCopy(), B.getBDDCopy(), 64).get());
     Invariant AB_expected =
         Invariant.builder()
             .addClause(
@@ -753,7 +755,7 @@ public class InvariantTest {
                     .matchPrefix(
                         new PrefixSpace(PrefixRange.fromPrefix(Prefix.parse("2.4.8.0/24")))))
             .build(tbdd, exports.get(ALPHANODE));
-    assertEquals(AB_expected.getBDD(), AB_interpolant.getBDD());
+    assertEquals(AB_expected.getBDDCopy(), AB_interpolant.getBDDCopy());
 
     // [4] !prefix(2.4.8.0/24) /\ !prefix(100.200.0.0/16) => {interpolant: !prefix(2.4.8.0/24)} =>
     // !prefix(2.4.8.0/24)
@@ -774,7 +776,8 @@ public class InvariantTest {
                         new PrefixSpace(PrefixRange.fromPrefix(Prefix.parse("2.4.8.0/24")))))
             .build(tbdd, exports.get(ALPHANODE));
     Invariant CD_interpolant =
-        new Invariant(tbdd, TransferBDDUtils.interpolate(tbdd, C.getBDD(), D.getBDD(), 64).get());
+        new Invariant(
+            tbdd, TransferBDDUtils.interpolate(tbdd, C.getBDDCopy(), D.getBDDCopy(), 64).get());
     Invariant CD_expected =
         Invariant.builder()
             .addClause(
@@ -782,6 +785,6 @@ public class InvariantTest {
                     .avoidPrefix(
                         new PrefixSpace(PrefixRange.fromPrefix(Prefix.parse("2.4.8.0/24")))))
             .build(tbdd, exports.get(ALPHANODE));
-    assertEquals(CD_expected.getBDD(), CD_interpolant.getBDD());
+    assertEquals(CD_expected.getBDDCopy(), CD_interpolant.getBDDCopy());
   }
 }

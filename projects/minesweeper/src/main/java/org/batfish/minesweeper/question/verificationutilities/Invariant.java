@@ -446,23 +446,22 @@ public class Invariant {
         .setCommunities(firstNonNull(comms, new RegexConstraints()));
   }
 
-  /// Returns a copy of the BDD
   public BDD getBDD() {
-    return bdd.id();
+    return bdd;
   }
 
-  public BDD peakAtBDD() {
-    return bdd;
+  public BDD getBDDCopy() {
+    return bdd.id();
   }
 
   /// Returns true if the invariant is false
   public boolean isFalse() {
-    return this.getBDD().isZero();
+    return this.bdd.isZero();
   }
 
   /// Returns true if the invariant is true (for any well-formed route)
   public boolean isTrue() {
-    return this.getBDD().isOne();
+    return this.bdd.isOne();
   }
 
   public Invariant copy() {
@@ -563,7 +562,7 @@ public class Invariant {
    * @return true if implies provided invariant
    */
   public boolean implies(Invariant post) {
-    return (!this.getBDD().diffSat(post.getBDD()));
+    return (!this.bdd.diffSat(post.getBDD()));
   }
 
   /**
@@ -612,7 +611,7 @@ public class Invariant {
   @Override
   public boolean equals(Object obj) {
     if (obj != null && obj.getClass() == this.getClass()) {
-      return this.getBDD().equals(((Invariant) obj).getBDD());
+      return this.bdd.equals(((Invariant) obj).bdd);
     } else {
       return false;
     }

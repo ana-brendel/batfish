@@ -68,7 +68,8 @@ public class InterferenceCheck {
         Invariant existing = inferred.getOrDefault(src, Invariant.getFalse(context.tbdd()));
         // TODO verify that disjoining here is the correct move - we want to consider any "bad
         // route"
-        Invariant updated = new Invariant(context.tbdd(), existing.getBDD().or(wp.getBDD()));
+        Invariant updated =
+            new Invariant(context.tbdd(), existing.getBDDCopy().or(wp.getBDDCopy()));
         inferred.put(src, updated);
         if (!existing.equals(updated) && !working.contains(src)) {
           working.add(src);
@@ -81,7 +82,8 @@ public class InterferenceCheck {
                   ? property.copy()
                   : property.weakestPrecondition(importPolicy, false);
           Invariant existing = inferred.getOrDefault(edge, Invariant.getFalse(context.tbdd()));
-          Invariant updated = new Invariant(context.tbdd(), existing.getBDD().or(wp.getBDD()));
+          Invariant updated =
+              new Invariant(context.tbdd(), existing.getBDDCopy().or(wp.getBDDCopy()));
           inferred.put(edge, updated);
           if (!existing.equals(updated) && !working.contains(edge)) {
             working.add(edge);
@@ -96,8 +98,8 @@ public class InterferenceCheck {
     Map<Location, Bgpv4Route> checks = new HashMap<>();
     for (Location assumption_location : context.assumptions().keySet()) {
       if (inferred.containsKey(assumption_location)) {
-        BDD assumption = context.assumptions().get(assumption_location).getBDD();
-        BDD badRouteCondition = inferred.get(assumption_location).getBDD();
+        BDD assumption = context.assumptions().get(assumption_location).getBDDCopy();
+        BDD badRouteCondition = inferred.get(assumption_location).getBDDCopy();
         BDD intersection = assumption.andWith(badRouteCondition);
         if (!intersection.isZero()) {
           // if the intersection is not empty, then routes meeting this condition at this location
@@ -127,7 +129,7 @@ public class InterferenceCheck {
     working.clear();
     Invariant condition =
         new Invariant(
-            context.tbdd(), target.negate().getBDD().and(context.prefixSpaceToBDD(prefix)));
+            context.tbdd(), target.negate().getBDDCopy().and(context.prefixSpaceToBDD(prefix)));
     if (condition.isFalse()) {
       // no possible "bad route" exists that matches the target prefix
       return Optional.empty();

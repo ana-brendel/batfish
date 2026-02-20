@@ -1,0 +1,72 @@
+{
+  "class": "org.batfish.minesweeper.question.liveness.LivenessQuestion",
+  "differential": false,
+  "prefix": "${prefix}",
+  "target": "${target}",
+  "location": "${location}",
+  "assumption_locations": "${assumption_locations}",
+  "assumptions": "${assumptions}",
+  "default_assumption": "${default_assumption}",
+  "ingress": "${ingress}",
+  "instance": {
+    "description": "...",
+    "instanceName": "liveness",
+    "longDescription": "This question...",
+    "orderedVariableNames": [
+      "prefix",
+      "target",
+      "location",
+      "assumption_locations",
+      "assumptions",
+      "default_assumption",
+      "ingress"
+    ],
+    "tags": [
+      "routing"
+    ],
+    "variables": {
+      "prefix": {
+        "description": "Consider routes for this prefix",
+        "type": "string",
+        "optional": true,
+        "displayName": "Prefix for Liveness Property"
+      },
+      "target": {
+        "description": "Liveness property to verify",
+        "type": "string",
+        "optional": true,
+        "displayName": "Target Property"
+      },
+      "location": {
+        "description": "Location to verify property at within network",
+        "type": "string",
+        "optional": true,
+        "displayName": "Location"
+      },
+      "assumption_locations": {
+        "description": "Locations where you make assumption about traffic",
+        "type": "string",
+        "optional": true,
+        "displayName": "Locations for Assumptions"
+      },
+      "assumptions": {
+        "description": "Assumptions made about traffic, should be one-to-one with assumption_locations",
+        "type": "string",
+        "optional": true,
+        "displayName": "Assumptions"
+      },
+      "default_assumption": {
+        "description": "Default assumption on incoming edges, if not specified",
+        "type": "string",
+        "optional": true,
+        "displayName": "Default Incoming Assumptions"
+      },
+      "ingress": {
+        "description": "Optional starting point for incoming traffic",
+        "type": "string",
+        "optional": true,
+        "displayName": "Ingress Node for Good Traffic"
+      }
+    }
+  }
+}

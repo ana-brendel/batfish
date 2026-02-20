@@ -4,6 +4,7 @@ import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableSortedMap;
 import org.batfish.datamodel.BgpActivePeerConfig;
 import org.batfish.datamodel.Configuration;
+import org.batfish.datamodel.PrefixSpace;
 import org.batfish.datamodel.bgp.Ipv4UnicastAddressFamily;
 import org.batfish.datamodel.bgp.community.StandardCommunity;
 import org.batfish.datamodel.routing_policy.RoutingPolicy;
@@ -75,6 +76,15 @@ public class TestConfigConstructionUtils {
 
     public NetworkInfo getInfo() {
       return new NetworkInfo(this.tbdd(), configInput());
+    }
+
+    public NetworkInfo getInfo(PrefixSpace prefix) {
+      return new NetworkInfo(
+          this.tbdd(),
+          configInput(),
+          Invariant.builder()
+              .addClause(Invariant.clauseBuilder().matchPrefix(prefix))
+              .build(tbdd, null));
     }
   }
 

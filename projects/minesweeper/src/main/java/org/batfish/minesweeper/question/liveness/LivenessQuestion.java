@@ -3,6 +3,7 @@ package org.batfish.minesweeper.question.liveness;
 import com.fasterxml.jackson.annotation.JsonCreator;
 import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.fasterxml.jackson.annotation.JsonProperty;
+import org.apache.commons.lang3.tuple.Pair;
 import org.batfish.datamodel.PrefixRange;
 import org.batfish.datamodel.PrefixSpace;
 import org.batfish.datamodel.questions.Question;
@@ -18,53 +19,56 @@ import java.util.Optional;
 
 @ParametersAreNonnullByDefault
 public final class LivenessQuestion extends Question {
-  private static final PrefixSpace DEFAULT_PREFIX =
-      new PrefixSpace(PrefixRange.fromString("10.0.0.0/8"));
+  private static final PrefixRange DEFAULT_PREFIX = PrefixRange.fromString("10.0.0.0/8");
 
   private static final String PROP_PREFIX = "prefix";
   private static final String PROP_PROPERTY = "target";
   private static final String PROP_LOCATION = "location";
   private static final String PROP_ASSUMPTION_LOCATIONS = "assumption_locations";
   private static final String PROP_ASSUMPTIONS = "assumptions";
-  private static final String PROP_SHOW_ALL = "show_all";
+  private static final String PROP_DEFAULT_ASSUMPTION = "default_assumption";
+  private static final String PROP_INGRESS = "ingress";
 
   private final @Nonnull PrefixSpace _prefix;
-  private final @Nonnull Map<Location.Builder, Invariant.Builder> _targets = new HashMap<>();
+  private final @Nonnull Map<Location.Builder, Invariant.Builder> _target = new HashMap<>();
   private final Location.Builders _assumption_locations;
   private final Invariant.Builders _assumptions;
-  private final boolean _showAll;
+  private final Invariant.Builder _default_assumption;
+  private final Location.Builder _ingress;
 
   public LivenessQuestion() {
-    this(DEFAULT_PREFIX, null, null, null, null, false);
+    this(DEFAULT_PREFIX, null, null, null, null, null, null);
   }
 
   private LivenessQuestion(
-      PrefixSpace prefix,
+      @Nullable PrefixRange prefix,
       @Nullable Invariant.Builder target,
       @Nullable Location.Builder location,
       @Nullable Location.Builders assumptions_locations,
       @Nullable Invariant.Builders assumptions,
-      boolean showAll) {
+      @Nullable Invariant.Builder default_assumption,
+      @Nullable Location.Builder ingress) {
     if (target != null && location != null) {
-      _targets.put(location, target);
+      _target.put(location, target);
     }
-    _prefix = prefix;
+    _prefix = prefix == null ? new PrefixSpace() : new PrefixSpace(prefix);
     _assumption_locations = assumptions_locations;
     _assumptions = assumptions;
-    _showAll = showAll;
+    _default_assumption = default_assumption;
+    _ingress = ingress;
   }
 
   @JsonCreator
   private static LivenessQuestion jsonCreator(
-      @JsonProperty(PROP_PREFIX) PrefixSpace prefix,
+      @JsonProperty(PROP_PREFIX) PrefixRange prefix,
       @JsonProperty(PROP_PROPERTY) Invariant.Builder target,
       @JsonProperty(PROP_LOCATION) Location.Builder location,
       @JsonProperty(PROP_ASSUMPTION_LOCATIONS) @Nullable Location.Builders assumption_locations,
       @JsonProperty(PROP_ASSUMPTIONS) @Nullable Invariant.Builders assumptions,
-      @JsonProperty(PROP_SHOW_ALL) @Nullable Boolean showAll) {
-    // default for display is false (as it is not efficient)
+      @JsonProperty(PROP_DEFAULT_ASSUMPTION) Invariant.Builder default_assumption,
+      @JsonProperty(PROP_INGRESS) Location.Builder ingress) {
     return new LivenessQuestion(
-        prefix, target, location, assumption_locations, assumptions, showAll != null && showAll);
+        prefix, target, location, assumption_locations, assumptions, default_assumption, ingress);
   }
 
   @Nonnull
@@ -72,13 +76,12 @@ public final class LivenessQuestion extends Question {
     return _prefix;
   }
 
-  @Nonnull
-  public Map<Location.Builder, Invariant.Builder> get_targets() {
-    return _targets;
-  }
-
-  public boolean get_show_all() {
-    return _showAll;
+  @Nullable
+  public Pair<Location.Builder, Invariant.Builder> get_target() {
+    return _target.entrySet().stream()
+        .findFirst()
+        .map(e -> Pair.of(e.getKey(), e.getValue()))
+        .orElse(null);
   }
 
   @Nonnull
@@ -89,6 +92,16 @@ public final class LivenessQuestion extends Question {
   @Nonnull
   public Optional<Invariant.Builders> get_assumptions() {
     return _assumptions == null ? Optional.empty() : Optional.of(_assumptions);
+  }
+
+  @Nullable
+  public Invariant.Builder get_default_assumption() {
+    return _default_assumption;
+  }
+
+  @Nullable
+  public Location.Builder get_ingress() {
+    return _ingress;
   }
 
   @JsonIgnore

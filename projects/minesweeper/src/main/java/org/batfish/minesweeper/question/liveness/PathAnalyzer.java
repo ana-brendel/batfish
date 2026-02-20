@@ -1,5 +1,6 @@
 package org.batfish.minesweeper.question.liveness;
 
+import org.apache.commons.lang3.tuple.Pair;
 import org.batfish.common.BatfishException;
 import org.batfish.datamodel.Ip;
 import org.batfish.datamodel.PrefixSpace;
@@ -44,7 +45,8 @@ public class PathAnalyzer {
 
   /// Based on potential paths provided, see if there is at least one which satisfies the liveness
   // property (is a good path)
-  private Optional<Path> generateGoodPaths(@Nonnull List<Path.Builder> potentialPaths) {
+  private Pair<Optional<Path>, Set<Path>> generateGoodPaths(
+      @Nonnull List<Path.Builder> potentialPaths, Edge ingress) {
     if (prefix.isEmpty()) {
       throw new BatfishException(
           "PathAnalyzer.generateGoodPaths() - Prefix space is empty, cannot perform liveness analysis.");
@@ -54,16 +56,23 @@ public class PathAnalyzer {
 
     if (condition.isFalse()) {
       // no possible route exists that matches the prefix and target property
-      return Optional.empty();
+      return Pair.of(Optional.empty(), Set.of());
     }
 
+    Set<Path> badPaths = new HashSet<>();
     for (Path.Builder builder : potentialPaths) {
-      Path path = builder.build(location, condition);
-      if (path != null && path.isGoodPath().isPresent()) {
-        return Optional.of(path);
+      // if there is an ingress node provided, we only want to try paths which start from there
+      if (ingress == null || builder.previous().map(ingress::equals).orElse(false)) {
+        Path path = builder.build(location, condition, this.prefix);
+        if (path != null && path.isGoodPath()) {
+          return Pair.of(Optional.of(path), Set.of());
+        } else if (path != null && badPaths.size() < 5) {
+          // only keep up to the 5 shortest possible paths to report
+          badPaths.add(path);
+        }
       }
     }
-    return Optional.empty();
+    return Pair.of(Optional.empty(), badPaths);
   }
 
   /// Returns set of possible paths from ingress node to the target properties location
@@ -105,12 +114,14 @@ public class PathAnalyzer {
   }
 
   /// Returns (if it exists) a good path that satisfies the liveness property in question. Note,
-  // this is a Path
-  /// object so the necessary invariants have been inferred, and we've checked that the ingress
-  // assumptions satisfies the
-  /// inferred ingress invariant.
-  public Optional<Path> run() {
+  /// this is a Path object so the necessary invariants have been inferred, and we've checked that
+  /// the ingress assumptions satisfies the inferred ingress invariant.
+  public Pair<Optional<Path>, Set<Path>> run() {
+    return this.run(null);
+  }
+
+  public Pair<Optional<Path>, Set<Path>> run(Edge ingress) {
     List<Path.Builder> potentialPaths = this.generatePathBuilders();
-    return this.generateGoodPaths(potentialPaths);
+    return this.generateGoodPaths(potentialPaths, ingress);
   }
 }

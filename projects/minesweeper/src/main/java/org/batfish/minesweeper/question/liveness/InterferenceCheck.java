@@ -5,7 +5,6 @@ import org.batfish.datamodel.Bgpv4Route;
 import org.batfish.datamodel.Ip;
 import org.batfish.datamodel.PrefixSpace;
 import org.batfish.datamodel.routing_policy.RoutingPolicy;
-import org.batfish.minesweeper.bdd.ModelGeneration;
 import org.batfish.minesweeper.question.verificationutilities.Edge;
 import org.batfish.minesweeper.question.verificationutilities.Invariant;
 import org.batfish.minesweeper.question.verificationutilities.Location;
@@ -18,6 +17,8 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.Queue;
 import java.util.Set;
+
+import static org.batfish.minesweeper.question.verificationutilities.NetworkInfo.getRouteExample;
 
 public class InterferenceCheck {
   private final Path.Context context;
@@ -66,8 +67,6 @@ public class InterferenceCheck {
                 : property.weakestPrecondition(exportPolicy, false);
         Node src = nodes.get(edge.getSrc());
         Invariant existing = inferred.getOrDefault(src, Invariant.getFalse(context.tbdd()));
-        // TODO verify that disjoining here is the correct move - we want to consider any "bad
-        // route"
         Invariant updated = new Invariant(context.tbdd(), existing.getBDD().or(wp.getBDD()));
         inferred.put(src, updated);
         if (!existing.equals(updated) && !working.contains(src)) {
@@ -97,21 +96,10 @@ public class InterferenceCheck {
     for (Location assumption_location : context.assumptions().keySet()) {
       if (inferred.containsKey(assumption_location)) {
         BDD assumption = context.assumptions().get(assumption_location).getBDD();
-        BDD badRouteCondition = inferred.get(assumption_location).getBDD();
-        BDD intersection = assumption.andWith(badRouteCondition);
-        if (!intersection.isZero()) {
-          // if the intersection is not empty, then routes meeting this condition at this location
-          // might cause interference
-          BDD model =
-              ModelGeneration.constraintsToModel(
-                  intersection.andWith(
-                      context.tbdd().getOriginalRoute().wellFormednessConstraints(true)),
-                  context.tbdd().getConfigAtomicPredicates());
-          Bgpv4Route counter =
-              ModelGeneration.satAssignmentToBgpInputRoute(
-                  model, context.tbdd().getConfigAtomicPredicates());
-          checks.put(assumption_location, counter);
-        }
+        BDD intersection = assumption.andWith(inferred.get(assumption_location).getBDD());
+        getRouteExample(context.tbdd(), intersection)
+            .ifPresent(cex -> checks.put(assumption_location, cex));
+        assumption.free();
       }
       // In the else branch, we didn't infer an incoming invariant, thus no route is possible so we
       // are good
@@ -120,8 +108,7 @@ public class InterferenceCheck {
   }
 
   /// Checks for interference, if any counterexamples were found they are returned. (If the result
-  // is
-  /// empty, then this is interpreted as no interference detected.)
+  /// is empty, then this is interpreted as no interference detected.)
   public Optional<Map<Location, Bgpv4Route>> run() {
     inferred.clear();
     working.clear();

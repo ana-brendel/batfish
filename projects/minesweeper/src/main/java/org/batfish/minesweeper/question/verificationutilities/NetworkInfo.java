@@ -1,6 +1,8 @@
 package org.batfish.minesweeper.question.verificationutilities;
 
+import net.sf.javabdd.BDD;
 import org.batfish.datamodel.BgpProcess;
+import org.batfish.datamodel.Bgpv4Route;
 import org.batfish.datamodel.Configuration;
 import org.batfish.datamodel.Ip;
 import org.batfish.datamodel.PrefixSpace;
@@ -9,6 +11,7 @@ import org.batfish.datamodel.bgp.Ipv4UnicastAddressFamily;
 import org.batfish.datamodel.routing_policy.RoutingPolicy;
 import org.batfish.datamodel.table.Row;
 import org.batfish.datamodel.table.TableAnswerElement;
+import org.batfish.minesweeper.bdd.ModelGeneration;
 import org.batfish.minesweeper.bdd.TransferBDD;
 import org.batfish.minesweeper.question.liveness.InterferenceCheck;
 import org.batfish.minesweeper.question.liveness.Path;
@@ -33,6 +36,7 @@ import static org.batfish.minesweeper.question.verificationutilities.Setup.metad
 
 public class NetworkInfo {
   public final TransferBDD tbdd;
+  public final Invariant defaultIncoming;
 
   private final Map<Ip, Node> nodes = new HashMap<>();
   private final Set<Location> locations = new HashSet<>();
@@ -113,6 +117,7 @@ public class NetworkInfo {
       @Nonnull Map<String, Configuration> configs,
       @Nonnull Invariant defaultIncoming) {
     this.tbdd = tbdd;
+    this.defaultIncoming = defaultIncoming;
     processConfigs(configs);
     // default assumption of True for incoming edges
     for (Location location : locations) {
@@ -232,7 +237,8 @@ public class NetworkInfo {
   /// verification
   public Infer toInfer() {
     Path.Context context =
-        new Path.Context(this.tbdd, this.assumptions, this.imports, this.exports);
+        new Path.Context(
+            this.tbdd, this.assumptions, this.imports, this.exports, this.defaultIncoming);
     return new Infer(context, this.nodes, this.getEdgesByDestination());
   }
 
@@ -240,7 +246,8 @@ public class NetworkInfo {
   /// of the provided liveness property (pertaining to the provided prefix space)
   public PathAnalyzer toPathAnalyzer(PrefixSpace prefix, Location location, Invariant target) {
     Path.Context context =
-        new Path.Context(this.tbdd, this.assumptions, this.imports, this.exports);
+        new Path.Context(
+            this.tbdd, this.assumptions, this.imports, this.exports, this.defaultIncoming);
     return new PathAnalyzer(
         context, prefix, location, target, this.nodes, this.getEdgesByDestination());
   }
@@ -250,7 +257,8 @@ public class NetworkInfo {
   public InterferenceCheck toInterferenceCheck(
       PrefixSpace prefix, Location location, Invariant target) {
     Path.Context context =
-        new Path.Context(this.tbdd, this.assumptions, this.imports, this.exports);
+        new Path.Context(
+            this.tbdd, this.assumptions, this.imports, this.exports, this.defaultIncoming);
     return new InterferenceCheck(
         context, prefix, location, target, this.nodes, this.getEdgesByDestination());
   }
@@ -292,6 +300,21 @@ public class NetworkInfo {
                         .put(Setup.NEIGHBORS_COL, nodeNameToEdges.get(node))
                         .build()));
     return tae;
+  }
+
+  public static Optional<Bgpv4Route> getRouteExample(TransferBDD tbdd, BDD constraint) {
+    if (!constraint.isZero()) {
+      // if the intersection is not empty, then routes meeting this condition at this location
+      // might cause interference
+      BDD model =
+          ModelGeneration.constraintsToModel(
+              constraint.andWith(tbdd.getOriginalRoute().wellFormednessConstraints(true)),
+              tbdd.getConfigAtomicPredicates());
+      return Optional.of(
+          ModelGeneration.satAssignmentToBgpInputRoute(model, tbdd.getConfigAtomicPredicates()));
+    } else {
+      return Optional.empty();
+    }
   }
 
   // CODE BELOW FOR DEBUGGING PURPOSES

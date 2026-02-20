@@ -145,12 +145,20 @@ public class Setup {
     return "Bgpv4Route{" + String.join(", ", features.build()) + "}";
   }
 
-  // columns for displaying results
+  // columns for displaying safety results
   public static final String LOCATION_RELEVANCE_COL = "Location_Relevance";
   public static final String PROVIDED_INVARIANT_COL = "Provided_Invariant";
   public static final String LOCATIONS_COL = "Network_Locations";
   public static final String INFERRED_INVARIANTS_COL = "Inferred_Invariant";
   public static final String COUNTEREXAMPLE_COL = "Counterexample";
+
+  // columns for displaying liveness results
+  public static final String RESULT_LABEL_COL = "Result_Label";
+  public static final String RESULT_VALUE_COL = "Result";
+  public static final String OVERALL_RESULT = "Liveness Property Verified?";
+  public static final String GOOD_PATH_LABEL = "Good Path";
+  public static final String BAD_PATH_LABEL = "Incomplete Path";
+  public static final String SOURCE_OF_INTERFERENCE = "Potential Interference from ";
 
   // columns for just displaying the locations
   public static final String NODES_COL = "Nodes_in_Network";
@@ -167,6 +175,14 @@ public class Setup {
             new ColumnMetadata(INFERRED_INVARIANTS_COL, STRING, "InDev", true, false),
             new ColumnMetadata(COUNTEREXAMPLE_COL, STRING, "InDev", true, false));
     return new TableMetadata(columnMetadata, "Invariant Inference and Verification Results");
+  }
+
+  public static TableMetadata metadata_liveness() {
+    List<ColumnMetadata> columnMetadata =
+        ImmutableList.of(
+            new ColumnMetadata(RESULT_LABEL_COL, STRING, "InDev", true, false),
+            new ColumnMetadata(RESULT_VALUE_COL, STRING, "InDev", true, false));
+    return new TableMetadata(columnMetadata, "Liveness Verification Results");
   }
 
   /// TableMetadata for displaying just the locations within the network

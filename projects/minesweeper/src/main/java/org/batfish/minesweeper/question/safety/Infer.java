@@ -150,14 +150,15 @@ public class Infer {
         boolean firstVisit = !inferred.containsKey(src);
         Invariant existing = inferred.getOrDefault(src, new Invariant(tbdd));
         Invariant updated = strongestCommonImplicant(existing, wp);
+        wp.free();
         inferred.put(src, updated);
         if (updated.isFalse()) {
-          return Optional.of(new CounterExample(src.copy(), property.copy(), location.copy()));
+          existing.free();
+          return Optional.of(new CounterExample(src, property, location));
         } else if ((firstVisit || !existing.equals(updated)) && !working.contains(src)) {
+          existing.free();
           working.add(src);
         }
-        wp.free();
-        existing.free();
       } else if (location instanceof Node node) {
         for (Location l : edgesByDestination.get(node)) {
           if (l instanceof Edge edge && edge.isDst(node)) {
@@ -167,14 +168,15 @@ public class Infer {
             boolean firstVisit = !inferred.containsKey(edge);
             Invariant existing = inferred.getOrDefault(edge, new Invariant(tbdd));
             Invariant updated = strongestCommonImplicant(existing, wp);
+            wp.free();
             inferred.put(edge, updated);
             if (updated.isFalse()) {
-              return Optional.of(new CounterExample(edge.copy(), property.copy(), location.copy()));
+              existing.free();
+              return Optional.of(new CounterExample(edge, property, location));
             } else if ((firstVisit || !existing.equals(updated)) && !working.contains(edge)) {
+              existing.free();
               working.add(edge);
             }
-            wp.free();
-            existing.free();
           }
         }
       }
@@ -196,7 +198,7 @@ public class Infer {
       } else {
         BDD constraint =
             assumption
-                .getBDD()
+                .getBDDCopy()
                 .andWith(infer.getBDD().not())
                 .andWith(tbdd.getOriginalRoute().wellFormednessConstraints(true));
         assert !constraint.isZero();
@@ -261,10 +263,6 @@ public class Infer {
 
   /// Deep copies invariants inferred
   public static Map<Location, Invariant> copyInferred(Map<Location, Invariant> base) {
-    Map<Location, Invariant> result = new HashMap<>();
-    for (Location location : base.keySet()) {
-      result.put(location.copy(), base.get(location).copy());
-    }
-    return result;
+    return new HashMap<>(base);
   }
 }

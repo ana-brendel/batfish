@@ -67,7 +67,10 @@ public class InterferenceCheck {
                 : property.weakestPrecondition(exportPolicy, false);
         Node src = nodes.get(edge.getSrc());
         Invariant existing = inferred.getOrDefault(src, Invariant.getFalse(context.tbdd()));
-        Invariant updated = new Invariant(context.tbdd(), existing.getBDD().or(wp.getBDD()));
+        // TODO verify that disjoining here is the correct move - we want to consider any "bad
+        // route"
+        Invariant updated =
+            new Invariant(context.tbdd(), existing.getBDDCopy().or(wp.getBDDCopy()));
         inferred.put(src, updated);
         if (!existing.equals(updated) && !working.contains(src)) {
           working.add(src);
@@ -80,7 +83,8 @@ public class InterferenceCheck {
                   ? property.copy()
                   : property.weakestPrecondition(importPolicy, false);
           Invariant existing = inferred.getOrDefault(edge, Invariant.getFalse(context.tbdd()));
-          Invariant updated = new Invariant(context.tbdd(), existing.getBDD().or(wp.getBDD()));
+          Invariant updated =
+              new Invariant(context.tbdd(), existing.getBDDCopy().or(wp.getBDDCopy()));
           inferred.put(edge, updated);
           if (!existing.equals(updated) && !working.contains(edge)) {
             working.add(edge);
@@ -95,8 +99,8 @@ public class InterferenceCheck {
     Map<Location, Bgpv4Route> checks = new HashMap<>();
     for (Location assumption_location : context.assumptions().keySet()) {
       if (inferred.containsKey(assumption_location)) {
-        BDD assumption = context.assumptions().get(assumption_location).getBDD();
-        BDD intersection = assumption.andWith(inferred.get(assumption_location).getBDD());
+        BDD assumption = context.assumptions().get(assumption_location).getBDDCopy();
+        BDD intersection = assumption.andWith(inferred.get(assumption_location).getBDDCopy());
         getRouteExample(context.tbdd(), intersection)
             .ifPresent(cex -> checks.put(assumption_location, cex));
         assumption.free();
@@ -114,7 +118,7 @@ public class InterferenceCheck {
     working.clear();
     Invariant condition =
         new Invariant(
-            context.tbdd(), target.negate().getBDD().and(context.prefixSpaceToBDD(prefix)));
+            context.tbdd(), target.negate().getBDDCopy().and(context.prefixSpaceToBDD(prefix)));
     if (condition.isFalse()) {
       // no possible "bad route" exists that matches the target prefix
       return Optional.empty();

@@ -595,7 +595,7 @@ public class Invariant {
       TransferBDD.Context context = TransferBDD.Context.forPolicy(policy);
       List<TransferReturn> paths;
       try {
-        paths = tbdd.computePaths(policy.getStatements(), context, true);
+        paths = tbdd.computePaths(policy.getStatements(), context, false);
       } catch (Exception e) {
         String name =
             policy.getOwner() != null ? policy.getOwner().getHostname() : "policy owner null";
@@ -635,7 +635,7 @@ public class Invariant {
     TransferBDD.Context context = TransferBDD.Context.forPolicy(policy);
     List<TransferReturn> paths;
     try {
-      paths = tbdd.computePaths(policy.getStatements(), context, true);
+      paths = tbdd.computePaths(policy.getStatements(), context, false);
     } catch (Exception e) {
       String name =
           policy.getOwner() != null ? policy.getOwner().getHostname() : "policy owner null";

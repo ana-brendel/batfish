@@ -157,7 +157,7 @@ public class Setup {
   public static final String RESULT_VALUE_COL = "Result";
   public static final String OVERALL_RESULT = "Liveness Property Verified?";
   public static final String GOOD_PATH_LABEL = "Good Path";
-  public static final String BAD_PATH_LABEL = "Incomplete Path";
+  public static final String BAD_PATH_LABEL = "Failed Path";
   public static final String SOURCE_OF_INTERFERENCE = "Potential Interference from ";
 
   // columns for just displaying the locations

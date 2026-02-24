@@ -135,7 +135,7 @@ public class Path {
     assert properties.length - 1 == steps.length - 1;
     BDD currentAssumption = info.getAssumptions().get(steps[steps.length - 1]).getBDD();
     currentAssumption.andWith(context.prefixSpaceToBDD(this.prefix));
-    BDD counterBDD = currentAssumption.diffWith(properties[properties.length - 1].getBDD());
+    BDD counterBDD = currentAssumption.diffEq(properties[properties.length - 1].getBDD());
     String cex =
         getRouteExample(info.tbdd, counterBDD)
             .map(Setup::nonDefaultRoute)

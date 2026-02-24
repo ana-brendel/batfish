@@ -75,6 +75,8 @@ public class InterferenceCheck {
         if (!existing.equals(updated) && !working.contains(src)) {
           working.add(src);
         }
+        existing.free(); // can be freed because the updated invariant has replaced
+        wp.free();
       } else if (location instanceof Node node) {
         for (Edge edge : edgesByDestination.get(node)) {
           RoutingPolicy importPolicy = context.imports().get(edge);
@@ -89,6 +91,8 @@ public class InterferenceCheck {
           if (!existing.equals(updated) && !working.contains(edge)) {
             working.add(edge);
           }
+          existing.free(); // can be freed because the updated invariant has replaced
+          wp.free();
         }
       }
     }

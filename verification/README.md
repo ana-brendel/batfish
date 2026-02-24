@@ -27,8 +27,8 @@ This command will not terminate, but it will start the Batfish process so that t
 
 _**To run the provided examples, look at the jupyter notebook in this directory titled (VerificationExamples.ipynb).**_
 
-The jupyter notebook (`VerificationExamples.ipynb`) contains descriptions for the API and examples of how it should be used.
+The jupyter notebooks (`SafetyExamples.ipynb` and `LivenessExamples.ipynb`) contain descriptions for the API and examples of how it should be used. These notebooks include how to make safety property verification queries and liveness property verification queries respectively.
 
 ## Running Your Own Network Verification
 
-There is a separate jupyter notebook (`VerificationPlayground.ipynb`) so that you can try verification your own networks once you've worked through the examples and have an understanding of the API. You can also use the `VerificationExamples.ipynb`, but this additional notebook is included if you want to keep things separate.
+There is a separate jupyter notebook (`VerificationPlayground.ipynb`) so that you can try verification your own networks once you've worked through the examples and have an understanding of the API - this notebook just includes the needed and relevant imports. You can also use either of the other notebooks, but this additional notebook is included if you want to keep things separate.

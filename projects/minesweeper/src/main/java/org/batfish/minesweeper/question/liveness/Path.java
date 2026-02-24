@@ -82,6 +82,14 @@ public class Path {
         ctx.tbdd(), ctx.imports(), ctx.exports(), ctx.assumptions(), ctx.default_assumption());
   }
 
+  public void freeBDDs() {
+    for (Invariant inv : this.properties) {
+      if (inv != null) {
+        inv.free();
+      }
+    }
+  }
+
   /// Returns this path if the incoming assumption satisfies the needed incoming invariant
   public boolean isGoodPath() {
     BDD initialAssumption =
@@ -91,11 +99,9 @@ public class Path {
                 context
                     .assumptions()
                     .getOrDefault(steps[steps.length - 1], context.default_assumption())
-                    .getBDD());
-    boolean good =
-        properties[properties.length - 1].impliedBy(new Invariant(context.tbdd, initialAssumption));
-    initialAssumption.free();
-    return good;
+                    .getBDDCopy());
+    Invariant initial = new Invariant(context.tbdd, initialAssumption);
+    return !initial.isFalse() && properties[properties.length - 1].impliedBy(initial);
   }
 
   /// Displays the path as a string
@@ -111,7 +117,7 @@ public class Path {
     return builder.toString();
   }
 
-  /// Displays the "bad" path as a string
+  /// Displays the "bad" path as a string - assumes the path is a "bad path"
   public String displayBadPath(NetworkInfo info) {
     StringBuilder builder = new StringBuilder();
     assert steps.length == properties.length;
@@ -224,8 +230,12 @@ public class Path {
         steps.clear();
         return false;
       } else if (next instanceof Edge incomingToPrevious && previous instanceof Node previousNode) {
-        // previous location is a node, so the next location should be the edge going into it
-        if (incomingToPrevious.isDst(previousNode)) {
+        // previous location is a node, so the next location should be the edge going into it,
+        // we also want to check that this edge doesn't loop back over the edge that came before
+        if (incomingToPrevious.isDst(previousNode)
+            && this.lastEdge()
+                .map(lastEdge -> !lastEdge.flipEdge().equals(incomingToPrevious))
+                .orElse(true)) {
           steps.push(next.copy());
           return true;
         } // otherwise falls through to false
@@ -313,9 +323,20 @@ public class Path {
       }
     }
 
-    /// Returns the previous step in path, if not empty. This is the start of the path.
+    /// Returns the previous step in path, if not empty. When a path is done, this will get you the
+    /// start of the path which leads to the start location/property
     public Optional<Location> previous() {
       return steps.isEmpty() ? Optional.empty() : Optional.of(steps.peek().copy());
+    }
+
+    /// Returns the previous step before the last step in path, if not empty. This is used to check
+    /// we don't go back over an edge that we just came from
+    public Optional<Edge> lastEdge() {
+      if (steps.size() >= 2 && steps.elementAt(steps.size() - 2).copy() instanceof Edge e) {
+        return Optional.of(e);
+      } else {
+        return Optional.empty();
+      }
     }
 
     @Override

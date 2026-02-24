@@ -45,7 +45,7 @@ public class PathAnalyzer {
 
   /// Based on potential paths provided, see if there is at least one which satisfies the liveness
   // property (is a good path)
-  private Pair<Optional<Path>, Set<Path>> generateGoodPaths(
+  private Pair<Optional<Path>, List<Path>> generateGoodPaths(
       @Nonnull List<Path.Builder> potentialPaths, Edge ingress) {
     if (prefix.isEmpty()) {
       throw new BatfishException(
@@ -56,19 +56,24 @@ public class PathAnalyzer {
 
     if (condition.isFalse()) {
       // no possible route exists that matches the prefix and target property
-      return Pair.of(Optional.empty(), Set.of());
+      return Pair.of(Optional.empty(), List.of());
     }
 
-    Set<Path> badPaths = new HashSet<>();
+    List<Path> badPaths = new LinkedList<>();
     for (Path.Builder builder : potentialPaths) {
       // if there is an ingress node provided, we only want to try paths which start from there
       if (ingress == null || builder.previous().map(ingress::equals).orElse(false)) {
-        Path path = builder.build(location, condition, this.prefix);
+        Path path = builder.build(location, condition.copy(), this.prefix);
         if (path != null && path.isGoodPath()) {
-          return Pair.of(Optional.of(path), Set.of());
+          // can free the BDDs in the bad paths
+          badPaths.forEach(Path::freeBDDs);
+          return Pair.of(Optional.of(path), List.of());
         } else if (path != null && badPaths.size() < 5) {
           // only keep up to the 5 shortest possible paths to report
           badPaths.add(path);
+        } else if (path != null) {
+          // can free the BDDs in any leftover bad paths
+          path.freeBDDs();
         }
       }
     }
@@ -116,11 +121,11 @@ public class PathAnalyzer {
   /// Returns (if it exists) a good path that satisfies the liveness property in question. Note,
   /// this is a Path object so the necessary invariants have been inferred, and we've checked that
   /// the ingress assumptions satisfies the inferred ingress invariant.
-  public Pair<Optional<Path>, Set<Path>> run() {
+  public Pair<Optional<Path>, List<Path>> run() {
     return this.run(null);
   }
 
-  public Pair<Optional<Path>, Set<Path>> run(Edge ingress) {
+  public Pair<Optional<Path>, List<Path>> run(Edge ingress) {
     List<Path.Builder> potentialPaths = this.generatePathBuilders();
     return this.generateGoodPaths(potentialPaths, ingress);
   }

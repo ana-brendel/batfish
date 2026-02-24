@@ -84,7 +84,7 @@ public class LivenessAnswerer extends Answerer {
 
   public record Result(
       Optional<Path> goodPath,
-      Set<Path> badPaths,
+      List<Path> badPaths,
       Optional<Map<Location, Bgpv4Route>> potentialInterferences) {
     public TableAnswerElement getAnswerElement(NetworkInfo info) {
       TableAnswerElement tae = new TableAnswerElement(metadata_liveness());
@@ -153,11 +153,11 @@ public class LivenessAnswerer extends Answerer {
     PathAnalyzer analyzer = info.toPathAnalyzer(prefix, location, target);
     InterferenceCheck interferenceCheck = info.toInterferenceCheck(prefix, location, target);
 
-    Pair<Optional<Path>, Set<Path>> paths =
+    Pair<Optional<Path>, List<Path>> paths =
         ingress == null ? analyzer.run() : analyzer.run(ingress);
 
     return paths.getLeft().isPresent()
-        ? new Result(paths.getLeft(), Set.of(), interferenceCheck.run())
+        ? new Result(paths.getLeft(), List.of(), interferenceCheck.run())
         : new Result(Optional.empty(), paths.getRight(), Optional.empty());
   }
 

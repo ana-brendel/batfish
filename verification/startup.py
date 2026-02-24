@@ -59,7 +59,7 @@ def show(df):
         .set_properties(**{"text-align": "left", "vertical-align": "top"})
     )
 
-from verificationPythonSupport import LocationPropertyPair,VerificationQuery,Clause,Property
+from verificationPythonSupport import LocationPropertyPair,LivenessQuery,SafetyQuery,Clause,Property
 
 # Help functions to run tests and examples easier
 def create(networkName:str,snapshotName:str,snapshotPath:str):
@@ -69,8 +69,8 @@ def create(networkName:str,snapshotName:str,snapshotPath:str):
     bf.init_snapshot(snapshotPath, name=snapshotName, overwrite=True)
     return bf
 
-# This function is what includes the call to the pybatfish verification question
-def runVerificationQuestion(bf,show_all:bool,query:VerificationQuery):
+# This function is what includes the call to the pybatfish safety property verification question
+def runSafetyVerificationQuestion(bf,show_all:bool,query:SafetyQuery):
     '''Returns the result of making the provided VerificationQuery `query` using the provided batfish session `bf`. The provided
     `show_all` flag indicates if all locations results should be displayed or just the most relevant ones.'''
     if query == None:
@@ -110,9 +110,96 @@ def runVerificationQuestion(bf,show_all:bool,query:VerificationQuery):
             refine=query.refines()).answer()
     return result.frame()
 
-def runAndDisplay(networkName:str,snapshotName:str,snapshotPath:str,query:VerificationQuery,show_all=False):
+# This function is what includes the call to the pybatfish liveness property verification question
+def runLivenessVerificationQuestion(bf,query:LivenessQuery):
+    '''Returns the result of making the provided VerificationQuery `query` using the provided batfish session `bf`. The provided
+    `show_all` flag indicates if all locations results should be displayed or just the most relevant ones.'''
+    if query == None:
+        return bf.q.liveness().answer().frame()
+    assumptionLocations = query.assumptionLocations()
+    defaultAssumption = query.defaultAssumption()
+    ingressEdge = query.getIngress()
+
+    if ingressEdge == None:
+        if assumptionLocations == None:
+            if defaultAssumption == None:
+                result = bf.q.liveness(
+                    prefix=query.getPrefix(),
+                    target=query.targetProperty(),
+                    location=query.targetLocation()).answer()
+            else:
+                result = bf.q.liveness(
+                    prefix=query.getPrefix(),
+                    target=query.targetProperty(),
+                    location=query.targetLocation(),
+                    default_assumption = defaultAssumption).answer()
+        elif defaultAssumption == None:
+            result = bf.q.liveness(
+                prefix=query.getPrefix(),
+                target=query.targetProperty(),
+                location=query.targetLocation(),
+                assumption_locations=assumptionLocations,
+                assumptions=query.assumptionProperties()).answer()
+        else:
+            result = bf.q.liveness(
+                prefix=query.getPrefix(),
+                target=query.targetProperty(),
+                location=query.targetLocation(),
+                assumption_locations=assumptionLocations,
+                assumptions=query.assumptionProperties(),
+                default_assumption = defaultAssumption).answer()
+    else: 
+        if assumptionLocations == None:
+            if defaultAssumption == None:
+                result = bf.q.liveness(
+                    prefix=query.getPrefix(),
+                    target=query.targetProperty(),
+                    location=query.targetLocation(),
+                    ingress=ingressEdge).answer()
+            else:
+                result = bf.q.liveness(
+                    prefix=query.getPrefix(),
+                    target=query.targetProperty(),
+                    location=query.targetLocation(),
+                    default_assumption = defaultAssumption,
+                    ingress=ingressEdge).answer()
+        elif defaultAssumption == None:
+            result = bf.q.liveness(
+                prefix=query.getPrefix(),
+                target=query.targetProperty(),
+                location=query.targetLocation(),
+                assumption_locations=assumptionLocations,
+                assumptions=query.assumptionProperties(),
+                ingress=ingressEdge).answer()
+        else:
+            result = bf.q.liveness(
+                prefix=query.getPrefix(),
+                target=query.targetProperty(),
+                location=query.targetLocation(),
+                assumption_locations=assumptionLocations,
+                assumptions=query.assumptionProperties(),
+                default_assumption = defaultAssumption,
+                ingress=ingressEdge).answer()
+    return result.frame()
+
+def runAndDisplay(networkName:str,snapshotName:str,snapshotPath:str,query,show_all=False):
     '''Runs and displays the result of running the VerificationQuery `query` on the snapshot located at `snapshotPath`. The optional `show_all`
     flag is passed to the query with a default value of False.'''
     bf = create(networkName,snapshotName,snapshotPath)
-    verificationResult = runVerificationQuestion(bf,show_all,query)
-    show(verificationResult)
+    if query == None:
+        return bf.q.safety().answer().frame()
+    elif type(query) == LivenessQuery:
+        verificationResult = runLivenessVerificationQuestion(bf,query)
+        show(verificationResult)
+    elif type(query) == SafetyQuery:
+        verificationResult = runSafetyVerificationQuestion(bf,show_all,query)
+        show(verificationResult)
+
+def runAndGet(networkName:str,snapshotName:str,snapshotPath:str,query,show_all=False):
+    '''Runs and displays the result of running the VerificationQuery `query` on the snapshot located at `snapshotPath`. The optional `show_all`
+    flag is passed to the query with a default value of False.'''
+    bf = create(networkName,snapshotName,snapshotPath)
+    if type(query) == LivenessQuery:
+        return runLivenessVerificationQuestion(bf,query)
+    elif type(query) == SafetyQuery:
+        return runSafetyVerificationQuestion(bf,show_all,query)

@@ -186,16 +186,22 @@ public class Infer {
 
   /// Checks if verification succeed by checking assumptions.
   /// If it fails (i.e. the assumption does not imply the needed invariant), we find a route example
-  // which is
-  /// a counterexample that adheres to the assumption but does not satisfy the invariant
+  /// which is a counterexample that adheres to the assumption but does not satisfy the invariant
   private Map<Location, Bgpv4Route> verificationAssumptionCheck() {
     Map<Location, Bgpv4Route> checks = new HashMap<>();
     for (Location location : assumptions.keySet()) {
-      Invariant assumption = assumptions.get(location);
+      // fix to make sure that we only consider well-formed assumptions
+      Invariant wellFormedAssumption =
+          new Invariant(
+              tbdd,
+              assumptions
+                  .get(location)
+                  .getBDDCopy()
+                  .andWith(tbdd.getOriginalRoute().wellFormednessConstraints(true)));
       Invariant infer = inferred.getOrDefault(location, Invariant.getFalse(tbdd));
-      if (!assumption.implies(infer)) {
+      if (!wellFormedAssumption.implies(infer)) {
         BDD constraint =
-            assumption
+            wellFormedAssumption
                 .getBDDCopy()
                 .andWith(infer.getBDD().not())
                 .andWith(tbdd.getOriginalRoute().wellFormednessConstraints(true));

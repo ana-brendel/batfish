@@ -100,8 +100,14 @@ public class Path {
                     .assumptions()
                     .getOrDefault(steps[steps.length - 1], context.default_assumption())
                     .getBDDCopy());
-    Invariant initial = new Invariant(context.tbdd, initialAssumption);
-    return !initial.isFalse() && properties[properties.length - 1].impliedBy(initial);
+    Invariant initial =
+        new Invariant(
+            context.tbdd,
+            initialAssumption.andWith(
+                context.tbdd.getOriginalRoute().wellFormednessConstraints(true)));
+    boolean result = !initial.isFalse() && properties[properties.length - 1].impliedBy(initial);
+    initialAssumption.free();
+    return result;
   }
 
   /// Displays the path as a string

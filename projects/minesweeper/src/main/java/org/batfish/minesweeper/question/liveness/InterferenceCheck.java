@@ -105,8 +105,11 @@ public class InterferenceCheck {
       if (inferred.containsKey(assumption_location)) {
         BDD assumption = context.assumptions().get(assumption_location).getBDDCopy();
         BDD intersection = assumption.andWith(inferred.get(assumption_location).getBDDCopy());
-        getRouteExample(context.tbdd(), intersection)
-            .ifPresent(cex -> checks.put(assumption_location, cex));
+        intersection.andWith(context.tbdd().getOriginalRoute().wellFormednessConstraints(true));
+        // if there exists some assumption which also satisfies the "bad condition", add counter
+        if (!intersection.isZero()) {
+          checks.put(assumption_location, getRouteExample(context.tbdd(), intersection));
+        }
         assumption.free();
       }
       // In the else branch, we didn't infer an incoming invariant, thus no route is possible so we

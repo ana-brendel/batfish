@@ -302,17 +302,12 @@ public class NetworkInfo {
     return tae;
   }
 
-  public static Optional<Bgpv4Route> getRouteExample(TransferBDD tbdd, BDD constraint) {
-    constraint.andWith(tbdd.getOriginalRoute().wellFormednessConstraints(true));
-    if (!constraint.isZero()) {
-      // if the intersection is not empty, then routes meeting this condition at this location
-      // might cause interference
-      BDD model = ModelGeneration.constraintsToModel(constraint, tbdd.getConfigAtomicPredicates());
-      return Optional.of(
-          ModelGeneration.satAssignmentToBgpInputRoute(model, tbdd.getConfigAtomicPredicates()));
-    } else {
-      return Optional.empty();
-    }
+  ///  Provides an example route for the constraint provided, we assume the constraint is
+  /// satisfiable and well-formed
+  public static Bgpv4Route getRouteExample(TransferBDD tbdd, BDD constraint) {
+    assert !constraint.isZero();
+    BDD model = ModelGeneration.constraintsToModel(constraint, tbdd.getConfigAtomicPredicates());
+    return ModelGeneration.satAssignmentToBgpInputRoute(model, tbdd.getConfigAtomicPredicates());
   }
 
   // CODE BELOW FOR DEBUGGING PURPOSES

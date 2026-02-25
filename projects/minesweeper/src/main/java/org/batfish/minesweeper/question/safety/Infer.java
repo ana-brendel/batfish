@@ -7,7 +7,6 @@ import org.batfish.common.BatfishException;
 import org.batfish.datamodel.Bgpv4Route;
 import org.batfish.datamodel.Ip;
 import org.batfish.datamodel.routing_policy.RoutingPolicy;
-import org.batfish.minesweeper.bdd.ModelGeneration;
 import org.batfish.minesweeper.bdd.TransferBDD;
 import org.batfish.minesweeper.question.liveness.Path;
 import org.batfish.minesweeper.question.verificationutilities.Edge;
@@ -27,6 +26,7 @@ import java.util.stream.Collectors;
 
 import static com.google.common.base.Preconditions.checkArgument;
 import static org.batfish.minesweeper.question.verificationutilities.Invariant.strongestCommonImplicant;
+import static org.batfish.minesweeper.question.verificationutilities.NetworkInfo.getRouteExample;
 
 public class Infer {
   private static final Logger LOGGER = LogManager.getLogger(Infer.class);
@@ -51,14 +51,14 @@ public class Infer {
     public final boolean verified;
     public final Map<Location, Invariant> invariants;
     public final Optional<CounterExample> counter;
-    public final Map<Location, Optional<Bgpv4Route>> checks;
+    public final Map<Location, Bgpv4Route> checks;
     public final Map<BDD, String> cache = new HashMap<>();
 
     public Result(
         boolean verified,
         Map<Location, Invariant> invariants,
         Optional<CounterExample> counter,
-        Map<Location, Optional<Bgpv4Route>> checks) {
+        Map<Location, Bgpv4Route> checks) {
       this.verified = verified;
       this.invariants = invariants;
       this.counter = counter;
@@ -188,27 +188,20 @@ public class Infer {
   /// If it fails (i.e. the assumption does not imply the needed invariant), we find a route example
   // which is
   /// a counterexample that adheres to the assumption but does not satisfy the invariant
-  private Map<Location, Optional<Bgpv4Route>> verificationAssumptionCheck() {
-    Map<Location, Optional<Bgpv4Route>> checks = new HashMap<>();
+  private Map<Location, Bgpv4Route> verificationAssumptionCheck() {
+    Map<Location, Bgpv4Route> checks = new HashMap<>();
     for (Location location : assumptions.keySet()) {
       Invariant assumption = assumptions.get(location);
       Invariant infer = inferred.getOrDefault(location, Invariant.getFalse(tbdd));
-      if (assumption.implies(infer)) {
-        checks.put(location, Optional.empty());
-      } else {
+      if (!assumption.implies(infer)) {
         BDD constraint =
             assumption
                 .getBDDCopy()
                 .andWith(infer.getBDD().not())
                 .andWith(tbdd.getOriginalRoute().wellFormednessConstraints(true));
         assert !constraint.isZero();
-        BDD model =
-            ModelGeneration.constraintsToModel(constraint, tbdd.getConfigAtomicPredicates());
-        Bgpv4Route counter =
-            ModelGeneration.satAssignmentToBgpInputRoute(model, tbdd.getConfigAtomicPredicates());
-        checks.put(location, Optional.of(counter));
+        checks.put(location, getRouteExample(tbdd, constraint));
         constraint.free();
-        model.free();
       }
     }
     return checks;
@@ -230,18 +223,14 @@ public class Infer {
     LOGGER.info("Beginning initial inference of safety invariants.");
     Optional<CounterExample> counter = inferenceLoop();
     LOGGER.info("Inference loop terminated.");
-    Map<Location, Optional<Bgpv4Route>> checks = verificationAssumptionCheck();
+    Map<Location, Bgpv4Route> checks = verificationAssumptionCheck();
 
     // Lightyear style check to only run during testing
     assert counter.isPresent()
             || (new Lightyear(this.nodes, this.imports, this.exports)).check(inferred).isEmpty()
         : "Checks that all invariants are sufficient as preconditions to imply the following postcondition";
 
-    return new Result(
-        counter.isEmpty() && checks.values().stream().allMatch(Optional::isEmpty),
-        inferred,
-        counter,
-        checks);
+    return new Result(counter.isEmpty() && checks.isEmpty(), inferred, counter, checks);
   }
 
   /// Returns a Refiner object which is used to refine invariants in order to tease out key

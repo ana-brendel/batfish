@@ -92,7 +92,7 @@ public final class SafetyAnswerer extends Answerer {
   public record Result(
       NetworkInfo info,
       boolean refinementOccurred,
-      Map<Location, Optional<Bgpv4Route>> checks,
+      Map<Location, Bgpv4Route> checks,
       Map<Location, Invariant> targets,
       Refine.Result refinement,
       Optional<Infer.CounterExample> inferenceCounter) {
@@ -173,8 +173,8 @@ public final class SafetyAnswerer extends Answerer {
                             k -> "LIMIT (Complex BDD) [" + (stringLimits.size() + 1) + "]");
                   }
                   String counterexample_str =
-                      checks.containsKey(loc) && checks.get(loc).isPresent()
-                          ? nonDefaultRoute(checks.get(loc).get())
+                      checks.containsKey(loc)
+                          ? nonDefaultRoute(checks.get(loc))
                           : (refinement.refined.get(loc).isFalse() && !refinementOccurred
                               ? "any route is counterexample"
                               : "");
@@ -237,8 +237,8 @@ public final class SafetyAnswerer extends Answerer {
                   assert refinement.refined.containsKey(loc);
                   String inferred_str = refinement.refined.get(loc).toString(true, cache);
                   String counterexample_str =
-                      checks.containsKey(loc) && checks.get(loc).isPresent()
-                          ? nonDefaultRoute(checks.get(loc).get())
+                      checks.containsKey(loc)
+                          ? nonDefaultRoute(checks.get(loc))
                           : (refinement.refined.get(loc).isFalse()
                               ? "any route is counterexample"
                               : "");

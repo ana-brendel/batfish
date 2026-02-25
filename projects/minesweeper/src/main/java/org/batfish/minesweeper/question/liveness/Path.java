@@ -142,10 +142,10 @@ public class Path {
     BDD currentAssumption = info.getAssumptions().get(steps[steps.length - 1]).getBDD();
     currentAssumption.andWith(context.prefixSpaceToBDD(this.prefix));
     BDD counterBDD = currentAssumption.diffEq(properties[properties.length - 1].getBDD());
-    String cex =
-        getRouteExample(info.tbdd, counterBDD)
-            .map(Setup::nonDefaultRoute)
-            .orElse("{UNSATISFIED ASSUMPTION}");
+    counterBDD.andWith(context.tbdd().getOriginalRoute().wellFormednessConstraints(true));
+    // we shouldn't be in this function if the path has no counterexamples
+    assert !counterBDD.isZero();
+    String cex = Setup.nonDefaultRoute(getRouteExample(info.tbdd, counterBDD));
     currentAssumption.free();
     builder.insert(0, cex + " ");
     return "Inferred Invariant: " + properties[properties.length - 1] + "\n" + builder;

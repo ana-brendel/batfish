@@ -152,6 +152,11 @@ public final class SafetyAnswerer extends Answerer {
       Map<String, Map<String, Set<String>>> intermediateGroups = new HashMap<>();
       Map<BDD, String> stringLimits = new HashMap<>();
 
+      // add targets to cache so they can be used for any assumption
+      targets
+          .values()
+          .forEach(inv -> cache.put(inv.getBDDCopy(), inv.toString(refinementOccurred)));
+
       // group the results and add the target first
       results
           .keySet()
@@ -258,10 +263,10 @@ public final class SafetyAnswerer extends Answerer {
   }
 
   /// Driving function to run complete invariant inference and refinement (if applicable)
-  public static Result run(NetworkInfo info, boolean refine, Location location, Invariant target) {
+  public static Result run(NetworkInfo info, boolean refine, Map<Location, Invariant> targets) {
     // Set up and run the invariant inference
     Infer inference = info.toInfer();
-    inference.addProperty(location, target);
+    targets.forEach(inference::addProperty);
 
     LOGGER.info("Beginning inference...");
     Infer.Result result = inference.run();
@@ -284,8 +289,7 @@ public final class SafetyAnswerer extends Answerer {
 
     assert result.verified == refined.verified : "Refine should NOT change verification outcome.";
 
-    return new Result(
-        info, refinementOccurred, result.checks, Map.of(location, target), refined, result.counter);
+    return new Result(info, refinementOccurred, result.checks, targets, refined, result.counter);
   }
 
   @Override
@@ -294,14 +298,19 @@ public final class SafetyAnswerer extends Answerer {
 
     // Gather information from the network
     SpecifierContext context = _batfish.specifierContext(snapshot);
+    LOGGER.info("Created BATFISH context");
     Map<String, Configuration> configs = context.getConfigs();
+    LOGGER.info("Gathered configurations");
     ConfigAtomicPredicates configAPs =
         getConfigAtomicPredicates(_communityRegexes, _asPathRegexes, configs.values());
+    LOGGER.info("Constructed ConfigAtomicPredicates");
     TransferBDD tbdd = new TransferBDD(configAPs);
+    LOGGER.info("Created TransferBDD");
     NetworkInfo info =
         _default_assumption
             .map(builder -> new NetworkInfo(tbdd, configs, builder.build(tbdd, null)))
             .orElseGet(() -> new NetworkInfo(tbdd, configs));
+    LOGGER.info("Constructed Verification.NetworkInfo object");
     _assumptions.forEach(info::addAssumption);
     LOGGER.info(info.displayNodes());
 
@@ -313,9 +322,14 @@ public final class SafetyAnswerer extends Answerer {
     assert _targets.size() == 1 : "Current API limits to a single property to verify";
 
     // determine the target and run the inference algorithm
-    Map.Entry<Location, Invariant> target =
-        buildInvariant(info, true, _targets.entrySet().stream().findFirst().get());
-    Result result = run(info, _refine, target.getKey(), target.getValue());
+    //    Map.Entry<Location, Invariant> target =
+    //        buildInvariant(info, true, _targets.entrySet().stream().findFirst().get());
+    //    Result result = run(info, _refine, target.getKey(), target.getValue());
+    Map<Location, Invariant> builtInvariants = new HashMap<>();
+    _targets.entrySet().stream()
+        .map(entry -> buildInvariant(info, true, entry))
+        .forEach(entry -> builtInvariants.put(entry.getKey(), entry.getValue()));
+    Result result = run(info, _refine, builtInvariants);
     LOGGER.info("Completed analysis. Working on displaying results...");
 
     // return the answer element associated with desired level of granularity

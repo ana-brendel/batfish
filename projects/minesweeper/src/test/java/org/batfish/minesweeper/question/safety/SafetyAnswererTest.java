@@ -292,7 +292,7 @@ public class SafetyAnswererTest {
             Invariant.builder()
                 .addClause(
                     Invariant.createClause(
-                        null, new PrefixSpace(PrefixRange.fromString(p_str)), null)),
+                        null, new PrefixSpace(PrefixRange.fromString(p_str)), null, null)),
             new Location.Builder(NODE_C.getName(), exit.toString(), null),
             null,
             null,
@@ -343,7 +343,7 @@ public class SafetyAnswererTest {
             Invariant.builder()
                 .addClause(
                     Invariant.createClause(
-                        null, new PrefixSpace(PrefixRange.fromString(p_str)), null)),
+                        null, new PrefixSpace(PrefixRange.fromString(p_str)), null, null)),
             new Location.Builder(NODE_C.getName(), exit.toString(), null),
             new Location.Builders(
                 List.of(new Location.Builder(entry.toString(), NODE_A.getName(), null))),
@@ -351,7 +351,10 @@ public class SafetyAnswererTest {
             Invariant.builder()
                 .addClause(
                     Invariant.createClause(
-                        null, null, new RegexConstraints(List.of(RegexConstraint.parse("10:10"))))),
+                        null,
+                        null,
+                        new RegexConstraints(List.of(RegexConstraint.parse("10:10"))),
+                        null)),
             true,
             true);
     SafetyAnswerer answerer = new SafetyAnswerer(question, batfish);

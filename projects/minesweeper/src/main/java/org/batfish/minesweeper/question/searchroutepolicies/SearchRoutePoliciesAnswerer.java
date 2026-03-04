@@ -301,7 +301,10 @@ public final class SearchRoutePoliciesAnswerer extends Answerer {
   }
 
   private static BDD nextHopIpConstraintsToBDD(
-          Optional<Prefix> optNextHopIp, BDDRoute r, boolean outputRoute, Environment.Direction direction) {
+      Optional<Prefix> optNextHopIp,
+      BDDRoute r,
+      boolean outputRoute,
+      Environment.Direction direction) {
     if (!optNextHopIp.isPresent()) {
       return r.getFactory().one();
     }
@@ -337,8 +340,8 @@ public final class SearchRoutePoliciesAnswerer extends Answerer {
    * @param route the symbolic route
    * @return the BDD
    */
-  private static BDD asPathRegexConstraintListToBDD(
-          List<RegexConstraint> regexConstraints, ConfigAtomicPredicates configAPs, BDDRoute route) {
+  public static BDD asPathRegexConstraintListToBDD(
+      List<RegexConstraint> regexConstraints, ConfigAtomicPredicates configAPs, BDDRoute route) {
     return TransferBDD.asPathRegexesToBDD(
         regexConstraints.stream()
             .map(RegexConstraint::getRegex)
@@ -357,7 +360,7 @@ public final class SearchRoutePoliciesAnswerer extends Answerer {
    * @return the constraint as a BDD
    */
   private static BDD communityRegexConstraintToBDD(
-          RegexConstraint regex, TransferBDD tbdd, BDDRoute route, TransferBDD.Context context) {
+      RegexConstraint regex, TransferBDD tbdd, BDDRoute route, TransferBDD.Context context) {
     return switch (regex.getRegexType()) {
       case REGEX ->
           tbdd.getFactory()
@@ -388,7 +391,7 @@ public final class SearchRoutePoliciesAnswerer extends Answerer {
    * @return the overall constraint as a BDD
    */
   private static BDD communityRegexConstraintsToBDD(
-          RegexConstraints regexes, TransferBDD tbdd, BDDRoute route, Context context) {
+      RegexConstraints regexes, TransferBDD tbdd, BDDRoute route, Context context) {
 
     BDDFactory factory = tbdd.getFactory();
 
@@ -427,7 +430,7 @@ public final class SearchRoutePoliciesAnswerer extends Answerer {
    * @return a BDD representing atomic predicates that satisfy the given regex constraints
    */
   private static BDD outputAsPathConstraintsToBDDAndUpdatedAPs(
-          RegexConstraints asPathRegexes, ConfigAtomicPredicates configAPs, BDDRoute r) {
+      RegexConstraints asPathRegexes, ConfigAtomicPredicates configAPs, BDDRoute r) {
     // update the atomic predicates to include any prepended ASes and then to constrain them to
     // satisfy the given regex constraints
     AsPathRegexAtomicPredicates aps = configAPs.getAsPathRegexAtomicPredicates();
@@ -488,7 +491,8 @@ public final class SearchRoutePoliciesAnswerer extends Answerer {
           (pos.isEmpty() ? r.getFactory().one() : asPathRegexConstraintListToBDD(pos, configAPs, r))
               .diffWith(asPathRegexConstraintListToBDD(neg, configAPs, r)));
     }
-    result.andWith(nextHopIpConstraintsToBDD(constraints.getNextHopIp(), r, outputRoute,direction));
+    result.andWith(
+        nextHopIpConstraintsToBDD(constraints.getNextHopIp(), r, outputRoute, direction));
     result.andWith(setToBDD(constraints.getOriginType(), r, r.getOriginType()));
     result.andWith(setToBDD(constraints.getProtocol(), r, r.getProtocolHistory()));
 
@@ -531,7 +535,12 @@ public final class SearchRoutePoliciesAnswerer extends Answerer {
     Set<PrefixSpace> blockedPrefixes = new HashSet<>();
     BDD inConstraints =
         routeConstraintsToBDD(
-            _inputConstraints, new BDDRoute(tbdd.getFactory(), configAPs), false, tbdd, context, _direction);
+            _inputConstraints,
+            new BDDRoute(tbdd.getFactory(), configAPs),
+            false,
+            tbdd,
+            context,
+            _direction);
     ImmutableList.Builder<Row> builder = ImmutableList.builder();
     for (TransferReturn path : relevantPaths) {
       BDD pathAnnouncements = path.getInputConstraints();
@@ -552,7 +561,8 @@ public final class SearchRoutePoliciesAnswerer extends Answerer {
                 outputRoute,
                 true,
                 new TransferBDD(outputRoute.getFactory(), outConfigAPs),
-                context, _direction);
+                context,
+                _direction);
         intersection = intersection.and(outConstraints);
       }
 

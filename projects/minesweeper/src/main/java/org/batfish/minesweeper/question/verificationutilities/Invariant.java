@@ -3,6 +3,7 @@ package org.batfish.minesweeper.question.verificationutilities;
 import static org.apache.commons.lang3.ObjectUtils.firstNonNull;
 import static org.batfish.minesweeper.bdd.TransferBDD.isRelevantForDestination;
 import static org.batfish.minesweeper.bdd.TransferBDDUtils.makeRoutePairing;
+import static org.batfish.minesweeper.question.searchroutepolicies.SearchRoutePoliciesAnswerer.asPathRegexConstraintListToBDD;
 
 import com.fasterxml.jackson.annotation.JsonCreator;
 import com.fasterxml.jackson.annotation.JsonProperty;
@@ -30,6 +31,7 @@ import org.batfish.datamodel.PrefixRange;
 import org.batfish.datamodel.PrefixSpace;
 import org.batfish.datamodel.routing_policy.RoutingPolicy;
 import org.batfish.datamodel.routing_policy.communities.CommunityMatchExpr;
+import org.batfish.minesweeper.ConfigAtomicPredicates;
 import org.batfish.minesweeper.bdd.BDDRoute;
 import org.batfish.minesweeper.bdd.CommunityMatchExprToBDD;
 import org.batfish.minesweeper.bdd.CommunitySetMatchExprToBDD;
@@ -143,20 +145,21 @@ public class Invariant {
     @VisibleForTesting
     static Builder forValue(@Nonnull String value) {
       Builder builder = new Builder();
-      if (value.equals("[]")) {
+      if (value.equals("~~")) {
         return builder;
       }
-      String[] splits = value.trim().split("]");
+      String[] splits = value.trim().split("~");
       for (String clause : splits) {
         String trimmed = clause.trim();
-        if (!trimmed.startsWith("[") && !trimmed.isEmpty()) {
-          throw new BatfishException(
-              "String parsing into property (Invariant.Builder) failed. "
-                  + "A property should be in DNF form - [clause1][clause2]...[clause_n]. "
-                  + "The trimmed clause is: "
-                  + trimmed);
-        } else if (!trimmed.isEmpty()) {
-          builder.addClause(ClauseBuilder.parseForClauseBuilder(trimmed.substring(1)));
+        //        if (!trimmed.isEmpty()) {
+        //          throw new BatfishException(
+        //              "String parsing into property (Invariant.Builder) failed. "
+        //                  + "A property should be in DNF form - [clause1][clause2]...[clause_n]. "
+        //                  + "The trimmed clause is: "
+        //                  + trimmed);
+        //        } else
+        if (!trimmed.isEmpty()) {
+          builder.addClause(ClauseBuilder.parseForClauseBuilder(trimmed));
         }
       }
       return builder;
@@ -194,6 +197,7 @@ public class Invariant {
     private PrefixSpace _positivePrefix;
     private PrefixSpace _negativePrefix;
     private RegexConstraints _communities;
+    private RegexConstraints _asPath;
 
     private ClauseBuilder() {}
 
@@ -221,6 +225,11 @@ public class Invariant {
 
     public ClauseBuilder setCommunities(@Nonnull RegexConstraints communities) {
       _communities = communities;
+      return this;
+    }
+
+    public ClauseBuilder setASPath(@Nonnull RegexConstraints asPath) {
+      _asPath = asPath;
       return this;
     }
 
@@ -306,6 +315,17 @@ public class Invariant {
       }
     }
 
+    ///  Leverages the asPathRegexConstraintListToBDD function from SearchRoutePoliciesAnswerer
+    private static BDD asPathToBDD(
+        RegexConstraints constraints, ConfigAtomicPredicates aps, BDDRoute r) {
+      List<RegexConstraint> pos = constraints.getPositiveRegexConstraints();
+      List<RegexConstraint> neg = constraints.getNegativeRegexConstraints();
+      // convert the positive and negative constraints to BDDs and return their difference;
+      // if the positive constraints are empty then treat it as logically true
+      return (pos.isEmpty() ? r.getFactory().one() : asPathRegexConstraintListToBDD(pos, aps, r))
+          .diffWith(asPathRegexConstraintListToBDD(neg, aps, r));
+    }
+
     @Nonnull
     public BDD build(@Nonnull TransferBDD tbdd, @Nullable RoutingPolicy policy) {
       BDDRoute base = new BDDRoute(tbdd.getFactory(), tbdd.getConfigAtomicPredicates());
@@ -321,11 +341,24 @@ public class Invariant {
       if (_communities != null && !_communities.isEmpty()) {
         clauseBDD.andWith(communitiesToBDD(_communities, tbdd, base, context));
       }
+      if (_asPath != null && !_asPath.isEmpty()) {
+        clauseBDD.andWith(asPathToBDD(_asPath, tbdd.getConfigAtomicPredicates(), base));
+      }
       return clauseBDD;
     }
 
     public String createDesiredStringRepresentation() {
       StringBuilder builder = new StringBuilder();
+      if (_asPath != null && !_asPath.isEmpty()) {
+        _asPath
+            .getNegativeRegexConstraints()
+            .forEach(
+                rgx ->
+                    builder
+                        .append(",!asPath(")
+                        .append(BDDString.trimRegex(rgx.getRegex()))
+                        .append(")"));
+      }
       if (_communities != null && !_communities.isEmpty()) {
         _communities
             .getNegativeRegexConstraints()
@@ -338,6 +371,16 @@ public class Invariant {
       }
       if (_negativePrefix != null && !_negativePrefix.isEmpty()) {
         builder.append(",!prefix(").append(_negativePrefix).append(")");
+      }
+      if (_asPath != null && !_asPath.isEmpty()) {
+        _asPath
+            .getPositiveRegexConstraints()
+            .forEach(
+                rgx ->
+                    builder
+                        .append(",!asPath(")
+                        .append(BDDString.trimRegex(rgx.getRegex()))
+                        .append(")"));
       }
       if (_communities != null && !_communities.isEmpty()) {
         _communities
@@ -358,11 +401,12 @@ public class Invariant {
     /// Added to help parse a string corresponding to a single clause
     private static Invariant.ClauseBuilder parseForClauseBuilder(String value) {
       if (value.trim().isEmpty()) {
-        return createClause(null, null, null);
+        return createClause(null, null, null, null);
       }
       PrefixSpace positivePrefix = new PrefixSpace();
       PrefixSpace negativePrefix = new PrefixSpace();
       ImmutableList.Builder<RegexConstraint> communities = ImmutableList.builder();
+      ImmutableList.Builder<RegexConstraint> asPaths = ImmutableList.builder();
       String[] atoms = value.trim().split("&");
       for (String atom : atoms) {
         String trimmed = atom.trim();
@@ -374,6 +418,9 @@ public class Invariant {
             switch (category) {
               case "comm":
                 communities.add(RegexConstraint.parse(input));
+                break;
+              case "asPath":
+                asPaths.add(RegexConstraint.parse(input));
                 break;
               case "prefix":
                 boolean positive = true;
@@ -421,7 +468,10 @@ public class Invariant {
         }
       }
       return createClause(
-          positivePrefix, negativePrefix, new RegexConstraints(communities.build()));
+          positivePrefix,
+          negativePrefix,
+          new RegexConstraints(communities.build()),
+          new RegexConstraints(asPaths.build()));
     }
 
     @Nonnull
@@ -439,11 +489,15 @@ public class Invariant {
   }
 
   public static ClauseBuilder createClause(
-      @Nullable PrefixSpace pos, @Nullable PrefixSpace neg, @Nullable RegexConstraints comms) {
+      @Nullable PrefixSpace pos,
+      @Nullable PrefixSpace neg,
+      @Nullable RegexConstraints comms,
+      @Nullable RegexConstraints asPath) {
     return clauseBuilder()
         .matchPrefix(firstNonNull(pos, new PrefixSpace()))
         .avoidPrefix(firstNonNull(neg, new PrefixSpace()))
-        .setCommunities(firstNonNull(comms, new RegexConstraints()));
+        .setCommunities(firstNonNull(comms, new RegexConstraints()))
+        .setASPath(firstNonNull(asPath, new RegexConstraints()));
   }
 
   public BDD getBDD() {

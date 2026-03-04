@@ -1,14 +1,16 @@
 # Python clauses useful for easily calling pybatfish API
 class Clause:
-    def __init__(self,communities:list[str]=[],prefixes:list[str]=[]):
+    def __init__(self,communities:list[str]=[],as_path:list[str]=[],prefixes:list[str]=[]):
         self.communities = communities
         self.prefixes = prefixes
+        self.as_path = as_path
 
     def format(self) -> str:
         communityStrings = list(map(lambda c: f"comm = {c}",self.communities))
+        asPathStrings = list(map(lambda c: f"asPath = {c}",self.as_path))
         prefixStrings = list(map(lambda p: f"prefix = {p}",self.prefixes))
-        joined = " & ".join(communityStrings+prefixStrings)
-        return f"[{joined}]"
+        joined = " & ".join(communityStrings+asPathStrings+prefixStrings)
+        return f"~{joined}~"
     
 class Property:
     def __init__(self,clauses:list[Clause]=[]):

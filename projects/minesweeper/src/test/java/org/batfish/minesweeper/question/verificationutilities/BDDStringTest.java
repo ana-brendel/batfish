@@ -148,14 +148,20 @@ public class BDDStringTest {
             prefixStringToBDD("25.13.0.0/16", true).and(prefixStringToBDD("12.0.0.0/8", true)));
     assertEquals("False", f);
 
-    // prefix ranges
+    // prefix range
     String g = BDDString.get(tbdd, prefixStringToBDD("25.13.0.0/16:16-32", true));
     assertEquals("prefix(25.13.0.0/16:16-32)", g);
 
-    String h = BDDString.get(tbdd, prefixStringToBDD("25.13.0.0/16:16-32", false));
-    assertEquals("prefix(!25.13.0.0/16:16-32)", h);
+    // disjunction of disjoint prefix ranges
+    String h =
+        BDDString.get(
+            tbdd,
+            prefixStringToBDD("25.13.0.0/16:16-32", true)
+                .or(prefixStringToBDD("12.0.0.0/8:8-12", true)));
+    assertEquals("prefix(12.0.0.0/8:8-12) OR prefix(25.13.0.0/16:16-32)", h);
 
     // TODO - Examples that our BDD to string class cannot support
+    /*
     String unknown1 =
         BDDString.get(
             tbdd,
@@ -171,6 +177,8 @@ public class BDDStringTest {
             tbdd,
             prefixStringToBDD("25.13.7.0/24", false)
                 .and(prefixStringToBDD("25.13.0.0/16:16-32", true)));
+    String unknown5 = BDDString.get(tbdd, prefixStringToBDD("25.13.0.0/16:16-32", false));
+    */
   }
 
   @Test

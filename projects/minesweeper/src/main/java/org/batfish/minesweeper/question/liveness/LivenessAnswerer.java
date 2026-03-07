@@ -1,6 +1,8 @@
 package org.batfish.minesweeper.question.liveness;
 
 import org.apache.commons.lang3.tuple.Pair;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 import org.batfish.common.Answerer;
 import org.batfish.common.NetworkSnapshot;
 import org.batfish.common.plugin.IBatfish;
@@ -35,7 +37,7 @@ import static org.batfish.minesweeper.question.verificationutilities.Setup.metad
 import static org.batfish.minesweeper.question.verificationutilities.Setup.nonDefaultRoute;
 
 public class LivenessAnswerer extends Answerer {
-  // private static final Logger LOGGER = LogManager.getLogger(LivenessAnswerer.class);
+  private static final Logger LOGGER = LogManager.getLogger(LivenessAnswerer.class);
 
   private final @Nonnull PrefixSpace _prefix;
   private final @Nullable Pair<Location.Builder, Invariant.Builder> _target;
@@ -150,6 +152,7 @@ public class LivenessAnswerer extends Answerer {
    */
   public static Result run(
       NetworkInfo info, PrefixSpace prefix, Location location, Invariant target, Edge ingress) {
+    LOGGER.info("Beginning to run liveness property analysis...");
     PathAnalyzer analyzer = info.toPathAnalyzer(prefix, location, target);
     InterferenceCheck interferenceCheck = info.toInterferenceCheck(prefix, location, target);
 
@@ -171,6 +174,7 @@ public class LivenessAnswerer extends Answerer {
     // Gathering and formatting information from snapshot
     SpecifierContext context = _batfish.specifierContext(snapshot);
     Map<String, Configuration> configs = context.getConfigs();
+    LOGGER.info("Creating ConfigAtomicPredicates for analysis...");
     ConfigAtomicPredicates configAPs =
         getConfigAtomicPredicates(_communityRegexes, _asPathRegexes, configs.values());
     TransferBDD tbdd = new TransferBDD(configAPs);
@@ -193,6 +197,7 @@ public class LivenessAnswerer extends Answerer {
       } else {
         result = run(info, _prefix, target.getKey(), target.getValue());
       }
+      LOGGER.info("Analysis done!");
       return result.getAnswerElement(info);
     }
   }

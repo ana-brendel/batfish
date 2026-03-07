@@ -42,7 +42,8 @@ public class NetworkInfo {
   private final Set<Location> locations = new HashSet<>();
   private final Map<Edge, RoutingPolicy> imports = new HashMap<>();
   private final Map<Edge, RoutingPolicy> exports = new HashMap<>();
-  private final Map<Location, Invariant> assumptions = new HashMap<>();
+  private final Map<Location, Invariant> checkedAssumptions = new HashMap<>();
+  private final Map<Location, Invariant> enforcedAssumptions = new HashMap<>();
 
   /// Processes the provided config files to determine the network's topology and relevant
   // information
@@ -124,7 +125,7 @@ public class NetworkInfo {
       if (location instanceof Edge edge) {
         // if the edge's source is not in the set of nodes (i.e. out of network)
         if (!nodes.containsKey(edge.getSrc())) {
-          assumptions.put(edge, defaultIncoming);
+          checkedAssumptions.put(edge, defaultIncoming);
         }
       }
     }
@@ -137,9 +138,14 @@ public class NetworkInfo {
     return loc.contextString(this.nodes);
   }
 
-  /// Returns the assumptions of the network
-  public Map<Location, Invariant> getAssumptions() {
-    return assumptions;
+  /// Returns the assumptions that should be checked of the network
+  public Map<Location, Invariant> getCheckedAssumptions() {
+    return checkedAssumptions;
+  }
+
+  /// Returns the assumptions of the network that are enforced in inference
+  public Map<Location, Invariant> getEnforcedAssumptions() {
+    return enforcedAssumptions;
   }
 
   /// Returns set of all ips associated with a provided node (via node's name)
@@ -181,15 +187,23 @@ public class NetworkInfo {
 
   /// Used to add an assumption which indicates any traffic is possible at provided location
   public NetworkInfo anyRouteAllowedAt(Location anchor) {
-    return this.addAssumption(anchor, new Invariant(this.tbdd));
+    //    return this.addAssumption(anchor, new Invariant(this.tbdd));
+    this.checkedAssumptions.put(anchor, new Invariant(this.tbdd));
+    return this;
   }
 
-  /// Used to add an assumption pertaining to traffic at provided location
-  public NetworkInfo addAssumption(@Nonnull Location location, @Nonnull Invariant assumption) {
+  /// Used to add an assumption pertaining to traffic at provided location, we assume incoming edges
+  /// are checked and internal locations/outgoing edges are enforced
+  public void addAssumption(@Nonnull Location location, @Nonnull Invariant assumption) {
     assert locations.contains(location)
+            || (location instanceof Edge e && nodes.containsKey(e.getSrc()))
         : "Assumption must be on incoming edge or within the network.";
-    assumptions.put(location, assumption);
-    return this;
+    if (location instanceof Edge incoming && !nodes.containsKey(incoming.getSrc())) {
+      checkedAssumptions.put(location, assumption);
+    } else {
+      // a location that is not an incoming edge, should be enforced during inference
+      enforcedAssumptions.put(location, assumption);
+    }
   }
 
   /// Used to add an assumption pertaining to traffic at provided location, need to build location
@@ -238,7 +252,12 @@ public class NetworkInfo {
   public Infer toInfer() {
     Path.Context context =
         new Path.Context(
-            this.tbdd, this.assumptions, this.imports, this.exports, this.defaultIncoming);
+            this.tbdd,
+            this.checkedAssumptions,
+            this.enforcedAssumptions,
+            this.imports,
+            this.exports,
+            this.defaultIncoming);
     return new Infer(context, this.nodes, this.getEdgesByDestination());
   }
 
@@ -247,7 +266,12 @@ public class NetworkInfo {
   public PathAnalyzer toPathAnalyzer(PrefixSpace prefix, Location location, Invariant target) {
     Path.Context context =
         new Path.Context(
-            this.tbdd, this.assumptions, this.imports, this.exports, this.defaultIncoming);
+            this.tbdd,
+            this.checkedAssumptions,
+            this.enforcedAssumptions,
+            this.imports,
+            this.exports,
+            this.defaultIncoming);
     return new PathAnalyzer(
         context, prefix, location, target, this.nodes, this.getEdgesByDestination());
   }
@@ -258,7 +282,12 @@ public class NetworkInfo {
       PrefixSpace prefix, Location location, Invariant target) {
     Path.Context context =
         new Path.Context(
-            this.tbdd, this.assumptions, this.imports, this.exports, this.defaultIncoming);
+            this.tbdd,
+            this.checkedAssumptions,
+            this.enforcedAssumptions,
+            this.imports,
+            this.exports,
+            this.defaultIncoming);
     return new InterferenceCheck(
         context, prefix, location, target, this.nodes, this.getEdgesByDestination());
   }
@@ -307,7 +336,14 @@ public class NetworkInfo {
   public static Bgpv4Route getRouteExample(TransferBDD tbdd, BDD constraint) {
     assert !constraint.isZero();
     BDD model = ModelGeneration.constraintsToModel(constraint, tbdd.getConfigAtomicPredicates());
-    return ModelGeneration.satAssignmentToBgpInputRoute(model, tbdd.getConfigAtomicPredicates());
+    if (!model.isAssignment() && model.isZero()) {
+      return null;
+    } else if (!model.isAssignment()) {
+      assert false; // throws error during testing
+      return null; // avoided otherwise
+    } else {
+      return ModelGeneration.satAssignmentToBgpInputRoute(model, tbdd.getConfigAtomicPredicates());
+    }
   }
 
   // CODE BELOW FOR DEBUGGING PURPOSES

@@ -10,23 +10,23 @@ import org.batfish.minesweeper.question.verificationutilities.Location;
 import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
 import javax.annotation.ParametersAreNonnullByDefault;
-import java.util.HashMap;
-import java.util.Map;
 import java.util.Optional;
 
 import static com.google.common.base.Preconditions.checkArgument;
 
 @ParametersAreNonnullByDefault
 public final class SafetyQuestion extends Question {
-  private static final String PROP_PROPERTY = "target";
-  private static final String PROP_LOCATION = "location";
+  private static final String PROP_PROPERTIES = "target";
+  private static final String PROP_LOCATIONS = "location";
   private static final String PROP_ASSUMPTION_LOCATIONS = "assumption_locations";
   private static final String PROP_ASSUMPTIONS = "assumptions";
   private static final String PROP_DEFAULT_ASSUMPTION = "default_assumption";
   private static final String PROP_SHOW_ALL = "show_all";
   private static final String PROP_REFINE = "refine";
 
-  private final @Nonnull Map<Location.Builder, Invariant.Builder> _targets = new HashMap<>();
+  //  private final @Nonnull Map<Location.Builder, Invariant.Builder> _targets = new HashMap<>();
+  private final Location.Builders _location;
+  private final Invariant.Builders _target;
   private final Location.Builders _assumption_locations;
   private final Invariant.Builders _assumptions;
   private final Invariant.Builder _default_assumption;
@@ -38,16 +38,20 @@ public final class SafetyQuestion extends Question {
   }
 
   public SafetyQuestion(
-      @Nullable Invariant.Builder target,
-      @Nullable Location.Builder location,
+      @Nullable Invariant.Builders target,
+      @Nullable Location.Builders location,
       @Nullable Location.Builders assumptions_locations,
       @Nullable Invariant.Builders assumptions,
       @Nullable Invariant.Builder default_assumption,
       boolean show_all,
       boolean refine) {
-    if (target != null && location != null) {
-      _targets.put(location, target);
-    }
+    checkArgument(
+        location == null
+            ? target == null
+            : target != null && (location.get_builders().size() == target.get_builders().size()),
+        "Must have the same number of targets and locations");
+    _target = target;
+    _location = location;
 
     checkArgument(
         assumptions_locations == null
@@ -67,8 +71,8 @@ public final class SafetyQuestion extends Question {
 
   @JsonCreator
   private static SafetyQuestion jsonCreator(
-      @JsonProperty(PROP_PROPERTY) Invariant.Builder target,
-      @JsonProperty(PROP_LOCATION) Location.Builder location,
+      @JsonProperty(PROP_PROPERTIES) Invariant.Builders target,
+      @JsonProperty(PROP_LOCATIONS) Location.Builders location,
       @JsonProperty(PROP_ASSUMPTION_LOCATIONS) @Nullable Location.Builders assumption_locations,
       @JsonProperty(PROP_ASSUMPTIONS) @Nullable Invariant.Builders assumptions,
       @JsonProperty(PROP_DEFAULT_ASSUMPTION) @Nullable Invariant.Builder default_assumption,
@@ -86,8 +90,13 @@ public final class SafetyQuestion extends Question {
   }
 
   @Nonnull
-  public Map<Location.Builder, Invariant.Builder> get_targets() {
-    return _targets;
+  public Optional<Location.Builders> get_location() {
+    return _location == null ? Optional.empty() : Optional.of(_location);
+  }
+
+  @Nonnull
+  public Optional<Invariant.Builders> get_target() {
+    return _target == null ? Optional.empty() : Optional.of(_target);
   }
 
   public boolean get_show_all() {

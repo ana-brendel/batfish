@@ -289,11 +289,17 @@ public class SafetyAnswererTest {
 
     SafetyQuestion question =
         new SafetyQuestion(
-            Invariant.builder()
-                .addClause(
-                    Invariant.createClause(
-                        null, new PrefixSpace(PrefixRange.fromString(p_str)), null, null)),
-            new Location.Builder(NODE_C.getName(), exit.toString(), null),
+            new Invariant.Builders(
+                List.of(
+                    Invariant.builder()
+                        .addClause(
+                            Invariant.createClause(
+                                null,
+                                new PrefixSpace(PrefixRange.fromString(p_str)),
+                                null,
+                                null)))),
+            new Location.Builders(
+                List.of(new Location.Builder(NODE_C.getName(), exit.toString(), null))),
             null,
             null,
             null,
@@ -340,11 +346,17 @@ public class SafetyAnswererTest {
 
     SafetyQuestion question =
         new SafetyQuestion(
-            Invariant.builder()
-                .addClause(
-                    Invariant.createClause(
-                        null, new PrefixSpace(PrefixRange.fromString(p_str)), null, null)),
-            new Location.Builder(NODE_C.getName(), exit.toString(), null),
+            new Invariant.Builders(
+                List.of(
+                    Invariant.builder()
+                        .addClause(
+                            Invariant.createClause(
+                                null,
+                                new PrefixSpace(PrefixRange.fromString(p_str)),
+                                null,
+                                null)))),
+            new Location.Builders(
+                List.of(new Location.Builder(NODE_C.getName(), exit.toString(), null))),
             new Location.Builders(
                 List.of(new Location.Builder(entry.toString(), NODE_A.getName(), null))),
             new Invariant.Builders(List.of(Invariant.builder())),

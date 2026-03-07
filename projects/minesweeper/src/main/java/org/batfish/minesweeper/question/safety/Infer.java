@@ -39,7 +39,8 @@ public class Infer {
   private final Map<Edge, RoutingPolicy> exports;
 
   private final Map<Location, Invariant> targets = new HashMap<>();
-  private final Map<Location, Invariant> assumptions;
+  private final Map<Location, Invariant> checkedAssumptions;
+  private final Map<Location, Invariant> enforcedAssumptions;
   private final Queue<Location> working = new LinkedList<>();
   private final Map<Location, Invariant> inferred = new HashMap<>();
 
@@ -88,7 +89,8 @@ public class Infer {
     this.edgesByDestination = edgesByDestination;
     this.imports = context.imports();
     this.exports = context.exports();
-    this.assumptions = context.assumptions();
+    this.checkedAssumptions = context.checkedAssumptions();
+    this.enforcedAssumptions = context.enforcedAssumptions();
   }
 
   /**
@@ -129,6 +131,8 @@ public class Infer {
   /// Initializes all target invariants
   private void initializeInvariants() {
     for (Location location : targets.keySet()) {
+      // we don't expect the target to be in the inferred map
+      assert !inferred.containsKey(location);
       inferred.putIfAbsent(location, this.targets.get(location).copy());
     }
   }
@@ -148,7 +152,9 @@ public class Infer {
             exportPolicy == null ? property.copy() : property.weakestPrecondition(exportPolicy);
         Node src = nodes.get(edge.getSrc());
         boolean firstVisit = !inferred.containsKey(src);
-        Invariant existing = inferred.getOrDefault(src, new Invariant(tbdd));
+        // get inferred if present, otherwise get enforced assumption, otherwise default is true
+        Invariant existing =
+            inferred.getOrDefault(src, enforcedAssumptions.getOrDefault(src, new Invariant(tbdd)));
         Invariant updated = strongestCommonImplicant(existing, wp);
         wp.free();
         inferred.put(src, updated);
@@ -166,7 +172,10 @@ public class Infer {
             Invariant wp =
                 importPolicy == null ? property.copy() : property.weakestPrecondition(importPolicy);
             boolean firstVisit = !inferred.containsKey(edge);
-            Invariant existing = inferred.getOrDefault(edge, new Invariant(tbdd));
+            // get inferred if present, otherwise get enforced assumption, otherwise default is true
+            Invariant existing =
+                inferred.getOrDefault(
+                    edge, enforcedAssumptions.getOrDefault(edge, new Invariant(tbdd)));
             Invariant updated = strongestCommonImplicant(existing, wp);
             wp.free();
             inferred.put(edge, updated);
@@ -189,12 +198,12 @@ public class Infer {
   /// which is a counterexample that adheres to the assumption but does not satisfy the invariant
   private Map<Location, Bgpv4Route> verificationAssumptionCheck() {
     Map<Location, Bgpv4Route> checks = new HashMap<>();
-    for (Location location : assumptions.keySet()) {
+    for (Location location : checkedAssumptions.keySet()) {
       // fix to make sure that we only consider well-formed assumptions
       Invariant wellFormedAssumption =
           new Invariant(
               tbdd,
-              assumptions
+              checkedAssumptions
                   .get(location)
                   .getBDDCopy()
                   .andWith(tbdd.getOriginalRoute().wellFormednessConstraints(true)));
@@ -247,7 +256,7 @@ public class Infer {
         .setImports(this.imports)
         .setExports(this.exports)
         .setTargets(copyInferred(this.targets))
-        .setAssumptions(copyInferred(this.assumptions))
+        .setAssumptions(copyInferred(this.checkedAssumptions))
         .setIncoming(
             inferred.keySet().stream()
                 .filter(x -> x instanceof Edge e && !nodes.containsKey(e.getSrc()))

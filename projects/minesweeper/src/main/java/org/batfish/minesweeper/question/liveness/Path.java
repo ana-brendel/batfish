@@ -5,6 +5,7 @@ import com.google.common.collect.ImmutableMap;
 import net.sf.javabdd.BDD;
 import net.sf.javabdd.BDDFactory;
 import org.batfish.common.BatfishException;
+import org.batfish.datamodel.Bgpv4Route;
 import org.batfish.datamodel.PrefixRange;
 import org.batfish.datamodel.PrefixSpace;
 import org.batfish.datamodel.routing_policy.RoutingPolicy;
@@ -60,7 +61,8 @@ public class Path {
   /// Network context needed
   public record Context(
       @Nonnull TransferBDD tbdd,
-      @Nonnull Map<Location, Invariant> assumptions,
+      @Nonnull Map<Location, Invariant> checkedAssumptions,
+      @Nonnull Map<Location, Invariant> enforcedAssumptions,
       @Nonnull Map<Edge, RoutingPolicy> imports,
       @Nonnull Map<Edge, RoutingPolicy> exports,
       @Nonnull Invariant default_assumption) {
@@ -79,7 +81,12 @@ public class Path {
   /// Return a path builder according to this network's context
   public static Builder builder(@Nonnull Context ctx) {
     return new Builder(
-        ctx.tbdd(), ctx.imports(), ctx.exports(), ctx.assumptions(), ctx.default_assumption());
+        ctx.tbdd(),
+        ctx.imports(),
+        ctx.exports(),
+        ctx.checkedAssumptions(),
+        ctx.enforcedAssumptions(),
+        ctx.default_assumption());
   }
 
   public void freeBDDs() {
@@ -97,7 +104,7 @@ public class Path {
             .prefixSpaceToBDD(prefix)
             .andWith(
                 context
-                    .assumptions()
+                    .checkedAssumptions()
                     .getOrDefault(steps[steps.length - 1], context.default_assumption())
                     .getBDDCopy());
     Invariant initial =
@@ -139,13 +146,15 @@ public class Path {
       }
     }
     assert properties.length - 1 == steps.length - 1;
-    BDD currentAssumption = info.getAssumptions().get(steps[steps.length - 1]).getBDD();
+    // the assumptions used here should be the assumptions that we want checked
+    BDD currentAssumption = info.getCheckedAssumptions().get(steps[steps.length - 1]).getBDD();
     currentAssumption.andWith(context.prefixSpaceToBDD(this.prefix));
     BDD counterBDD = currentAssumption.diffEq(properties[properties.length - 1].getBDD());
     counterBDD.andWith(context.tbdd().getOriginalRoute().wellFormednessConstraints(true));
     // we shouldn't be in this function if the path has no counterexamples
     assert !counterBDD.isZero();
-    String cex = Setup.nonDefaultRoute(getRouteExample(info.tbdd, counterBDD));
+    Bgpv4Route route = getRouteExample(info.tbdd, counterBDD);
+    String cex = route != null ? Setup.nonDefaultRoute(route) : "{NO SAT ASSIGNMENT}";
     currentAssumption.free();
     builder.insert(0, cex + " ");
     return "Inferred Invariant: " + properties[properties.length - 1] + "\n" + builder;
@@ -160,20 +169,23 @@ public class Path {
     private final @Nonnull Map<Edge, RoutingPolicy> exports;
     /// Bottom of the stack is the target location, top of stack is the entry point
     private final @Nonnull Stack<Location> steps;
-    private final @Nonnull Map<Location, Invariant> assumptions;
+    private final @Nonnull Map<Location, Invariant> checkedAssumptions;
+    private final @Nonnull Map<Location, Invariant> enforcedAssumptions;
     private final @Nonnull Invariant default_assumption;
 
     private Builder(
         @Nonnull TransferBDD tbdd,
         @Nonnull Map<Edge, RoutingPolicy> imports,
         @Nonnull Map<Edge, RoutingPolicy> exports,
-        @Nonnull Map<Location, Invariant> assumptions,
+        @Nonnull Map<Location, Invariant> checkedAssumptions,
+        @Nonnull Map<Location, Invariant> enforcedAssumptions,
         @Nonnull Stack<Location> steps,
         @Nullable Invariant default_assumption) {
       this.tbdd = tbdd;
       this.imports = ImmutableMap.copyOf(imports);
       this.exports = ImmutableMap.copyOf(exports);
-      this.assumptions = ImmutableMap.copyOf(assumptions);
+      this.checkedAssumptions = ImmutableMap.copyOf(checkedAssumptions);
+      this.enforcedAssumptions = ImmutableMap.copyOf(enforcedAssumptions);
       this.steps = copySteps(steps);
       this.default_assumption =
           default_assumption == null ? new Invariant(tbdd) : default_assumption.copy();
@@ -191,9 +203,17 @@ public class Path {
         @Nonnull TransferBDD tbdd,
         @Nonnull Map<Edge, RoutingPolicy> imports,
         @Nonnull Map<Edge, RoutingPolicy> exports,
-        @Nonnull Map<Location, Invariant> assumptions,
+        @Nonnull Map<Location, Invariant> checkedAssumptions,
+        @Nonnull Map<Location, Invariant> enforcedAssumptions,
         @Nullable Invariant default_assumption) {
-      this(tbdd, imports, exports, assumptions, new Stack<>(), default_assumption);
+      this(
+          tbdd,
+          imports,
+          exports,
+          checkedAssumptions,
+          enforcedAssumptions,
+          new Stack<>(),
+          default_assumption);
     }
 
     /// Generates new Path.Builders corresponding to expanding this Path.Builder according to each
@@ -201,7 +221,15 @@ public class Path {
     public Set<Builder> expand(@Nonnull Set<Edge> potentialSteps) {
       Set<Builder> result = new HashSet<>();
       for (Location step : potentialSteps) {
-        Builder curr = new Builder(tbdd, imports, exports, assumptions, steps, default_assumption);
+        Builder curr =
+            new Builder(
+                tbdd,
+                imports,
+                exports,
+                checkedAssumptions,
+                enforcedAssumptions,
+                steps,
+                default_assumption);
         if (curr.addToPath(step)) {
           result.add(curr);
         }
@@ -280,8 +308,10 @@ public class Path {
       if (steps.isEmpty()) {
         return null;
       } else if (!location.equals(steps.firstElement())) {
+        // might make sense as assert
         throw new BatfishException("Path.Builder.build() - Path does not end at target location.");
-      } else if (!assumptions.containsKey(steps.peek())) {
+      } else if (!checkedAssumptions.containsKey(steps.peek())) {
+        // might make sense as assert
         throw new BatfishException("Path.Builder.build() - Path does not start at an assumption.");
       }
       Location[] locations = new Location[steps.size()];
@@ -298,6 +328,7 @@ public class Path {
         } else if (curr instanceof Edge incoming && prev instanceof Node) {
           policy = imports.getOrDefault(incoming, null);
         } else {
+          // might make sense as assert
           throw new BatfishException(
               "Path.build() - Path is not valid; going from " + curr + " to " + prev);
         }
@@ -307,11 +338,17 @@ public class Path {
         } else {
           predicates[i] = post.weakestPrecondition(policy, false);
         }
+        // if there is an enforced assumption at this location, make sure we include
+        if (enforcedAssumptions.containsKey(curr)) {
+          // and with this assumption, if false, then this assumption won't meet conditions
+          predicates[i].getBDD().andWith(enforcedAssumptions.get(curr).getBDDCopy());
+        }
       }
       return new Path(
           locations,
           predicates,
-          new Context(tbdd, assumptions, imports, exports, default_assumption),
+          new Context(
+              tbdd, checkedAssumptions, enforcedAssumptions, imports, exports, default_assumption),
           prefix);
     }
 

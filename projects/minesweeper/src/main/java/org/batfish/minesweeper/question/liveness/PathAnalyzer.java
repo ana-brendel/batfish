@@ -93,7 +93,7 @@ public class PathAnalyzer {
       if (prev.isEmpty()) {
         throw new BatfishException(
             "PathAnalyzer.generatePathBuilders() - This should be unreachable.");
-      } else if (context.assumptions().containsKey(prev.get())) {
+      } else if (context.checkedAssumptions().containsKey(prev.get())) {
         paths.add(curr);
       } else if (prev.get() instanceof Edge edge && nodes.containsKey(edge.getSrc())) {
         // source node of edge is still in network so we just there, if valid path
@@ -113,7 +113,9 @@ public class PathAnalyzer {
     // path
     return paths.stream()
         .filter(
-            p -> p.previous().isPresent() && context.assumptions().containsKey(p.previous().get()))
+            p ->
+                p.previous().isPresent()
+                    && context.checkedAssumptions().containsKey(p.previous().get()))
         .sorted()
         .toList();
   }

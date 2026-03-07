@@ -66,9 +66,14 @@ public class InterferenceCheck {
                 ? property.copy()
                 : property.weakestPrecondition(exportPolicy, false);
         Node src = nodes.get(edge.getSrc());
-        Invariant existing = inferred.getOrDefault(src, Invariant.getFalse(context.tbdd()));
-        // TODO verify that disjoining here is the correct move - we want to consider any "bad
-        // route"
+        // if there is no inferred assumption, use the negation of the enforced assumption if
+        // present, otherwise default is false
+        Invariant existing =
+            inferred.getOrDefault(
+                src,
+                context.enforcedAssumptions().containsKey(src)
+                    ? context.enforcedAssumptions().get(src).negate()
+                    : Invariant.getFalse(context.tbdd()));
         Invariant updated =
             new Invariant(context.tbdd(), existing.getBDDCopy().or(wp.getBDDCopy()));
         inferred.put(src, updated);
@@ -84,9 +89,16 @@ public class InterferenceCheck {
               importPolicy == null
                   ? property.copy()
                   : property.weakestPrecondition(importPolicy, false);
-          Invariant existing = inferred.getOrDefault(edge, Invariant.getFalse(context.tbdd()));
-          Invariant updated =
-              new Invariant(context.tbdd(), existing.getBDDCopy().or(wp.getBDDCopy()));
+          // if there is no inferred assumption, use the negation of the enforced assumption if
+          // present, otherwise default is false
+          Invariant existing =
+              inferred.getOrDefault(
+                  edge,
+                  context.enforcedAssumptions().containsKey(edge)
+                      ? context.enforcedAssumptions().get(edge).negate()
+                      : Invariant.getFalse(context.tbdd()));
+          BDD updatedBDD = existing.getBDDCopy().or(wp.getBDDCopy());
+          Invariant updated = new Invariant(context.tbdd(), updatedBDD);
           inferred.put(edge, updated);
           if (!existing.equals(updated) && !working.contains(edge)) {
             working.add(edge);
@@ -101,9 +113,9 @@ public class InterferenceCheck {
   /// For all ingress locations, we find a counterexample if one exists
   private Map<Location, Bgpv4Route> interferenceExample() {
     Map<Location, Bgpv4Route> checks = new HashMap<>();
-    for (Location assumption_location : context.assumptions().keySet()) {
+    for (Location assumption_location : context.checkedAssumptions().keySet()) {
       if (inferred.containsKey(assumption_location)) {
-        BDD assumption = context.assumptions().get(assumption_location).getBDDCopy();
+        BDD assumption = context.checkedAssumptions().get(assumption_location).getBDDCopy();
         BDD intersection = assumption.andWith(inferred.get(assumption_location).getBDDCopy());
         intersection.andWith(context.tbdd().getOriginalRoute().wellFormednessConstraints(true));
         // if there exists some assumption which also satisfies the "bad condition", add counter

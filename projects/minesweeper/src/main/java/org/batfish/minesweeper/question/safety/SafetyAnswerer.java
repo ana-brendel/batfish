@@ -49,9 +49,24 @@ public final class SafetyAnswerer extends Answerer {
   public SafetyAnswerer(SafetyQuestion question, IBatfish batfish) {
     super(question, batfish);
     _showAll = question.get_show_all();
-    _targets = question.get_targets();
     _refine = question.get_refine();
     _default_assumption = question.get_default_assumption();
+
+    // we take target property and corresponding locations as two lists with corresponding inputs
+    List<Invariant.Builder> targetProperties =
+        question.get_target().isPresent() ? question.get_target().get().get_builders() : List.of();
+    List<Location.Builder> targetLocations =
+        question.get_location().isPresent()
+            ? question.get_location().get().get_builders()
+            : List.of();
+
+    assert targetProperties.size() == targetLocations.size()
+        : "Arguments checked in question, if this fails there is bug in code.";
+
+    _targets = new HashMap<>();
+    for (int i = 0; i < targetProperties.size(); i++) {
+      _targets.put(targetLocations.get(i), targetProperties.get(i));
+    }
 
     // this is added because the assumptions are taken as two lists with corresponding inputs
     List<Invariant.Builder> invAssumptions =
@@ -152,8 +167,14 @@ public final class SafetyAnswerer extends Answerer {
       Map<String, Map<String, Set<String>>> intermediateGroups = new HashMap<>();
       Map<BDD, String> stringLimits = new HashMap<>();
 
-      // add targets to cache so they can be used for any assumption
+      // add targets and assumptions to cache so they can be used if useful
       targets
+          .values()
+          .forEach(inv -> cache.put(inv.getBDDCopy(), inv.toString(refinementOccurred)));
+      info.getCheckedAssumptions()
+          .values()
+          .forEach(inv -> cache.put(inv.getBDDCopy(), inv.toString(refinementOccurred)));
+      info.getEnforcedAssumptions()
           .values()
           .forEach(inv -> cache.put(inv.getBDDCopy(), inv.toString(refinementOccurred)));
 
@@ -166,12 +187,18 @@ public final class SafetyAnswerer extends Answerer {
                   addTargetToTAE(tae, loc, targets.get(loc), results.get(loc), cache);
                 } else {
                   String assumption_str =
-                      info.getAssumptions().containsKey(loc)
-                          ? info.getAssumptions().get(loc).toString(refinementOccurred, cache)
-                          : "";
+                      info.getCheckedAssumptions().containsKey(loc)
+                          ? info.getCheckedAssumptions()
+                              .get(loc)
+                              .toString(refinementOccurred, cache)
+                          : info.getEnforcedAssumptions().containsKey(loc)
+                              ? info.getEnforcedAssumptions()
+                                  .get(loc)
+                                  .toString(refinementOccurred, cache)
+                              : "";
 
                   String inferred_str = results.get(loc).toString(true, cache);
-                  if (inferred_str.equals("LIMIT (Complex BDD)")) {
+                  if (inferred_str.equals("LIMIT (Complex BDD)") || inferred_str.isEmpty()) {
                     inferred_str =
                         stringLimits.computeIfAbsent(
                             results.get(loc).getBDD(),
@@ -235,7 +262,7 @@ public final class SafetyAnswerer extends Answerer {
         // otherwise, report whether the assumptions were satisfied
         // assumption -> inferred invariant -> counterexample -> set of locations
         Map<String, Map<String, Map<String, Set<String>>>> groupings = new HashMap<>();
-        info.getAssumptions()
+        info.getCheckedAssumptions()
             .forEach(
                 (loc, assumption) -> {
                   String assumption_str = assumption.toString(refinementOccurred, cache);
@@ -320,7 +347,6 @@ public final class SafetyAnswerer extends Answerer {
     }
 
     assert _targets.size() == 1 : "Current API limits to a single property to verify";
-
     // determine the target and run the inference algorithm
     //    Map.Entry<Location, Invariant> target =
     //        buildInvariant(info, true, _targets.entrySet().stream().findFirst().get());

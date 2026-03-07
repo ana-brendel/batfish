@@ -29,7 +29,12 @@ public class PathTest {
     TransferBDD tbdd = new TransferBDD(new ConfigAtomicPredicates(List.of(), Set.of(), Set.of()));
     empty_context =
         new Path.Context(
-            tbdd, new HashMap<>(), new HashMap<>(), new HashMap<>(), new Invariant(tbdd));
+            tbdd,
+            new HashMap<>(),
+            new HashMap<>(),
+            new HashMap<>(),
+            new HashMap<>(),
+            new Invariant(tbdd));
   }
 
   @Test

@@ -165,7 +165,8 @@ public class BDDString {
     // IP address in the prefix, starting from the highest order bit, and that no other bits
     // of the IP address are set. if this is not the case, then we can't represent the BDD
     // as a single prefix range, so we return null.
-    int[] prefixSupport = prefixOnlyBDD.support().scanSet();
+    BDD pobSupport = prefixOnlyBDD.support();
+    int[] prefixSupport = pobSupport.scanSet();
     int minToMaxPrefixLength;
     if (prefixSupport == null || prefixSupport.length == 0) {
       minToMaxPrefixLength = 0;
@@ -189,6 +190,7 @@ public class BDDString {
         if (i % 8 == 7 && i != minToMaxPrefixLength - 1) {
           result.append(".");
         }
+        var.free();
       }
       result.append("/").append(minToMaxPrefixLength);
     }
@@ -209,6 +211,7 @@ public class BDDString {
       if (length > upper) {
         upper = length;
       }
+      assignment.free();
     }
 
     // if the length range is the same as the prefix length, then we don't add the range
@@ -217,7 +220,8 @@ public class BDDString {
       // check that the BDD represents all and only the range of lengths from lower to upper,
       // inclusive; otherwise we can't represent it as a single prefix range so we return a
       // bitstring
-      if (this.base.getPrefixLength().range(lower, upper).equals(lenOnlyBDD)) {
+      BDD range = this.base.getPrefixLength().range(lower, upper);
+      if (range.equals(lenOnlyBDD)) {
         result.append(":").append(lower).append("-").append(upper);
       } else {
         int maxLengthVar = Arrays.stream(lenSupport.scanSet()).max().getAsInt();
@@ -225,9 +229,15 @@ public class BDDString {
           BDD var = factory.ithVar(maxLengthVar - i);
           String bitChar = getBitChar(prefixOnlyBDD, var);
           result.append(bitChar);
+          var.free();
         }
       }
+      range.free();
     }
+    prefixOnlyBDD.free();
+    pobSupport.free();
+    lenOnlyBDD.free();
+    lenSupport.free();
     return result.toString();
   }
 

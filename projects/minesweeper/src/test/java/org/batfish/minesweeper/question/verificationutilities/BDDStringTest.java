@@ -212,6 +212,9 @@ public class BDDStringTest {
     BDD a = commBDDString("40:40").and(prefixStringToBDD("25.13.0.0/16", true));
     String a_str = BDDString.get(tbdd, a);
     assertEquals("comm(40:40),prefix(25.13.0.0/16)", a_str);
+    BDD aa = commBDDString("40:40").and(prefixStringToBDD("25.13.0.0/16:16-32", true));
+    String aa_str = BDDString.get(tbdd, aa);
+    assertEquals("comm(40:40),prefix(25.13.0.0/16:16-32)", aa_str);
     BDD d = commBDDString("30:30").and(prefixStringToBDD("25.13.0.0/16", false));
     String d_str = BDDString.get(tbdd, d);
     assertEquals("!prefix(25.13.0.0/16),comm(30:30)", d_str);

@@ -5,12 +5,11 @@ import net.sf.javabdd.BDDFactory;
 import org.apache.commons.lang3.tuple.Pair;
 import org.batfish.datamodel.Ip;
 import org.batfish.datamodel.Prefix;
-import org.batfish.datamodel.PrefixRange;
-import org.batfish.datamodel.SubRange;
 import org.batfish.minesweeper.CommunityVar;
 import org.batfish.minesweeper.bdd.BDDRoute;
 import org.batfish.minesweeper.bdd.TransferBDD;
 
+import javax.annotation.Nonnull;
 import java.util.Arrays;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -25,8 +24,8 @@ public class BDDString {
   private final BDDFactory factory;
   private final BDDRoute base;
 
-  private final int[] prefixVars;
   private final int maxPrefixVarNum;
+
   private final BDD prefixOnlySupport;
   private final BDD prefixInfoSupport;
   private final Map<CommunityVar, Set<Integer>> communities;
@@ -56,8 +55,8 @@ public class BDDString {
     this.base = tbdd.getOriginalRoute();
     this.prefixOnlySupport = this.base.getPrefix().support();
     this.prefixInfoSupport = this.prefixOnlySupport.and(this.base.getPrefixLength().support());
-    this.prefixVars = prefixOnlySupport.scanSet();
-    this.maxPrefixVarNum = Arrays.stream(this.prefixVars).max().getAsInt();
+    int[] prefixVars = prefixOnlySupport.scanSet();
+    this.maxPrefixVarNum = Arrays.stream(prefixVars).max().getAsInt();
 
     // make the only variable corresponding to "all communities" be the one isolated for it
     this.communities = tbdd.getCommunityAtomicPredicates();
@@ -157,27 +156,43 @@ public class BDDString {
   }
 
   /// Return prefix range associated with a bdd.
-  /// If this BDD does not represent a single prefix range, the method returns null.
-  private PrefixRange prefixOfBDD(BDD bdd) {
+  /// If this BDD does not represent a single prefix range, the method returns a
+  /// bitstring representation of the prefix range.
+  private @Nonnull String prefixOfBDD(BDD bdd) {
     BDD prefixOnlyBDD = bdd.project(this.prefixOnlySupport);
-    Ip ip = Ip.create(this.base.getPrefix().satAssignmentToLong(prefixOnlyBDD));
+    StringBuilder result;
     // check that the BDD assigns values to some contiguous set of variables corresponding to the
     // IP address in the prefix, starting from the highest order bit, and that no other bits
     // of the IP address are set. if this is not the case, then we can't represent the BDD
     // as a single prefix range, so we return null.
     int[] prefixSupport = prefixOnlyBDD.support().scanSet();
-    int minPrefixVar;
+    int minToMaxPrefixLength;
     if (prefixSupport == null || prefixSupport.length == 0) {
-      minPrefixVar = this.maxPrefixVarNum + 1;
+      minToMaxPrefixLength = 0;
     } else {
       // note: we assume the variables in prefixSupport are in increasing order,
       // which seems to be the case based on the behavior of support() and scanSet()
-      minPrefixVar = prefixSupport[0];
-      if (prefixSupport.length != this.maxPrefixVarNum - minPrefixVar + 1) {
-        return null;
-      }
+      minToMaxPrefixLength = this.maxPrefixVarNum - prefixSupport[0] + 1;
     }
-    Prefix p = Prefix.create(ip, maxPrefixVarNum - minPrefixVar + 1);
+    if (prefixSupport == null || prefixSupport.length == minToMaxPrefixLength) {
+      // the BDD represents a single prefix
+      Ip ip = Ip.create(this.base.getPrefix().satAssignmentToLong(prefixOnlyBDD));
+      Prefix p = Prefix.create(ip, minToMaxPrefixLength);
+      result = new StringBuilder(p.toString());
+    } else {
+      result = new StringBuilder();
+      // return a bit representation of the prefix, since it does not represent a unique prefix
+      for (int i = 0; i < minToMaxPrefixLength; i++) {
+        BDD var = factory.ithVar(maxPrefixVarNum - i);
+        String bitChar = getBitChar(prefixOnlyBDD, var);
+        result.append(bitChar);
+        if (i % 8 == 7 && i != minToMaxPrefixLength - 1) {
+          result.append(".");
+        }
+      }
+      result.append("/").append(minToMaxPrefixLength);
+    }
+
     // now let's work on the length range
     BDD lenSupport = this.base.getPrefixLength().support();
     BDD lenOnlyBDD = bdd.project(lenSupport);
@@ -195,13 +210,39 @@ public class BDDString {
         upper = length;
       }
     }
-    // check that the BDD represents all and only the range of lengths from lower to upper,
-    // inclusive; otherwise we can't represent it as a single prefix range so we return null
-    if (this.base.getPrefixLength().range(lower, upper).equals(lenOnlyBDD)) {
-      return new PrefixRange(p, new SubRange(lower, upper));
-    } else {
-      return null;
+
+    // if the length range is the same as the prefix length, then we don't add the range
+    // to the string representation since it is redundant
+    if (lower != upper || lower != minToMaxPrefixLength) {
+      // check that the BDD represents all and only the range of lengths from lower to upper,
+      // inclusive; otherwise we can't represent it as a single prefix range so we return a
+      // bitstring
+      if (this.base.getPrefixLength().range(lower, upper).equals(lenOnlyBDD)) {
+        result.append(":").append(lower).append("-").append(upper);
+      } else {
+        int maxLengthVar = Arrays.stream(lenSupport.scanSet()).max().getAsInt();
+        for (int i = 0; i < 6; i++) {
+          BDD var = factory.ithVar(maxLengthVar - i);
+          String bitChar = getBitChar(prefixOnlyBDD, var);
+          result.append(bitChar);
+        }
+      }
     }
+    return result.toString();
+  }
+
+  // return a character representing whether a given bdd variable has a particular
+  // required value in the given bdd
+  private static String getBitChar(BDD bdd, BDD var) {
+    String bitChar;
+    if (!bdd.diffSat(var)) {
+      bitChar = "1";
+    } else if (!bdd.andSat(var)) {
+      bitChar = "0";
+    } else {
+      bitChar = "*";
+    }
+    return bitChar;
   }
 
   /// Returns set which is disjunction over the prefixes - first BDD in pair is prefix, second is
@@ -231,10 +272,10 @@ public class BDDString {
 
     // process common prefix groups - right now, we are just checking for positive prefixes, or
     // negation
-    Map<BDD, Set<Pair<Pair<BDD, PrefixRange>, Boolean>>> prefixGroups = new HashMap<>();
+    Map<BDD, Set<Pair<Pair<BDD, String>, Boolean>>> prefixGroups = new HashMap<>();
     for (BDD remaining : prefixBDDGroups.keySet()) {
       Map<BDD, BDD> differentPrefixes = prefixBDDGroups.get(remaining);
-      Set<Pair<Pair<BDD, PrefixRange>, Boolean>> prefixes =
+      Set<Pair<Pair<BDD, String>, Boolean>> prefixes =
           differentPrefixes.entrySet().stream()
               .map(
                   entry -> {
@@ -251,12 +292,12 @@ public class BDDString {
                     .map(e -> e.getKey().and(e.getValue()))
                     .toList());
         BDD potential = disjunction.not();
-        Set<Pair<BDD, PrefixRange>> negated = new HashSet<>();
+        Set<Pair<BDD, String>> negated = new HashSet<>();
         BDD.AllSatIterator iterator = potential.allsat();
         while (iterator.hasNext()) {
           BDD assignment = bddOfByteArr(iterator.next());
           BDD projection = assignment.project(this.prefixInfoSupport);
-          PrefixRange prefix = this.prefixOfBDD(assignment);
+          String prefix = this.prefixOfBDD(assignment);
           negated.add(Pair.of(projection, prefix));
           // only switches to the negation if there is one negated prefix
           if (negated.size() > 1) {
@@ -264,11 +305,11 @@ public class BDDString {
           }
         }
         // only switches to the negation if there is one negated prefix
-        if (negated.size() == 1 && negated.stream().noneMatch(p -> p.getRight() == null)) {
+        if (negated.size() == 1) {
           prefixes = Set.of(Pair.of(negated.stream().findFirst().get(), false));
         }
       }
-      if (!prefixes.isEmpty() && prefixes.stream().noneMatch(p -> p.getLeft().getRight() == null)) {
+      if (!prefixes.isEmpty()) {
         prefixGroups.put(remaining, prefixes);
       }
     }
@@ -281,7 +322,7 @@ public class BDDString {
               .flatMap(
                   entry -> {
                     BDD remaining = entry.getKey();
-                    Set<Pair<Pair<BDD, PrefixRange>, Boolean>> prefixes = entry.getValue();
+                    Set<Pair<Pair<BDD, String>, Boolean>> prefixes = entry.getValue();
                     if (prefixes.isEmpty()) {
                       return Stream.of(Pair.of(Pair.of(this.factory.one(), remaining), 0));
                     } else {
@@ -290,7 +331,7 @@ public class BDDString {
                               prefix -> {
                                 Integer var =
                                     this.addStringToBank(
-                                        "prefix(" + prefix.getLeft().getRight().toString() + ")");
+                                        "prefix(" + prefix.getLeft().getRight() + ")");
                                 BDD prefixBDD = prefix.getLeft().getLeft();
                                 return Pair.of(
                                     Pair.of(prefixBDD, remaining), prefix.getRight() ? var : -var);

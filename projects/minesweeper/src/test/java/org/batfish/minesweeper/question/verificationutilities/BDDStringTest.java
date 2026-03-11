@@ -160,7 +160,31 @@ public class BDDStringTest {
                 .or(prefixStringToBDD("12.0.0.0/8:8-12", true)));
     assertEquals("prefix(12.0.0.0/8:8-12) OR prefix(25.13.0.0/16:16-32)", h);
 
-    // TODO - Examples that our BDD to string class cannot support
+    // disjunction of two prefixes that can be combined into a single prefix with wildcards
+    String i =
+        BDDString.get(
+            tbdd,
+            prefixStringToBDD("192.0.0.0/8", true).or(prefixStringToBDD("200.0.0.0/8", true)));
+    assertEquals("prefix(1100*000/8)", i);
+
+    // as above but now prefix ranges with the same range of prefix lengths
+    String j =
+        BDDString.get(
+            tbdd,
+            prefixStringToBDD("192.0.0.0/8:8-16", true)
+                .or(prefixStringToBDD("200.0.0.0/8:8-16", true)));
+    assertEquals("prefix(1100*000/8:8-16)", j);
+
+    // as above but now the prefix lengths overlap but are not equivalent
+    String k =
+        BDDString.get(
+            tbdd,
+            prefixStringToBDD("192.0.0.0/8:8-16", true)
+                .or(prefixStringToBDD("200.0.0.0/8:8-12", true)));
+    assertEquals("prefix(1100*000/8:8-12) OR prefix(192.0.0.0/8:13-16)", k);
+
+    // TODO - Examples that return bitstrings, but we'd like to do better than that
+    // and recover the original prefix ranges
     /*
     String unknown1 =
         BDDString.get(
@@ -177,8 +201,7 @@ public class BDDStringTest {
             tbdd,
             prefixStringToBDD("25.13.7.0/24", false)
                 .and(prefixStringToBDD("25.13.0.0/16:16-32", true)));
-    String unknown5 = BDDString.get(tbdd, prefixStringToBDD("25.13.0.0/16:16-32", false));
-    */
+     */
   }
 
   @Test

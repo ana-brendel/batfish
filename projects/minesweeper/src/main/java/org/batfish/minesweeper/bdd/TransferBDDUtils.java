@@ -13,6 +13,7 @@ import net.sf.javabdd.BDD;
 import net.sf.javabdd.BDDFactory;
 import net.sf.javabdd.BDDPairing;
 import org.batfish.common.BatfishException;
+import org.batfish.common.bdd.MutableBDDInteger;
 import org.batfish.minesweeper.ConfigAtomicPredicates;
 
 /**
@@ -276,5 +277,84 @@ public class TransferBDDUtils {
       }
     }
     return Optional.of(q_pruned);
+  }
+
+  // Returns true if every route represented by p is more preferred than every route represented by
+  // q, according to the BGP decision process; false otherwise.
+  // This check is approximate, so a result of false may mean that we don't know, while a result of
+  // true means we are sure that p is more preferred than q.
+  public boolean isMorePreferredBGP(BDD p, BDD q, TransferBDD tbdd) {
+    // for now we'll just do the first step, which checks if p's weight is greater than q's weight
+    BDDRoute orig = tbdd.getOriginalRoute();
+    // TODO: Weight is a Cisco-specific attribute so we may want an option to ignore it
+    long p_minWeight = getMinValue(p, orig.getWeight());
+    long q_maxWeight = getMaxValue(q, orig.getWeight());
+    if (p_minWeight > q_maxWeight) {
+      return true;
+    } else if (p_minWeight == q_maxWeight) {
+      // p can still be more preferred than q if p's local preference is greater than q's local
+      // preference
+      long p_minLocalPref = getMinValue(p, orig.getLocalPref());
+      long q_maxLocalPref = getMaxValue(q, orig.getLocalPref());
+      if (p_minLocalPref > q_maxLocalPref) {
+        return true;
+      } else {
+        // TODO continue down the tie-breaking steps
+        return false;
+      }
+    } else {
+      return false;
+    }
+  }
+
+  // TODO these two methods can probably be combined
+
+  // Find the minimum value of the given BDDInteger that satisfies the given BDD.
+  // Assumes that the most-significant bit comes first in the BDDInteger's variable ordering.
+  @VisibleForTesting
+  long getMinValue(BDD bdd, MutableBDDInteger bddInt) {
+    // for each variable in the support, from most to least significant, check if it can be 0 or
+    // not, and construct the minimum value accordingly
+    long result = 0;
+    BDD supp = bddInt.support();
+    int[] vars = supp.scanSet();
+    // vars will be in ascending order, with the most-significant bit last
+    BDD curr = bdd.project(supp);
+    for (int i = 0; i < vars.length; i++) {
+      BDD nvar = bddInt.getFactory().nithVar(vars[i]);
+      if (curr.andSat(nvar)) {
+        curr.andEq(nvar);
+      } else {
+        result += 1L << (vars.length - i - 1);
+      }
+      nvar.free();
+    }
+    supp.free();
+    curr.free();
+    return result;
+  }
+
+  // Find the maximum value of the given BDDInteger that satisfies the given BDD.
+  // Assumes that the most-significant bit comes first in the BDDInteger's variable ordering.
+  @VisibleForTesting
+  long getMaxValue(BDD bdd, MutableBDDInteger bddInt) {
+    // for each variable in the support, from most to least significant, check if it can be 1 or
+    // not, and construct the maximum value accordingly
+    long result = 0;
+    BDD supp = bddInt.support();
+    int[] vars = supp.scanSet();
+    // vars will be in ascending order, with the most-significant bit last
+    BDD curr = bdd.project(supp);
+    for (int i = 0; i < vars.length; i++) {
+      BDD var = bddInt.getFactory().ithVar(vars[i]);
+      if (curr.andSat(var)) {
+        curr.andEq(var);
+        result += 1L << (vars.length - i - 1);
+      }
+      var.free();
+    }
+    supp.free();
+    curr.free();
+    return result;
   }
 }

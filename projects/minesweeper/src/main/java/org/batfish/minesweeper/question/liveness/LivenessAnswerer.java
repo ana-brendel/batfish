@@ -19,6 +19,7 @@ import org.batfish.minesweeper.question.verificationutilities.Edge;
 import org.batfish.minesweeper.question.verificationutilities.Invariant;
 import org.batfish.minesweeper.question.verificationutilities.Location;
 import org.batfish.minesweeper.question.verificationutilities.NetworkInfo;
+import org.batfish.minesweeper.question.verificationutilities.Node;
 import org.batfish.minesweeper.question.verificationutilities.Setup;
 import org.batfish.specifier.SpecifierContext;
 
@@ -159,9 +160,14 @@ public class LivenessAnswerer extends Answerer {
     Pair<Optional<Path>, List<Path>> paths =
         ingress == null ? analyzer.run() : analyzer.run(ingress);
 
-    return paths.getLeft().isPresent()
-        ? new Result(paths.getLeft(), List.of(), interferenceCheck.run())
-        : new Result(Optional.empty(), paths.getRight(), Optional.empty());
+    if (paths.getLeft().isEmpty()) {
+      return new Result(Optional.empty(), paths.getRight(), Optional.empty());
+    } else {
+      // compute the reachable set of routes along the good path, at each node on that path
+      Path goodPath = paths.getLeft().get();
+      Map<Node, Invariant> reachableGood = goodPath.reachableRoutes();
+      return new Result(paths.getLeft(), List.of(), interferenceCheck.run(reachableGood));
+    }
   }
 
   public static Result run(

@@ -160,6 +160,39 @@ public class Path {
     return "Inferred Invariant: " + properties[properties.length - 1] + "\n" + builder;
   }
 
+  public Map<Node, Invariant> reachableRoutes() {
+    Invariant curr = new Invariant(context.tbdd, context.prefixSpaceToBDD(prefix));
+    ImmutableMap.Builder<Node, Invariant> result = new ImmutableMap.Builder<>();
+    int i = steps.length - 1;
+    while (i > 0) {
+      Location loc = steps[i];
+      if (loc instanceof Node) {
+        i--;
+        continue;
+      }
+      Edge edge = (Edge) loc;
+      if (context.checkedAssumptions.containsKey(edge)) {
+        // the edge is coming from outside the network
+        curr.free();
+        curr = context.checkedAssumptions.get(loc);
+      } else {
+        // the edge is internal so do a strongest post computation
+        RoutingPolicy exportPolicy = context.exports.get(edge);
+        if (exportPolicy != null) {
+          curr = curr.strongestPostcondition(exportPolicy);
+        }
+        curr = curr.postExport();
+      }
+      RoutingPolicy importPolicy = context.imports.get(edge);
+      if (importPolicy != null) {
+        curr = curr.strongestPostcondition(importPolicy);
+      }
+      result.put((Node) steps[i - 1], curr);
+      i -= 2;
+    }
+    return result.build();
+  }
+
   /// A Path.Builder represents a path which should be connected but has not had any liveness
   /// inference performed. This could be provided by user if we want the user to provide the path.
   @VisibleForTesting

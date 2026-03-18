@@ -283,7 +283,7 @@ public class TransferBDDUtils {
   // q, according to the BGP decision process; false otherwise.
   // This check is approximate, so a result of false may mean that we don't know, while a result of
   // true means we are sure that p is more preferred than q.
-  public boolean isMorePreferredBgp(BDD p, BDD q, TransferBDD tbdd) {
+  public static boolean isMorePreferredBgp(BDD p, BDD q, TransferBDD tbdd) {
     BDDRoute orig = tbdd.getOriginalRoute();
     // TODO: Weight is a Cisco-specific attribute so we may want an option to ignore it
     long p_minWeight = getMinValue(p, orig.getWeight());
@@ -309,18 +309,20 @@ public class TransferBDDUtils {
   // Returns a bdd representing the set of routes that are less preferred than
   // every route in p. The method is conservative, so it only includes routes
   // that we can be sure are less preferred, but it may not include all such routes.
-  public BDD lessPreferredThanBgp(BDD p, TransferBDD tbdd) {
+  public static BDD lessPreferredThanBgp(BDD p, TransferBDD tbdd) {
     BDDRoute orig = tbdd.getOriginalRoute();
     // for now we will only consider the weight and local preference attributes
     // TODO: Weight is a Cisco-specific attribute so we may want an option to ignore it
     long p_minWeight = getMinValue(p, orig.getWeight());
+    BDD lessThanMinWeight =
+        p_minWeight == 0 ? tbdd.getFactory().zero() : orig.getWeight().leq(p_minWeight - 1);
     long p_minLocalPref = getMinValue(p, orig.getLocalPref());
-    return orig.getWeight()
-        .leq(p_minWeight - 1)
-        .orWith(
-            orig.getWeight()
-                .value(p_minWeight)
-                .andWith(orig.getLocalPref().leq(p_minLocalPref - 1)));
+    BDD lessThanMinLocalPref =
+        p_minLocalPref == 0
+            ? tbdd.getFactory().zero()
+            : orig.getLocalPref().leq(p_minLocalPref - 1);
+    return lessThanMinWeight.orWith(
+        orig.getWeight().value(p_minWeight).andWith(lessThanMinLocalPref));
   }
 
   // TODO these two methods can probably be combined
@@ -328,7 +330,7 @@ public class TransferBDDUtils {
   // Find the minimum value of the given BDDInteger that satisfies the given BDD.
   // Assumes that the most-significant bit comes first in the BDDInteger's variable ordering.
   @VisibleForTesting
-  long getMinValue(BDD bdd, MutableBDDInteger bddInt) {
+  static long getMinValue(BDD bdd, MutableBDDInteger bddInt) {
     // for each variable in the support, from most to least significant, check if it can be 0 or
     // not, and construct the minimum value accordingly
     long result = 0;
@@ -353,7 +355,7 @@ public class TransferBDDUtils {
   // Find the maximum value of the given BDDInteger that satisfies the given BDD.
   // Assumes that the most-significant bit comes first in the BDDInteger's variable ordering.
   @VisibleForTesting
-  long getMaxValue(BDD bdd, MutableBDDInteger bddInt) {
+  static long getMaxValue(BDD bdd, MutableBDDInteger bddInt) {
     // for each variable in the support, from most to least significant, check if it can be 1 or
     // not, and construct the maximum value accordingly
     long result = 0;

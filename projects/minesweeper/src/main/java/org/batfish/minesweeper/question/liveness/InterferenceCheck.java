@@ -61,6 +61,7 @@ public class InterferenceCheck {
       Invariant property = inferred.get(location);
       if (location instanceof Edge edge && nodes.containsKey(edge.getSrc())) {
         RoutingPolicy exportPolicy = context.exports().get(edge);
+        property = property.preImport();
         Invariant wp =
             exportPolicy == null
                 ? property.copy()
@@ -137,7 +138,7 @@ public class InterferenceCheck {
     working.clear();
     Invariant condition =
         new Invariant(
-            context.tbdd(), target.negate().getBDDCopy().and(context.prefixSpaceToBDD(prefix)));
+            context.tbdd(), target.negate().getBDD().and(context.prefixSpaceToBDD(prefix)));
     if (condition.isFalse()) {
       // no possible "bad route" exists that matches the target prefix
       return Optional.empty();

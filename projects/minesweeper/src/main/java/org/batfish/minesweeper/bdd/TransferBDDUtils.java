@@ -283,8 +283,7 @@ public class TransferBDDUtils {
   // q, according to the BGP decision process; false otherwise.
   // This check is approximate, so a result of false may mean that we don't know, while a result of
   // true means we are sure that p is more preferred than q.
-  public boolean isMorePreferredBGP(BDD p, BDD q, TransferBDD tbdd) {
-    // for now we'll just do the first step, which checks if p's weight is greater than q's weight
+  public boolean isMorePreferredBgp(BDD p, BDD q, TransferBDD tbdd) {
     BDDRoute orig = tbdd.getOriginalRoute();
     // TODO: Weight is a Cisco-specific attribute so we may want an option to ignore it
     long p_minWeight = getMinValue(p, orig.getWeight());
@@ -305,6 +304,23 @@ public class TransferBDDUtils {
     } else {
       return false;
     }
+  }
+
+  // Returns a bdd representing the set of routes that are less preferred than
+  // every route in p. The method is conservative, so it only includes routes
+  // that we can be sure are less preferred, but it may not include all such routes.
+  public BDD lessPreferredThanBgp(BDD p, TransferBDD tbdd) {
+    BDDRoute orig = tbdd.getOriginalRoute();
+    // for now we will only consider the weight and local preference attributes
+    // TODO: Weight is a Cisco-specific attribute so we may want an option to ignore it
+    long p_minWeight = getMinValue(p, orig.getWeight());
+    long p_minLocalPref = getMinValue(p, orig.getLocalPref());
+    return orig.getWeight()
+        .leq(p_minWeight - 1)
+        .orWith(
+            orig.getWeight()
+                .value(p_minWeight)
+                .andWith(orig.getLocalPref().leq(p_minLocalPref - 1)));
   }
 
   // TODO these two methods can probably be combined

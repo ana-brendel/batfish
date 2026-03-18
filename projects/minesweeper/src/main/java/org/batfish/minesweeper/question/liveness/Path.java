@@ -325,6 +325,9 @@ public class Path {
         RoutingPolicy policy;
         if (curr instanceof Node && prev instanceof Edge outgoing) {
           policy = exports.getOrDefault(outgoing, null);
+          // if we are pushing post back through an export policy,
+          // we first account for the export transformations that BGP does
+          post = post.preImport();
         } else if (curr instanceof Edge incoming && prev instanceof Node) {
           policy = imports.getOrDefault(incoming, null);
         } else {

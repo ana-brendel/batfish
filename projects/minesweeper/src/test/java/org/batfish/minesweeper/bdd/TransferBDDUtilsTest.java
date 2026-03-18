@@ -214,7 +214,7 @@ public class TransferBDDUtilsTest {
     // p has weight 200 (min = 200), q has weight 100 (max = 100); p is more preferred
     BDD p = orig.getWeight().value(200);
     BDD q = orig.getWeight().value(100);
-    assertTrue(utils.isMorePreferredBGP(p, q, _tbdd));
+    assertTrue(utils.isMorePreferredBgp(p, q, _tbdd));
   }
 
   @Test
@@ -225,7 +225,7 @@ public class TransferBDDUtilsTest {
     // p has weight 50 (min = 50), q has weight 100 (max = 100); p is not more preferred
     BDD p = orig.getWeight().value(50);
     BDD q = orig.getWeight().value(100);
-    assertFalse(utils.isMorePreferredBGP(p, q, _tbdd));
+    assertFalse(utils.isMorePreferredBgp(p, q, _tbdd));
   }
 
   @Test
@@ -236,7 +236,7 @@ public class TransferBDDUtilsTest {
     // p and q have the same weight (100), but p has higher local pref (300 vs 200)
     BDD p = orig.getWeight().value(100).and(orig.getLocalPref().value(300));
     BDD q = orig.getWeight().value(100).and(orig.getLocalPref().value(200));
-    assertTrue(utils.isMorePreferredBGP(p, q, _tbdd));
+    assertTrue(utils.isMorePreferredBgp(p, q, _tbdd));
   }
 
   @Test
@@ -247,7 +247,7 @@ public class TransferBDDUtilsTest {
     // p and q have the same weight (100), but p has lower local pref (100 vs 200)
     BDD p = orig.getWeight().value(100).and(orig.getLocalPref().value(100));
     BDD q = orig.getWeight().value(100).and(orig.getLocalPref().value(200));
-    assertFalse(utils.isMorePreferredBGP(p, q, _tbdd));
+    assertFalse(utils.isMorePreferredBgp(p, q, _tbdd));
   }
 
   @Test
@@ -258,7 +258,7 @@ public class TransferBDDUtilsTest {
     // p and q have the same weight (100) and the same local pref (200); tie, returns false
     BDD p = orig.getWeight().value(100).and(orig.getLocalPref().value(200));
     BDD q = orig.getWeight().value(100).and(orig.getLocalPref().value(200));
-    assertFalse(utils.isMorePreferredBGP(p, q, _tbdd));
+    assertFalse(utils.isMorePreferredBgp(p, q, _tbdd));
   }
 
   @Test
@@ -270,7 +270,7 @@ public class TransferBDDUtilsTest {
     // min(p) = 100 < max(q) = 300 so we cannot say p is more preferred by weight alone
     BDD p = orig.getWeight().geq(100).and(orig.getWeight().leq(200));
     BDD q = orig.getWeight().geq(150).and(orig.getWeight().leq(300));
-    assertFalse(utils.isMorePreferredBGP(p, q, _tbdd));
+    assertFalse(utils.isMorePreferredBgp(p, q, _tbdd));
   }
 
   @Test
@@ -282,7 +282,7 @@ public class TransferBDDUtilsTest {
     // min(p) = 400 > max(q) = 300 so p is more preferred
     BDD p = orig.getWeight().geq(400).and(orig.getWeight().leq(500));
     BDD q = orig.getWeight().geq(100).and(orig.getWeight().leq(300));
-    assertTrue(utils.isMorePreferredBGP(p, q, _tbdd));
+    assertTrue(utils.isMorePreferredBgp(p, q, _tbdd));
   }
 
   @Test
@@ -293,6 +293,52 @@ public class TransferBDDUtilsTest {
     // p's minimum weight is 0 due to the disjunction
     BDD p = orig.getWeight().value(200).or(orig.getMed().value(500));
     BDD q = orig.getWeight().value(100);
-    assertFalse(utils.isMorePreferredBGP(p, q, _tbdd));
+    assertFalse(utils.isMorePreferredBgp(p, q, _tbdd));
+  }
+
+  @Test
+  public void testLessPreferredThanBgp_lowerWeightAlwaysIncluded() {
+    TransferBDDUtils utils = new TransferBDDUtils();
+    BDDRoute orig = _tbdd.getOriginalRoute();
+
+    BDD p = orig.getWeight().value(200).and(orig.getLocalPref().value(300));
+    BDD lessPreferred = utils.lessPreferredThanBgp(p, _tbdd);
+
+    assertTrue(lessPreferred.andSat(orig.getWeight().value(199)));
+    assertFalse(lessPreferred.andSat(orig.getWeight().value(201)));
+  }
+
+  @Test
+  public void testLessPreferredThanBgp_sameWeightLowerLocalPrefIncluded() {
+    TransferBDDUtils utils = new TransferBDDUtils();
+    BDDRoute orig = _tbdd.getOriginalRoute();
+
+    BDD p = orig.getWeight().value(200).and(orig.getLocalPref().value(300));
+    BDD lessPreferred = utils.lessPreferredThanBgp(p, _tbdd);
+
+    assertTrue(
+        lessPreferred.andSat(orig.getWeight().value(200).and(orig.getLocalPref().value(299))));
+    assertFalse(
+        lessPreferred.andSat(orig.getWeight().value(200).and(orig.getLocalPref().value(300))));
+  }
+
+  @Test
+  public void testLessPreferredThanBgp_disjunctionUsesConservativeMinimums() {
+    TransferBDDUtils utils = new TransferBDDUtils();
+    BDDRoute orig = _tbdd.getOriginalRoute();
+
+    BDD p =
+        orig.getWeight()
+            .value(150)
+            .and(orig.getLocalPref().value(500))
+            .or(orig.getWeight().value(200).and(orig.getLocalPref().value(300)));
+    BDD lessPreferred = utils.lessPreferredThanBgp(p, _tbdd);
+
+    assertTrue(lessPreferred.andSat(orig.getWeight().value(149)));
+    assertTrue(
+        lessPreferred.andSat(orig.getWeight().value(150).and(orig.getLocalPref().value(299))));
+    assertFalse(
+        lessPreferred.andSat(orig.getWeight().value(150).and(orig.getLocalPref().value(300))));
+    assertFalse(lessPreferred.andSat(orig.getWeight().value(199)));
   }
 }

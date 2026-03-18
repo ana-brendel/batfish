@@ -26,6 +26,7 @@ import net.sf.javabdd.BDD;
 import net.sf.javabdd.BDDFactory;
 import net.sf.javabdd.BDDPairing;
 import org.batfish.common.BatfishException;
+import org.batfish.common.bdd.MutableBDDInteger;
 import org.batfish.datamodel.LineAction;
 import org.batfish.datamodel.PrefixRange;
 import org.batfish.datamodel.PrefixSpace;
@@ -607,6 +608,22 @@ public class Invariant {
   public static Invariant strongestCommonImplicant(Invariant left, Invariant right) {
     assert left.tbdd.equals(right.tbdd);
     return new Invariant(left.tbdd, left.bdd.and(right.bdd));
+  }
+
+  // Returns a version of the current invariant that represents what must hold on export
+  // from the neighbor in order for this invariant to hold on import.  In other words,
+  // it reflects the transformations that BGP performs when it exports a route.
+  public Invariant preImport() {
+    // for now the only transformation that we handle is the fact that the local
+    // preference is reset to default (100) on export;
+    // hence we require this invariant to be satisfied under that constraint,
+    // and then we quantify out the local preference since the exporting value is irrelevant
+    MutableBDDInteger localPref = tbdd.getOriginalRoute().getLocalPref();
+    BDD localPref100 = localPref.value(100L).andEq(this.bdd);
+    BDD localPrefSupport = localPref.support();
+    Invariant i = new Invariant(tbdd, localPref100.existEq(localPrefSupport));
+    localPrefSupport.free();
+    return i;
   }
 
   /**

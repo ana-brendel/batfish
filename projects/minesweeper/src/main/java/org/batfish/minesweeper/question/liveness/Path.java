@@ -160,9 +160,12 @@ public class Path {
     return "Inferred Invariant: " + properties[properties.length - 1] + "\n" + builder;
   }
 
+  // Returns a map from each node on the path to an invariant representing the routes that can
+  // reach the node along this path
   public Map<Node, Invariant> reachableRoutes() {
     Invariant curr = new Invariant(context.tbdd, context.prefixSpaceToBDD(prefix));
     ImmutableMap.Builder<Node, Invariant> result = new ImmutableMap.Builder<>();
+    // the path is in reverse order so start at the end
     int i = steps.length - 1;
     while (i > 0) {
       Location loc = steps[i];
@@ -172,7 +175,7 @@ public class Path {
       }
       Edge edge = (Edge) loc;
       if (context.checkedAssumptions.containsKey(edge)) {
-        // the edge is coming from outside the network
+        // the edge is coming from outside the network so use its assumption
         curr.free();
         curr = context.checkedAssumptions.get(loc);
       } else {
@@ -181,6 +184,8 @@ public class Path {
         if (exportPolicy != null) {
           curr = curr.strongestPostcondition(exportPolicy);
         }
+        // we need to account for the export transformations that BGP does, to
+        // convert curr to an invariant on the routes that the importer will receive
         curr = curr.postExport();
       }
       RoutingPolicy importPolicy = context.imports.get(edge);
@@ -188,6 +193,8 @@ public class Path {
         curr = curr.strongestPostcondition(importPolicy);
       }
       result.put((Node) steps[i - 1], curr);
+      // since this is an edge the previous step must be a node, so we can skip it and move to the
+      // next edge
       i -= 2;
     }
     return result.build();
@@ -358,9 +365,6 @@ public class Path {
         RoutingPolicy policy;
         if (curr instanceof Node && prev instanceof Edge outgoing) {
           policy = exports.getOrDefault(outgoing, null);
-          // if we are pushing post back through an export policy,
-          // we first account for the export transformations that BGP does
-          post = post.preImport();
         } else if (curr instanceof Edge incoming && prev instanceof Node) {
           policy = imports.getOrDefault(incoming, null);
         } else {
@@ -373,6 +377,14 @@ public class Path {
           predicates[i] = post.copy();
         } else {
           predicates[i] = post.weakestPrecondition(policy, false);
+        }
+        if (curr instanceof Edge) {
+          // we need to account for the export transformations that BGP does, to
+          // maintain the invariant that predicates on edges represent the sender's
+          // invariant on the routes that will be sent
+          Invariant old = predicates[i];
+          predicates[i] = predicates[i].preImport();
+          old.free();
         }
         // if there is an enforced assumption at this location, make sure we include
         if (enforcedAssumptions.containsKey(curr)) {

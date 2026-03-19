@@ -285,7 +285,6 @@ public class TransferBDDUtils {
   // true means we are sure that p is more preferred than q.
   public static boolean isMorePreferredBgp(BDD p, BDD q, TransferBDD tbdd) {
     BDDRoute orig = tbdd.getOriginalRoute();
-    // TODO: Weight is a Cisco-specific attribute so we may want an option to ignore it
     long p_minWeight = getMinValue(p, orig.getWeight());
     long q_maxWeight = getMaxValue(q, orig.getWeight());
     if (p_minWeight > q_maxWeight) {
@@ -312,7 +311,6 @@ public class TransferBDDUtils {
   public static BDD lessPreferredThanBgp(BDD p, TransferBDD tbdd) {
     BDDRoute orig = tbdd.getOriginalRoute();
     // for now we will only consider the weight and local preference attributes
-    // TODO: Weight is a Cisco-specific attribute so we may want an option to ignore it
     long p_minWeight = getMinValue(p, orig.getWeight());
     BDD lessThanMinWeight =
         p_minWeight == 0 ? tbdd.getFactory().zero() : orig.getWeight().leq(p_minWeight - 1);
@@ -341,8 +339,10 @@ public class TransferBDDUtils {
     for (int i = 0; i < vars.length; i++) {
       BDD nvar = bddInt.getFactory().nithVar(vars[i]);
       if (curr.andSat(nvar)) {
+        // the bit can be 0, so we set it to 0
         curr.andEq(nvar);
       } else {
+        // the bit must be 1 so we add it to our result
         result += 1L << (vars.length - i - 1);
       }
       nvar.free();
@@ -366,6 +366,7 @@ public class TransferBDDUtils {
     for (int i = 0; i < vars.length; i++) {
       BDD var = bddInt.getFactory().ithVar(vars[i]);
       if (curr.andSat(var)) {
+        // the bit can be 1, so we set it to 1 and add it to our result
         curr.andEq(var);
         result += 1L << (vars.length - i - 1);
       }

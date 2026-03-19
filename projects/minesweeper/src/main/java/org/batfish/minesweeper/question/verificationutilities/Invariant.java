@@ -612,7 +612,7 @@ public class Invariant {
 
   // Returns a version of the current invariant that represents what must hold on export
   // from the neighbor in order for this invariant to hold on import.  In other words,
-  // it reflects the transformations that BGP performs when it exports a route.
+  // it represents the transformations that BGP performs when it exports a route.
   public Invariant preImport() {
     // for now the only transformations that we handle are for the weight and
     // local preference, which are reset to default (0 and 100 respectively) on export
@@ -633,8 +633,8 @@ public class Invariant {
     return i;
   }
 
-  // Like preImport above, but in the reverse direction (suitable for use
-  // in a strongest postcondition computation)
+  // Like preImport above, but in the reverse direction (for use in a strongest postcondition
+  // computation)
   public Invariant postExport() {
     // for now the only transformations are to reset the weight and local preference to default (0
     // and 100 respectively) on export

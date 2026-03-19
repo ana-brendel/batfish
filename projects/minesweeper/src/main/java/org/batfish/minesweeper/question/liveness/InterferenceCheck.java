@@ -50,13 +50,12 @@ public class InterferenceCheck {
   }
 
   /// Iteratively infer the "bad invariants" which allow for a "bad route" to reach the liveness
-  // property location. Note,
-  /// this is sound but not complete as BGP preferences, which we don't account for, might rule out
-  // some of these "bad routes."
+  // property location. The reachableGood parameter allows us to restrict the inference to only
+  // consider routes that are not less preferred than the good routes that can reach nodes
+  // along the "good" path.
   private void inferenceLoop(Map<Node, Invariant> reachableGood) {
     // carries out invariant inference similar to safety property, but we don't allow for denied
-    // routes to be
-    // considered in the weakest precondition computation
+    // routes to be considered in the weakest precondition computation
     while (!working.isEmpty()) {
       Location location = working.remove();
       Invariant property = inferred.get(location);
@@ -112,6 +111,7 @@ public class InterferenceCheck {
           // from the sender's perspective; the call to preImport converts from the
           // receiver's perspective to the sender's perspective
           Invariant updated = new Invariant(context.tbdd(), updatedBDD).preImport();
+          updatedBDD.free();
           inferred.put(edge, updated);
           if (!existing.equals(updated) && !working.contains(edge)) {
             working.add(edge);
@@ -145,6 +145,8 @@ public class InterferenceCheck {
 
   /// Checks for interference, if any counterexamples were found they are returned. (If the result
   /// is empty, then this is interpreted as no interference detected.)
+  /// The reachableGood parameter allows us to restrict the inference to only consider routes that
+  // are not less preferred than the good routes that can reach nodes along the "good" path.
   public Optional<Map<Location, Bgpv4Route>> run(Map<Node, Invariant> reachableGood) {
     inferred.clear();
     working.clear();

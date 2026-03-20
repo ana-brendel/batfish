@@ -91,7 +91,11 @@ public class Invariant {
   public String toString(boolean refinementOccurred) {
     if (this.isFalse()) {
       return refinementOccurred ? "no traffic" : "false";
-    } else if (this.isTrue()) {
+    } else if (this.isTrue()
+        // if the invariant is true, but well-formed, we can represent as true
+        || tbdd.getOriginalRoute()
+            .wellFormednessConstraints(true)
+            .equals(this.bdd.and(tbdd.getOriginalRoute().wellFormednessConstraints(true)))) {
       return "true";
     } else {
       String returned =
@@ -228,7 +232,7 @@ public class Invariant {
       return this;
     }
 
-    public ClauseBuilder setASPath(@Nonnull RegexConstraints asPath) {
+    public ClauseBuilder setAsPath(@Nonnull RegexConstraints asPath) {
       _asPath = asPath;
       return this;
     }
@@ -478,6 +482,11 @@ public class Invariant {
     public RegexConstraints getCommunities() {
       return firstNonNull(_communities, new RegexConstraints());
     }
+
+    @Nonnull
+    public RegexConstraints getAsPath() {
+      return firstNonNull(_asPath, new RegexConstraints());
+    }
   }
 
   public static Builder builder() {
@@ -497,7 +506,7 @@ public class Invariant {
         .matchPrefix(firstNonNull(pos, new PrefixSpace()))
         .avoidPrefix(firstNonNull(neg, new PrefixSpace()))
         .setCommunities(firstNonNull(comms, new RegexConstraints()))
-        .setASPath(firstNonNull(asPath, new RegexConstraints()));
+        .setAsPath(firstNonNull(asPath, new RegexConstraints()));
   }
 
   public BDD getBDD() {

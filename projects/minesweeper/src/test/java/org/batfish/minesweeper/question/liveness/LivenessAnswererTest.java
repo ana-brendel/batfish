@@ -211,7 +211,7 @@ public class LivenessAnswererTest {
         new Invariant(
             net.tbdd(),
             Invariant.clauseBuilder().setCommunities(comm).build(net.tbdd(), net.template()));
-    LivenessAnswerer.Result result = LivenessAnswerer.run(info, BASIC_PREFIX, GAMMANODE, target);
+    LivenessResult result = LivenessAnswerer.run(info, BASIC_PREFIX, GAMMANODE, target);
 
     assertTrue(result.goodPath().isPresent());
     assertTrue(result.potentialInterferences().isEmpty());
@@ -236,7 +236,7 @@ public class LivenessAnswererTest {
         new Invariant(
             net.tbdd(),
             Invariant.clauseBuilder().setCommunities(comm).build(net.tbdd(), net.template()));
-    LivenessAnswerer.Result result = LivenessAnswerer.run(info, BASIC_PREFIX, GAMMANODE, target);
+    LivenessResult result = LivenessAnswerer.run(info, BASIC_PREFIX, GAMMANODE, target);
 
     assertTrue(result.goodPath().isPresent());
     assertTrue(result.potentialInterferences().isPresent());
@@ -376,7 +376,7 @@ public class LivenessAnswererTest {
         new Invariant(
             net.tbdd(),
             Invariant.clauseBuilder().setCommunities(comm).build(net.tbdd(), net.template()));
-    LivenessAnswerer.Result result = LivenessAnswerer.run(info, TARGET_PREFIX, GAMMANODE, target);
+    LivenessResult result = LivenessAnswerer.run(info, TARGET_PREFIX, GAMMANODE, target);
 
     assertTrue(result.goodPath().isPresent());
     assertTrue(result.potentialInterferences().isPresent());

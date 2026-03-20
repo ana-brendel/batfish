@@ -6,20 +6,14 @@ import org.apache.logging.log4j.Logger;
 import org.batfish.common.Answerer;
 import org.batfish.common.NetworkSnapshot;
 import org.batfish.common.plugin.IBatfish;
-import org.batfish.datamodel.Bgpv4Route;
 import org.batfish.datamodel.Configuration;
 import org.batfish.datamodel.PrefixSpace;
 import org.batfish.datamodel.answers.AnswerElement;
-import org.batfish.datamodel.table.Row;
-import org.batfish.datamodel.table.TableAnswerElement;
-import org.batfish.minesweeper.ConfigAtomicPredicates;
-import org.batfish.minesweeper.bdd.TransferBDD;
 import org.batfish.minesweeper.question.searchroutepolicies.RegexConstraint;
 import org.batfish.minesweeper.question.verificationutilities.Edge;
 import org.batfish.minesweeper.question.verificationutilities.Invariant;
 import org.batfish.minesweeper.question.verificationutilities.Location;
 import org.batfish.minesweeper.question.verificationutilities.NetworkInfo;
-import org.batfish.minesweeper.question.verificationutilities.Setup;
 import org.batfish.specifier.SpecifierContext;
 
 import javax.annotation.Nonnull;
@@ -31,19 +25,16 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 
-import static org.batfish.minesweeper.question.verificationutilities.Setup.buildInvariant;
-import static org.batfish.minesweeper.question.verificationutilities.Setup.getConfigAtomicPredicates;
-import static org.batfish.minesweeper.question.verificationutilities.Setup.metadata_liveness;
-import static org.batfish.minesweeper.question.verificationutilities.Setup.nonDefaultRoute;
+import static org.batfish.minesweeper.question.verificationutilities.Setup.buildLocationInvariant;
 
 public class LivenessAnswerer extends Answerer {
   private static final Logger LOGGER = LogManager.getLogger(LivenessAnswerer.class);
 
   private final @Nonnull PrefixSpace _prefix;
   private final @Nullable Pair<Location.Builder, Invariant.Builder> _target;
-  private final @Nonnull Map<Location.Builder, Invariant.Builder> _assumptions;
-  private final @Nonnull Set<RegexConstraint> _communityRegexes;
-  private final @Nonnull Set<RegexConstraint> _asPathRegexes;
+  private final @Nonnull Map<Location.Builder, Invariant.Builder> _assumptions = new HashMap<>();
+  private final @Nonnull Set<RegexConstraint> _communityRegexes = new HashSet<>();
+  private final @Nonnull Set<RegexConstraint> _asPathRegexes = new HashSet<>();
   private final @Nullable Invariant.Builder _default_assumption;
   private final @Nullable Location.Builder _ingress;
 
@@ -63,79 +54,41 @@ public class LivenessAnswerer extends Answerer {
         question.get_assumption_locations().isPresent()
             ? question.get_assumption_locations().get().get_builders()
             : List.of();
+
     assert invAssumptions.size() == locAssumptions.size();
-    _assumptions = new HashMap<>();
     for (int i = 0; i < invAssumptions.size(); i++) {
       _assumptions.put(locAssumptions.get(i), invAssumptions.get(i));
     }
 
-    _communityRegexes = new HashSet<>();
+    if (_default_assumption != null) {
+      _default_assumption
+          .getClauses()
+          .forEach(
+              c -> {
+                _communityRegexes.addAll(c.getCommunities().getRegexConstraints());
+                _asPathRegexes.addAll(c.getAsPath().getRegexConstraints());
+              });
+    }
+
     invAssumptions.forEach(
         clauses ->
             clauses
                 .getClauses()
-                .forEach(c -> _communityRegexes.addAll(c.getCommunities().getRegexConstraints())));
-    _asPathRegexes = new HashSet<>(); // not included in the NetworkClause nor Invariant class yet
+                .forEach(
+                    c -> {
+                      _communityRegexes.addAll(c.getCommunities().getRegexConstraints());
+                      _asPathRegexes.addAll(c.getAsPath().getRegexConstraints());
+                    }));
+
     if (_target != null) {
       _target
           .getRight()
           .getClauses()
-          .forEach(c -> _communityRegexes.addAll(c.getCommunities().getRegexConstraints()));
-    }
-  }
-
-  public record Result(
-      Optional<Path> goodPath,
-      List<Path> badPaths,
-      Optional<Map<Location, Bgpv4Route>> potentialInterferences) {
-    public TableAnswerElement getAnswerElement(NetworkInfo info) {
-      TableAnswerElement tae = new TableAnswerElement(metadata_liveness());
-
-      boolean verified =
-          goodPath.isPresent()
-              && (potentialInterferences.isEmpty() || potentialInterferences.get().isEmpty());
-
-      // add overall result
-      tae.addRow(
-          Row.builder()
-              .put(Setup.RESULT_LABEL_COL, Setup.OVERALL_RESULT)
-              .put(Setup.RESULT_VALUE_COL, verified ? "True" : "False")
-              .build());
-
-      // add the good route, if present
-      goodPath.ifPresent(
-          p ->
-              tae.addRow(
-                  Row.builder()
-                      .put(Setup.RESULT_LABEL_COL, Setup.GOOD_PATH_LABEL)
-                      .put(Setup.RESULT_VALUE_COL, p.display(info))
-                      .build()));
-
-      // if no good paths are found, report back paths which fail to help diagnose problem
-      assert goodPath.isPresent() || !badPaths.isEmpty();
-      badPaths.forEach(
-          path ->
-              tae.addRow(
-                  Row.builder()
-                      .put(Setup.RESULT_LABEL_COL, Setup.BAD_PATH_LABEL)
-                      .put(Setup.RESULT_VALUE_COL, path.displayBadPath(info))
-                      .build()));
-
-      // add possible interference, if applicable
-      assert badPaths.isEmpty() || potentialInterferences.isEmpty();
-      potentialInterferences.ifPresent(
-          interferences ->
-              interferences.forEach(
-                  (entersAt, counter) ->
-                      tae.addRow(
-                          Row.builder()
-                              .put(
-                                  Setup.RESULT_LABEL_COL,
-                                  Setup.SOURCE_OF_INTERFERENCE + info.locationStr(entersAt))
-                              .put(Setup.RESULT_VALUE_COL, nonDefaultRoute(counter))
-                              .build())));
-
-      return tae;
+          .forEach(
+              c -> {
+                _communityRegexes.addAll(c.getCommunities().getRegexConstraints());
+                _asPathRegexes.addAll(c.getAsPath().getRegexConstraints());
+              });
     }
   }
 
@@ -150,7 +103,7 @@ public class LivenessAnswerer extends Answerer {
    * @param ingress option to specify the origin of traffic
    * @return LivenessAnswerer.Result object storing corresponding verification result
    */
-  public static Result run(
+  public static LivenessResult run(
       NetworkInfo info, PrefixSpace prefix, Location location, Invariant target, Edge ingress) {
     LOGGER.info("Beginning to run liveness property analysis...");
     PathAnalyzer analyzer = info.toPathAnalyzer(prefix, location, target);
@@ -160,11 +113,11 @@ public class LivenessAnswerer extends Answerer {
         ingress == null ? analyzer.run() : analyzer.run(ingress);
 
     return paths.getLeft().isPresent()
-        ? new Result(paths.getLeft(), List.of(), interferenceCheck.run())
-        : new Result(Optional.empty(), paths.getRight(), Optional.empty());
+        ? new LivenessResult(paths.getLeft(), List.of(), interferenceCheck.run())
+        : new LivenessResult(Optional.empty(), paths.getRight(), Optional.empty());
   }
 
-  public static Result run(
+  public static LivenessResult run(
       NetworkInfo info, PrefixSpace prefix, Location location, Invariant target) {
     return run(info, prefix, location, target, null);
   }
@@ -174,15 +127,11 @@ public class LivenessAnswerer extends Answerer {
     // Gathering and formatting information from snapshot
     SpecifierContext context = _batfish.specifierContext(snapshot);
     Map<String, Configuration> configs = context.getConfigs();
-    LOGGER.info("Creating ConfigAtomicPredicates for analysis...");
-    ConfigAtomicPredicates configAPs =
-        getConfigAtomicPredicates(_communityRegexes, _asPathRegexes, configs.values());
-    TransferBDD tbdd = new TransferBDD(configAPs);
-    // we want the default, if not provided, to be that the traffic has the target prefix
+
+    LOGGER.info("Gathering relevant information from configs...");
     NetworkInfo info =
-        _default_assumption != null
-            ? new NetworkInfo(tbdd, configs, _default_assumption.build(tbdd, null))
-            : new NetworkInfo(tbdd, configs);
+        new NetworkInfo(configs, _communityRegexes, _asPathRegexes, _default_assumption);
+    LOGGER.info("Constructed Verification.NetworkInfo object");
 
     _assumptions.forEach(info::addAssumption);
 
@@ -190,8 +139,8 @@ public class LivenessAnswerer extends Answerer {
       // if no target or prefix is provided, send back locations
       return info.getAnswerElement();
     } else {
-      Map.Entry<Location, Invariant> target = buildInvariant(info, true, _target);
-      Result result;
+      Map.Entry<Location, Invariant> target = buildLocationInvariant(info, true, _target);
+      LivenessResult result;
       if (_ingress != null && _ingress.instantiate(info) instanceof Edge ingress) {
         result = run(info, _prefix, target.getKey(), target.getValue(), ingress);
       } else {

@@ -160,6 +160,46 @@ public class Path {
     return "Inferred Invariant: " + properties[properties.length - 1] + "\n" + builder;
   }
 
+  // Returns a map from each node on the path to an invariant representing the routes that can
+  // reach the node along this path
+  public Map<Node, Invariant> reachableRoutes() {
+    Invariant curr = new Invariant(context.tbdd, context.prefixSpaceToBDD(prefix));
+    ImmutableMap.Builder<Node, Invariant> result = new ImmutableMap.Builder<>();
+    // the path is in reverse order so start at the end
+    int i = steps.length - 1;
+    while (i > 0) {
+      Location loc = steps[i];
+      if (loc instanceof Node) {
+        i--;
+        continue;
+      }
+      Edge edge = (Edge) loc;
+      if (context.checkedAssumptions.containsKey(edge)) {
+        // the edge is coming from outside the network so use its assumption
+        curr.free();
+        curr = context.checkedAssumptions.get(loc);
+      } else {
+        // the edge is internal so do a strongest post computation
+        RoutingPolicy exportPolicy = context.exports.get(edge);
+        if (exportPolicy != null) {
+          curr = curr.strongestPostcondition(exportPolicy);
+        }
+        // we need to account for the export transformations that BGP does, to
+        // convert curr to an invariant on the routes that the importer will receive
+        curr = curr.postExport();
+      }
+      RoutingPolicy importPolicy = context.imports.get(edge);
+      if (importPolicy != null) {
+        curr = curr.strongestPostcondition(importPolicy);
+      }
+      result.put((Node) steps[i - 1], curr);
+      // since this is an edge the previous step must be a node, so we can skip it and move to the
+      // next edge
+      i -= 2;
+    }
+    return result.build();
+  }
+
   /// A Path.Builder represents a path which should be connected but has not had any liveness
   /// inference performed. This could be provided by user if we want the user to provide the path.
   @VisibleForTesting
@@ -337,6 +377,14 @@ public class Path {
           predicates[i] = post.copy();
         } else {
           predicates[i] = post.weakestPrecondition(policy, false);
+        }
+        if (curr instanceof Edge) {
+          // we need to account for the export transformations that BGP does, to
+          // maintain the invariant that predicates on edges represent the sender's
+          // invariant on the routes that will be sent
+          Invariant old = predicates[i];
+          predicates[i] = predicates[i].preImport();
+          old.free();
         }
         // if there is an enforced assumption at this location, make sure we include
         if (enforcedAssumptions.containsKey(curr)) {

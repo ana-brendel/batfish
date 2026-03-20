@@ -13,6 +13,7 @@ import net.sf.javabdd.BDD;
 import net.sf.javabdd.BDDFactory;
 import net.sf.javabdd.BDDPairing;
 import org.batfish.common.BatfishException;
+import org.batfish.common.bdd.MutableBDDInteger;
 import org.batfish.minesweeper.ConfigAtomicPredicates;
 
 /**
@@ -276,5 +277,103 @@ public class TransferBDDUtils {
       }
     }
     return Optional.of(q_pruned);
+  }
+
+  // Returns true if every route represented by p is more preferred than every route represented by
+  // q, according to the BGP decision process; false otherwise.
+  // This check is approximate, so a result of false may mean that we don't know, while a result of
+  // true means we are sure that p is more preferred than q.
+  public static boolean isMorePreferredBgp(BDD p, BDD q, TransferBDD tbdd) {
+    BDDRoute orig = tbdd.getOriginalRoute();
+    long p_minWeight = getMinValue(p, orig.getWeight());
+    long q_maxWeight = getMaxValue(q, orig.getWeight());
+    if (p_minWeight > q_maxWeight) {
+      return true;
+    } else if (p_minWeight == q_maxWeight) {
+      // p can still be more preferred than q if p's local preference is greater than q's local
+      // preference
+      long p_minLocalPref = getMinValue(p, orig.getLocalPref());
+      long q_maxLocalPref = getMaxValue(q, orig.getLocalPref());
+      if (p_minLocalPref > q_maxLocalPref) {
+        return true;
+      } else {
+        // TODO continue down the tie-breaking steps
+        return false;
+      }
+    } else {
+      return false;
+    }
+  }
+
+  // Returns a bdd representing the set of routes that are less preferred than
+  // every route in p. The method is conservative, so it only includes routes
+  // that we can be sure are less preferred, but it may not include all such routes.
+  public static BDD lessPreferredThanBgp(BDD p, TransferBDD tbdd) {
+    BDDRoute orig = tbdd.getOriginalRoute();
+    // for now we will only consider the weight and local preference attributes
+    long p_minWeight = getMinValue(p, orig.getWeight());
+    BDD lessThanMinWeight =
+        p_minWeight == 0 ? tbdd.getFactory().zero() : orig.getWeight().leq(p_minWeight - 1);
+    long p_minLocalPref = getMinValue(p, orig.getLocalPref());
+    BDD lessThanMinLocalPref =
+        p_minLocalPref == 0
+            ? tbdd.getFactory().zero()
+            : orig.getLocalPref().leq(p_minLocalPref - 1);
+    return lessThanMinWeight.orWith(
+        orig.getWeight().value(p_minWeight).andWith(lessThanMinLocalPref));
+  }
+
+  // TODO these two methods can probably be combined
+
+  // Find the minimum value of the given BDDInteger that satisfies the given BDD.
+  // Assumes that the most-significant bit comes first in the BDDInteger's variable ordering.
+  @VisibleForTesting
+  static long getMinValue(BDD bdd, MutableBDDInteger bddInt) {
+    // for each variable in the support, from most to least significant, check if it can be 0 or
+    // not, and construct the minimum value accordingly
+    long result = 0;
+    BDD supp = bddInt.support();
+    int[] vars = supp.scanSet();
+    // vars will be in ascending order, with the most-significant bit last
+    BDD curr = bdd.project(supp);
+    for (int i = 0; i < vars.length; i++) {
+      BDD nvar = bddInt.getFactory().nithVar(vars[i]);
+      if (curr.andSat(nvar)) {
+        // the bit can be 0, so we set it to 0
+        curr.andEq(nvar);
+      } else {
+        // the bit must be 1 so we add it to our result
+        result += 1L << (vars.length - i - 1);
+      }
+      nvar.free();
+    }
+    supp.free();
+    curr.free();
+    return result;
+  }
+
+  // Find the maximum value of the given BDDInteger that satisfies the given BDD.
+  // Assumes that the most-significant bit comes first in the BDDInteger's variable ordering.
+  @VisibleForTesting
+  static long getMaxValue(BDD bdd, MutableBDDInteger bddInt) {
+    // for each variable in the support, from most to least significant, check if it can be 1 or
+    // not, and construct the maximum value accordingly
+    long result = 0;
+    BDD supp = bddInt.support();
+    int[] vars = supp.scanSet();
+    // vars will be in ascending order, with the most-significant bit last
+    BDD curr = bdd.project(supp);
+    for (int i = 0; i < vars.length; i++) {
+      BDD var = bddInt.getFactory().ithVar(vars[i]);
+      if (curr.andSat(var)) {
+        // the bit can be 1, so we set it to 1 and add it to our result
+        curr.andEq(var);
+        result += 1L << (vars.length - i - 1);
+      }
+      var.free();
+    }
+    supp.free();
+    curr.free();
+    return result;
   }
 }

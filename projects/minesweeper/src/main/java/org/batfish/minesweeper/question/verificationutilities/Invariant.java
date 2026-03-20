@@ -26,6 +26,7 @@ import net.sf.javabdd.BDD;
 import net.sf.javabdd.BDDFactory;
 import net.sf.javabdd.BDDPairing;
 import org.batfish.common.BatfishException;
+import org.batfish.common.bdd.MutableBDDInteger;
 import org.batfish.datamodel.LineAction;
 import org.batfish.datamodel.PrefixRange;
 import org.batfish.datamodel.PrefixSpace;
@@ -616,6 +617,44 @@ public class Invariant {
   public static Invariant strongestCommonImplicant(Invariant left, Invariant right) {
     assert left.tbdd.equals(right.tbdd);
     return new Invariant(left.tbdd, left.bdd.and(right.bdd));
+  }
+
+  // Returns a version of the current invariant that represents what must hold on export
+  // from the neighbor in order for this invariant to hold on import.  In other words,
+  // it represents the transformations that BGP performs when it exports a route.
+  public Invariant preImport() {
+    // for now the only transformations that we handle are for the weight and
+    // local preference, which are reset to default (0 and 100 respectively) on export
+
+    // first restrict the current bdd to only those routes that have weight 0 and local preference
+    // 100
+    MutableBDDInteger weight = tbdd.getOriginalRoute().getWeight();
+    BDD weight0 = weight.value(0L);
+    MutableBDDInteger localPref = tbdd.getOriginalRoute().getLocalPref();
+    BDD localPref100 = localPref.value(100L);
+    BDD restricted = weight0.andWith(localPref100).andEq(this.bdd);
+
+    // then quantify out the weight and local preference variables, since the sent route can have
+    // any value for them
+    BDD support = weight.support().andWith(localPref.support());
+    Invariant i = new Invariant(tbdd, restricted.existEq(support));
+    support.free();
+    return i;
+  }
+
+  // Like preImport above, but in the reverse direction (for use in a strongest postcondition
+  // computation)
+  public Invariant postExport() {
+    // for now the only transformations are to reset the weight and local preference to default (0
+    // and 100 respectively) on export
+    MutableBDDInteger weight = tbdd.getOriginalRoute().getWeight();
+    MutableBDDInteger localPref = tbdd.getOriginalRoute().getLocalPref();
+    BDD support = weight.support().andWith(localPref.support());
+    Invariant i =
+        new Invariant(
+            tbdd, bdd.exist(support).andWith(weight.value(0L)).andWith(localPref.value(100L)));
+    support.free();
+    return i;
   }
 
   /**

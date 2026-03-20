@@ -5,6 +5,7 @@ import org.batfish.datamodel.Bgpv4Route;
 import org.batfish.datamodel.Ip;
 import org.batfish.datamodel.PrefixSpace;
 import org.batfish.datamodel.routing_policy.RoutingPolicy;
+import org.batfish.minesweeper.bdd.TransferBDDUtils;
 import org.batfish.minesweeper.question.verificationutilities.Edge;
 import org.batfish.minesweeper.question.verificationutilities.Invariant;
 import org.batfish.minesweeper.question.verificationutilities.Location;
@@ -49,13 +50,12 @@ public class InterferenceCheck {
   }
 
   /// Iteratively infer the "bad invariants" which allow for a "bad route" to reach the liveness
-  // property location. Note,
-  /// this is sound but not complete as BGP preferences, which we don't account for, might rule out
-  // some of these "bad routes."
-  private void inferenceLoop() {
+  // property location. The reachableGood parameter allows us to restrict the inference to only
+  // consider routes that are not less preferred than the good routes that can reach nodes
+  // along the "good" path.
+  private void inferenceLoop(Map<Node, Invariant> reachableGood) {
     // carries out invariant inference similar to safety property, but we don't allow for denied
-    // routes to be
-    // considered in the weakest precondition computation
+    // routes to be considered in the weakest precondition computation
     while (!working.isEmpty()) {
       Location location = working.remove();
       Invariant property = inferred.get(location);
@@ -76,6 +76,15 @@ public class InterferenceCheck {
                     : Invariant.getFalse(context.tbdd()));
         Invariant updated =
             new Invariant(context.tbdd(), existing.getBDDCopy().or(wp.getBDDCopy()));
+        if (reachableGood.containsKey(src)) {
+          // restrict the inferred invariant to only those routes that are not
+          // less preferred than the good routes that are reachable
+          BDD reachableGoodBDD = reachableGood.get(src).getBDD();
+          BDD notLessPreferred =
+              TransferBDDUtils.lessPreferredThanBgp(reachableGoodBDD, context.tbdd()).notEq();
+          BDD restricted = notLessPreferred.andWith(updated.getBDD());
+          updated = new Invariant(context.tbdd(), restricted);
+        }
         inferred.put(src, updated);
         if (!existing.equals(updated) && !working.contains(src)) {
           working.add(src);
@@ -98,7 +107,11 @@ public class InterferenceCheck {
                       ? context.enforcedAssumptions().get(edge).negate()
                       : Invariant.getFalse(context.tbdd()));
           BDD updatedBDD = existing.getBDDCopy().or(wp.getBDDCopy());
-          Invariant updated = new Invariant(context.tbdd(), updatedBDD);
+          // we maintain an invariant that the edge invariants represent the routes
+          // from the sender's perspective; the call to preImport converts from the
+          // receiver's perspective to the sender's perspective
+          Invariant updated = new Invariant(context.tbdd(), updatedBDD).preImport();
+          updatedBDD.free();
           inferred.put(edge, updated);
           if (!existing.equals(updated) && !working.contains(edge)) {
             working.add(edge);
@@ -132,19 +145,21 @@ public class InterferenceCheck {
 
   /// Checks for interference, if any counterexamples were found they are returned. (If the result
   /// is empty, then this is interpreted as no interference detected.)
-  public Optional<Map<Location, Bgpv4Route>> run() {
+  /// The reachableGood parameter allows us to restrict the inference to only consider routes that
+  // are not less preferred than the good routes that can reach nodes along the "good" path.
+  public Optional<Map<Location, Bgpv4Route>> run(Map<Node, Invariant> reachableGood) {
     inferred.clear();
     working.clear();
     Invariant condition =
         new Invariant(
-            context.tbdd(), target.negate().getBDDCopy().and(context.prefixSpaceToBDD(prefix)));
+            context.tbdd(), target.negate().getBDD().and(context.prefixSpaceToBDD(prefix)));
     if (condition.isFalse()) {
       // no possible "bad route" exists that matches the target prefix
       return Optional.empty();
     }
     inferred.put(location, condition);
     working.add(location.copy());
-    inferenceLoop();
+    inferenceLoop(reachableGood);
     Map<Location, Bgpv4Route> checks = interferenceExample();
     return checks.isEmpty() ? Optional.empty() : Optional.of(checks);
   }

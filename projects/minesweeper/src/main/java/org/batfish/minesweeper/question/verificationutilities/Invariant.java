@@ -203,6 +203,7 @@ public class Invariant {
     private PrefixSpace _negativePrefix;
     private RegexConstraints _communities;
     private RegexConstraints _asPath;
+    private @Nullable Integer _asPathLength;
 
     private ClauseBuilder() {}
 
@@ -235,6 +236,11 @@ public class Invariant {
 
     public ClauseBuilder setAsPath(@Nonnull RegexConstraints asPath) {
       _asPath = asPath;
+      return this;
+    }
+
+    public ClauseBuilder setAsPathLength(@Nullable Integer length) {
+      _asPathLength = length;
       return this;
     }
 
@@ -349,6 +355,9 @@ public class Invariant {
       if (_asPath != null && !_asPath.isEmpty()) {
         clauseBDD.andWith(asPathToBDD(_asPath, tbdd.getConfigAtomicPredicates(), base));
       }
+      if (_asPathLength != null) {
+        clauseBDD.andWith(tbdd.getOriginalRoute().getAsPathLength().value(_asPathLength));
+      }
       return clauseBDD;
     }
 
@@ -406,12 +415,13 @@ public class Invariant {
     /// Added to help parse a string corresponding to a single clause
     private static Invariant.ClauseBuilder parseForClauseBuilder(String value) {
       if (value.trim().isEmpty()) {
-        return createClause(null, null, null, null);
+        return createClause(null, null, null, null, null);
       }
       PrefixSpace positivePrefix = new PrefixSpace();
       PrefixSpace negativePrefix = new PrefixSpace();
       ImmutableList.Builder<RegexConstraint> communities = ImmutableList.builder();
       ImmutableList.Builder<RegexConstraint> asPaths = ImmutableList.builder();
+      Integer asPathLength = null;
       String[] atoms = value.trim().split("&");
       for (String atom : atoms) {
         String trimmed = atom.trim();
@@ -452,6 +462,13 @@ public class Invariant {
                   }
                 }
                 break;
+              case "asPathLength":
+                if (asPathLength != null) {
+                  throw new BatfishException("At most one as-path length constraint per clause");
+                } else {
+                  asPathLength = Integer.parseInt(input);
+                }
+                break;
               default:
                 throw new BatfishException(
                     "Error when parsing string for clause -"
@@ -476,7 +493,8 @@ public class Invariant {
           positivePrefix,
           negativePrefix,
           new RegexConstraints(communities.build()),
-          new RegexConstraints(asPaths.build()));
+          new RegexConstraints(asPaths.build()),
+          asPathLength);
     }
 
     @Nonnull
@@ -502,11 +520,13 @@ public class Invariant {
       @Nullable PrefixSpace pos,
       @Nullable PrefixSpace neg,
       @Nullable RegexConstraints comms,
-      @Nullable RegexConstraints asPath) {
+      @Nullable RegexConstraints asPath,
+      @Nullable Integer asPathLength) {
     return clauseBuilder()
         .matchPrefix(firstNonNull(pos, new PrefixSpace()))
         .avoidPrefix(firstNonNull(neg, new PrefixSpace()))
         .setCommunities(firstNonNull(comms, new RegexConstraints()))
+        .setAsPathLength(asPathLength)
         .setAsPath(firstNonNull(asPath, new RegexConstraints()));
   }
 
@@ -686,17 +706,37 @@ public class Invariant {
    * @return invariant corresponding to the strongest postcondition
    */
   public Invariant strongestPostcondition(@Nonnull RoutingPolicy policy) {
+    return strongestPostcondition(policy, false);
+  }
+
+  /**
+   * Synthesizes the strongest postcondition which will hold after any route satisfying this
+   * invariant is passed through the provided policy. If no routes satisfying this invariant are
+   * permitted passed this policy, then the postcondition returned is false.
+   *
+   * @param policy gets the strongest postcondition for this policy
+   * @param eBGP true if the policy being analyzed is an eBGP export policy, false otherwise (iBGP
+   *     or import)
+   * @return invariant corresponding to the strongest postcondition
+   */
+  public Invariant strongestPostcondition(@Nonnull RoutingPolicy policy, boolean eBGP) {
+    List<TransferReturn> paths = null;
     if (policy.getStatements().isEmpty()) {
       if (policy.getOwner() == null
           || policy.getOwner().getDefaultInboundAction() == LineAction.PERMIT) {
-        return this.copy(); // default is permit, so invariant itself is the strongest postcondition
+        // create a single accepting path for the analysis below
+        paths =
+            ImmutableList.of(
+                new TransferReturn(
+                    new BDDRoute(tbdd.getOriginalRoute()), tbdd.getFactory().one(), true));
       } else {
         return Invariant.getFalse(tbdd); // default is deny so the strongest postcondition is false
       }
-    } else {
-      TransferBDD.Context context = TransferBDD.Context.forPolicy(policy);
-      List<TransferReturn> paths;
+    }
+
+    if (paths == null) {
       try {
+        TransferBDD.Context context = TransferBDD.Context.forPolicy(policy);
         paths = tbdd.computePaths(policy.getStatements(), context, false);
       } catch (Exception e) {
         String name =
@@ -704,10 +744,19 @@ public class Invariant {
         throw new BatfishException(
             "Unexpected error analyzing policy " + policy.getName() + " in node " + name, e);
       }
-      BDD strongest =
-          TransferBDDUtils.strongestPostcondition(paths, this.getBDD(), tbdd, Function.identity());
-      return new Invariant(tbdd, strongest);
     }
+    if (eBGP) {
+      // add one to the AS-path lengths in the output route of each path, to account for the sender
+      // prepending its own ASN
+      MutableBDDInteger one = MutableBDDInteger.makeFromValue(tbdd.getFactory(), 4, 1);
+      paths.forEach(
+          p ->
+              p.getOutputRoute()
+                  .setAsPathLength(p.getOutputRoute().getAsPathLength().addClipping(one)));
+    }
+    BDD strongest =
+        TransferBDDUtils.strongestPostcondition(paths, this.getBDD(), tbdd, Function.identity());
+    return new Invariant(tbdd, strongest);
   }
 
   @Override

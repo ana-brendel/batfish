@@ -1,6 +1,8 @@
 package org.batfish.minesweeper.question.liveness;
 
 import net.sf.javabdd.BDD;
+import net.sf.javabdd.BDDPairing;
+import org.batfish.common.bdd.MutableBDDInteger;
 import org.batfish.datamodel.Bgpv4Route;
 import org.batfish.datamodel.Ip;
 import org.batfish.datamodel.PrefixSpace;
@@ -60,6 +62,21 @@ public class InterferenceCheck {
       Location location = working.remove();
       Invariant property = inferred.get(location);
       if (location instanceof Edge edge && nodes.containsKey(edge.getSrc())) {
+        if (edge.isEBGP()) {
+          // Symbolically undo the effect of prepending the source node's ASN to the AS-path
+          // on the property by replacing all references to the AS-path length (call it x) with
+          // (x + 1). Then when we do the WP computation below we'll get the right precondition
+          // for the source node.
+          MutableBDDInteger origAsPathLength = context.tbdd().getOriginalRoute().getAsPathLength();
+          MutableBDDInteger asPathLengthPlusOne =
+              origAsPathLength.addClipping(
+                  MutableBDDInteger.makeFromValue(context.tbdd().getFactory(), 4, 1));
+          BDDPairing pairing = context.tbdd().getFactory().makePair();
+          asPathLengthPlusOne.augmentPairing(origAsPathLength, pairing);
+          BDD old = property.getBDD();
+          BDD updated = old.veccompose(pairing);
+          property = new Invariant(context.tbdd(), updated);
+        }
         RoutingPolicy exportPolicy = context.exports().get(edge);
         Invariant wp =
             exportPolicy == null
@@ -150,9 +167,16 @@ public class InterferenceCheck {
   public Optional<Map<Location, Bgpv4Route>> run(Map<Node, Invariant> reachableGood) {
     inferred.clear();
     working.clear();
-    Invariant condition =
-        new Invariant(
-            context.tbdd(), target.negate().getBDD().and(context.prefixSpaceToBDD(prefix)));
+    BDD conditionBDD = target.negate().getBDD().and(context.prefixSpaceToBDD(prefix));
+    if (location instanceof Node node && reachableGood.containsKey(node)) {
+      // restrict the condition to only those routes that are not
+      // less preferred than the good routes that are reachable
+      BDD reachableGoodBDD = reachableGood.get(node).getBDD();
+      BDD notLessPreferred =
+          TransferBDDUtils.lessPreferredThanBgp(reachableGoodBDD, context.tbdd()).notEq();
+      conditionBDD.andWith(notLessPreferred);
+    }
+    Invariant condition = new Invariant(context.tbdd(), conditionBDD);
     if (condition.isFalse()) {
       // no possible "bad route" exists that matches the target prefix
       return Optional.empty();

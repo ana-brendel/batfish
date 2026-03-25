@@ -69,7 +69,6 @@ public class NetworkInfo {
       @Nonnull Map<String, Configuration> configs) {
     LOGGER.info("Processing each config provided...");
     Map<Configuration, Collection<RoutingPolicy>> policies = new HashMap<>();
-    Map<LongSpace, Set<Location>> outgoingByDstASn = new HashMap<>();
     Long[] thisAS = {null};
 
     for (String nodeName : configs.keySet()) {
@@ -79,7 +78,7 @@ public class NetworkInfo {
       if (isNull(config) || isNull(config.getVrfs())) {
         continue;
       }
-      // filter out any null VRFs
+      // filter out any null VRFs and only keep default
       Stream<Vrf> forwarding =
           config.getVrfs().values().stream()
               .filter(vrf -> nonNull(vrf) && vrf.getName().equals("default"));
@@ -119,8 +118,6 @@ public class NetworkInfo {
                         : nodeIps.stream().findFirst().get();
                 nodeIps.add(nodeIp);
                 assert !nodeIp.equals(Ip.ZERO);
-                Edge incoming = new Edge(entry.getKey(), nodeIp);
-                Edge outgoing = new Edge(nodeIp, entry.getKey());
 
                 // REASONING ABOUT INTERNAL/EXTERNAL VIA ASN
                 // gather the as that are considered in internal, to keep track of externals
@@ -135,10 +132,22 @@ public class NetworkInfo {
                           + ", found AS "
                           + entry.getValue().getLocalAs());
                 }
-                outgoingByDstASn
-                    .computeIfAbsent(entry.getValue().getRemoteAsns(), k -> new HashSet<>())
-                    .add(outgoing);
 
+                // TODO this may need to be updated
+                // currently we determine that a session is EBGP if the local ASN is not in the list
+                // of remote ASNs
+                boolean eBGP =
+                    !(entry.getValue().getLocalAs() == null
+                        || entry
+                            .getValue()
+                            .getRemoteAsns()
+                            .contains(entry.getValue().getLocalAs()));
+                Edge incoming = new Edge(entry.getKey(), nodeIp, eBGP);
+                Edge outgoing = new Edge(nodeIp, entry.getKey(), eBGP);
+                if (eBGP) {
+                    // to keep traffic of all outgoing edges
+                    this.externalOutgoing.add(outgoing);
+                }
                 Ipv4UnicastAddressFamily unicast = entry.getValue().getIpv4UnicastAddressFamily();
                 // only add policies which exist, otherwise a default is used for weakest
                 // precondition
@@ -157,24 +166,13 @@ public class NetworkInfo {
                   }
                 }
                 // add anywhere edge is going into this node (i.e. the incoming edge above)
-                locations.add(new Edge(entry.getKey(), nodeIp));
+                locations.add(new Edge(entry.getKey(), nodeIp, eBGP));
               });
       Node node = new Node(nodeIps, nodeName);
       locations.add(node); // add node
       nodeIps.forEach(nodeIp -> nodes.put(nodeIp, node));
     }
 
-    // REASONING ABOUT INTERNAL/EXTERNAL VIA ASN
-    // keeps track of the external nodes according the AS path
-    if (thisAS[0] != null) {
-      outgoingByDstASn.forEach(
-          (remote, outgoing) -> {
-            if (!remote.contains(thisAS[0])) {
-              this.externalOutgoing.addAll(outgoing);
-            }
-          });
-    }
-    assert thisAS[0] != null || externalOutgoing.isEmpty();
     assert this.externalOutgoing.stream().allMatch(l -> l instanceof Edge);
     return policies;
   }
@@ -370,6 +368,7 @@ public class NetworkInfo {
     Set<Location> outgoing = new HashSet<>();
     if (!this.externalOutgoing.isEmpty()) {
       outgoing.addAll(this.externalOutgoing);
+      assert outgoing.stream().allMatch(l -> l instanceof Edge e && e.isEBGP());
     } else {
       for (Location location : this.checkedAssumptions.keySet()) {
         if (location instanceof Edge incoming && isIncomingEdge(incoming)) {
@@ -407,6 +406,7 @@ public class NetworkInfo {
         || (location instanceof Edge e && nodes.containsKey(e.getSrc()))) {
       boolean noConfigAtSource = location instanceof Edge e && !nodes.containsKey(e.getSrc());
       // check if edge is coming from external node or if we do not have a config for source
+        // TODO would there ever be an external node we don't have config for?
       if (isIncomingEdge(location) || noConfigAtSource) {
         checkedAssumptions.put(location, assumption);
       } else {
@@ -571,12 +571,6 @@ public class NetworkInfo {
     } else {
       return ModelGeneration.satAssignmentToBgpInputRoute(model, tbdd.getConfigAtomicPredicates());
     }
-  }
-
-  public String getRouteExampleStr(Invariant inv) {
-    BDD wf = inv.getBDD().and(this.tbdd.getOriginalRoute().wellFormednessConstraints(true));
-    Bgpv4Route rt = getRouteExample(this.tbdd, wf.satOne());
-    return rt != null ? nonDefaultRoute(rt) : "";
   }
 
   // CODE BELOW FOR DEBUGGING PURPOSES

@@ -3492,6 +3492,10 @@ public class TransferBDDTest {
 
     BDDRoute expected = anyRoute(tbdd.getFactory());
     expected.setPrependedASes(ImmutableList.of(42L));
+    expected.setAsPathLength(
+        expected
+            .getAsPathLength()
+            .addClipping(MutableBDDInteger.makeFromValue(tbdd.getFactory(), 4, 1)));
 
     assertEquals(
         paths, ImmutableList.of(new TransferReturn(expected, tbdd.getFactory().one(), true)));
@@ -3524,6 +3528,10 @@ public class TransferBDDTest {
     BDDRoute expected = anyRoute(tbdd.getFactory());
     // the first
     expected.setPrependedASes(ImmutableList.of(44L, 4L, 42L));
+    expected.setAsPathLength(
+        expected
+            .getAsPathLength()
+            .addClipping(MutableBDDInteger.makeFromValue(tbdd.getFactory(), 4, 3)));
 
     assertEquals(
         paths, ImmutableList.of(new TransferReturn(expected, tbdd.getFactory().one(), true)));

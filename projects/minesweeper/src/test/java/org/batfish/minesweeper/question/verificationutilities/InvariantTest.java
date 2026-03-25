@@ -304,12 +304,13 @@ public class InvariantTest {
     RegexConstraint comm_100_2 = RegexConstraint.parse("100:2");
     RegexConstraint not_comm_100_1 = RegexConstraint.parse("!100:1");
     Invariant.ClauseBuilder match =
-        Invariant.createClause(null, null, new RegexConstraints(List.of(comm_100_2)), null);
+        Invariant.createClause(null, null, new RegexConstraints(List.of(comm_100_2)), null, null);
     Invariant.ClauseBuilder avoid =
-        Invariant.createClause(null, null, new RegexConstraints(List.of(not_comm_100_1)), null);
+        Invariant.createClause(
+            null, null, new RegexConstraints(List.of(not_comm_100_1)), null, null);
     Invariant.ClauseBuilder both =
         Invariant.createClause(
-            null, null, new RegexConstraints(List.of(comm_100_2, not_comm_100_1)), null);
+            null, null, new RegexConstraints(List.of(comm_100_2, not_comm_100_1)), null, null);
 
     BDD match_100_1 = commBDDString("100:1");
     BDD match_100_2 = commBDDString("100:2");
@@ -336,11 +337,11 @@ public class InvariantTest {
     PrefixSpace checkedP = new PrefixSpace(PrefixRange.fromPrefix(Prefix.parse("25.13.0.0/16")));
     PrefixSpace matchesP = new PrefixSpace(PrefixRange.fromPrefix(Prefix.parse("25.13.24.0/24")));
 
-    Invariant.ClauseBuilder checked = Invariant.createClause(checkedP, null, null, null);
-    Invariant.ClauseBuilder matches = Invariant.createClause(matchesP, null, null, null);
-    Invariant.ClauseBuilder sub = Invariant.createClause(checkedP, matchesP, null, null);
-    Invariant.ClauseBuilder excluded = Invariant.createClause(checkedP, matchesP, null, null);
-    Invariant.ClauseBuilder avoided = Invariant.createClause(null, checkedP, null, null);
+    Invariant.ClauseBuilder checked = Invariant.createClause(checkedP, null, null, null, null);
+    Invariant.ClauseBuilder matches = Invariant.createClause(matchesP, null, null, null, null);
+    Invariant.ClauseBuilder sub = Invariant.createClause(checkedP, matchesP, null, null, null);
+    Invariant.ClauseBuilder excluded = Invariant.createClause(checkedP, matchesP, null, null, null);
+    Invariant.ClauseBuilder avoided = Invariant.createClause(null, checkedP, null, null, null);
 
     BDD checkedBDD = prefixSpaceToBDD(checkedP, base, true);
     BDD avoidCheckedBDD = prefixSpaceToBDD(checkedP, base, false);

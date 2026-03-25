@@ -11,11 +11,18 @@ public class Edge extends Location {
   private final @Nonnull Ip src;
   private final @Nonnull Ip dst;
 
-  public Edge(@Nonnull Ip src, @Nonnull Ip dst) {
+  private final boolean eBGP;
+
+  public Edge(@Nonnull Ip src, @Nonnull Ip dst, boolean eBGP) {
     assert !src.equals(dst);
     assert !src.equals(Ip.ZERO) && !dst.equals(Ip.ZERO);
     this.src = src;
     this.dst = dst;
+    this.eBGP = eBGP;
+  }
+
+  public Edge(@Nonnull Ip src, @Nonnull Ip dst) {
+    this(src, dst, false);
   }
 
   public Edge(@Nonnull String src, @Nonnull String dst) {
@@ -38,9 +45,13 @@ public class Edge extends Location {
     return dst;
   }
 
+  public boolean isEBGP() {
+    return eBGP;
+  }
+
   @Nonnull
   public Edge flipEdge() {
-    return new Edge(dst, src);
+    return new Edge(dst, src, eBGP);
   }
 
   public boolean isSrc(@Nonnull Node node) {
@@ -53,7 +64,7 @@ public class Edge extends Location {
 
   @Override
   public Edge copy() {
-    return new Edge(Ip.create(src.asLong()), Ip.create(dst.asLong()));
+    return new Edge(Ip.create(src.asLong()), Ip.create(dst.asLong()), eBGP);
   }
 
   @Override

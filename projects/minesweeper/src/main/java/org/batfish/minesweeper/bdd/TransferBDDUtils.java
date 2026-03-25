@@ -133,21 +133,29 @@ public class TransferBDDUtils {
       BDD strongest = inputConstraints.id();
       BDDPairing pairing = makeRoutePairing(path.getOutputRoute(), tbdd);
 
+      // TODO hack - ignore the AS path length if it's not constrained to be a constant
+      // in the future we should and can handle this properly, when we also address
+      // the more general limitation that causes the exception to be thrown below
+      BDD asPathLengthVars = tbdd.getOriginalRoute().getAsPathLength().support();
+
       for (int v : tbdd.getFactory().getVarOrder()) {
         BDD var = tbdd.getFactory().ithVar(v); // variable in consideration
         BDD variableSet = var.veccompose(pairing); // condition true in order for variable to be set
 
-        // check if the variable is updated at all, if it is, then existentially quantify that
-        // variable
-        if (!variableSet.equals(var)) {
-          strongest.existEq(var);
+        // if the variable is not updated, then ignore it
+        if (variableSet.equals(var)) {
+          continue;
         }
 
-        if (inputConstraints.imp(variableSet).isOne()) {
-          strongest = strongest.and(var);
-        } else if (inputConstraints.imp(variableSet.not()).isOne()) {
-          strongest = strongest.and(var.not());
-        } else if (!variableSet.equals(var)) {
+        // quantify out the variable and handle the update
+        strongest.existEq(var);
+        if (!inputConstraints.diffSat(variableSet)) {
+          strongest = strongest.andWith(var);
+        } else if (!inputConstraints.andSat(variableSet)) {
+          strongest = strongest.andWith(var.notEq());
+        } else if (!asPathLengthVars.testsVars(var)) {
+          // ignore the AS-path length if it's not a constant;
+          // otherwise throw an exception
           throw new BatfishException(
               "Strongest postcondition method currently doesn't handle variable dependent updates");
         }
@@ -279,38 +287,13 @@ public class TransferBDDUtils {
     return Optional.of(q_pruned);
   }
 
-  // Returns true if every route represented by p is more preferred than every route represented by
-  // q, according to the BGP decision process; false otherwise.
-  // This check is approximate, so a result of false may mean that we don't know, while a result of
-  // true means we are sure that p is more preferred than q.
-  public static boolean isMorePreferredBgp(BDD p, BDD q, TransferBDD tbdd) {
-    BDDRoute orig = tbdd.getOriginalRoute();
-    long p_minWeight = getMinValue(p, orig.getWeight());
-    long q_maxWeight = getMaxValue(q, orig.getWeight());
-    if (p_minWeight > q_maxWeight) {
-      return true;
-    } else if (p_minWeight == q_maxWeight) {
-      // p can still be more preferred than q if p's local preference is greater than q's local
-      // preference
-      long p_minLocalPref = getMinValue(p, orig.getLocalPref());
-      long q_maxLocalPref = getMaxValue(q, orig.getLocalPref());
-      if (p_minLocalPref > q_maxLocalPref) {
-        return true;
-      } else {
-        // TODO continue down the tie-breaking steps
-        return false;
-      }
-    } else {
-      return false;
-    }
-  }
-
   // Returns a bdd representing the set of routes that are less preferred than
   // every route in p. The method is conservative, so it only includes routes
   // that we can be sure are less preferred, but it may not include all such routes.
   public static BDD lessPreferredThanBgp(BDD p, TransferBDD tbdd) {
     BDDRoute orig = tbdd.getOriginalRoute();
-    // for now we will only consider the weight and local preference attributes
+    // for now we will only consider the weight, local preference, and
+    // AS-path length
     long p_minWeight = getMinValue(p, orig.getWeight());
     BDD lessThanMinWeight =
         p_minWeight == 0 ? tbdd.getFactory().zero() : orig.getWeight().leq(p_minWeight - 1);
@@ -319,8 +302,18 @@ public class TransferBDDUtils {
         p_minLocalPref == 0
             ? tbdd.getFactory().zero()
             : orig.getLocalPref().leq(p_minLocalPref - 1);
-    return lessThanMinWeight.orWith(
-        orig.getWeight().value(p_minWeight).andWith(lessThanMinLocalPref));
+    long p_maxAsPathLength = getMaxValue(p, orig.getAsPathLength());
+    BDD greaterThanMaxAsPathLength =
+        p_maxAsPathLength == 15
+            ? tbdd.getFactory().zero()
+            : orig.getAsPathLength().geq(p_maxAsPathLength + 1);
+    return lessThanMinWeight
+        .orWith(orig.getWeight().value(p_minWeight).andWith(lessThanMinLocalPref))
+        .orWith(
+            orig.getWeight()
+                .value(p_minWeight)
+                .andWith(orig.getLocalPref().value(p_minLocalPref))
+                .andWith(greaterThanMaxAsPathLength));
   }
 
   // TODO these two methods can probably be combined

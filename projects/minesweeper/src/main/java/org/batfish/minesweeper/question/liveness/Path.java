@@ -182,7 +182,7 @@ public class Path {
         // the edge is internal so do a strongest post computation
         RoutingPolicy exportPolicy = context.exports.get(edge);
         if (exportPolicy != null) {
-          curr = curr.strongestPostcondition(exportPolicy);
+          curr = curr.strongestPostcondition(exportPolicy, edge.isEBGP());
         }
         // we need to account for the export transformations that BGP does, to
         // convert curr to an invariant on the routes that the importer will receive

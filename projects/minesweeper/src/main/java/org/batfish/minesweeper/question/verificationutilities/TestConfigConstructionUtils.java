@@ -162,8 +162,8 @@ public class TestConfigConstructionUtils {
    */
   public static List<Statement> permitRoute(boolean permit) {
     return permit
-        ? ImmutableList.of(new Statements.StaticStatement(Statements.ReturnTrue))
-        : ImmutableList.of(new Statements.StaticStatement(Statements.ReturnFalse));
+        ? ImmutableList.of(new Statements.StaticStatement(Statements.ExitAccept))
+        : ImmutableList.of(new Statements.StaticStatement(Statements.ExitReject));
   }
 
   /**

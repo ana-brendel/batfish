@@ -82,6 +82,12 @@ public final class BDDRoute implements IDeepCopy<BDDRoute> {
    */
   private BDDDomain<Integer> _asPathRegexAtomicPredicates;
 
+  // TODO: This field is somewhat of a stopgap and needs to be thought through
+  // before merging into mainline
+  // Track the AS path length separately for use in checking route preference
+  // during our liveness analysis
+  private MutableBDDInteger _asPathLength;
+
   // for now we only track the cluster list's length, not its contents;
   // that is all that is needed to support matching on the length
   private MutableBDDInteger _clusterListLength;
@@ -220,6 +226,8 @@ public final class BDDRoute implements IDeepCopy<BDDRoute> {
             + 16
             + bitsToRepresentAdmin
             + 6
+            // we'll use 4 bits for the AS-path length
+            + 4
             + numCommAtomicPredicates
             + numBits(numAsPathRegexAtomicPredicates)
             // we track one extra value for the next-hop interfaces and source VRFs, to represent
@@ -298,6 +306,10 @@ public final class BDDRoute implements IDeepCopy<BDDRoute> {
     addBitNames("as-path atomic predicates", len, idx, false);
     idx += len;
 
+    _asPathLength = MutableBDDInteger.makeFromIndex(factory, 4, idx, false);
+    addBitNames("asPathLength", 4, idx, false);
+    idx += 4;
+
     // we use the value -1 below to denote that an optional value is not there, or (in the case of
     // peer addresses) that the address is something other than one of the ones being tracked
     _nextHopInterfaces =
@@ -361,6 +373,7 @@ public final class BDDRoute implements IDeepCopy<BDDRoute> {
     _factory = other._factory;
 
     _asPathRegexAtomicPredicates = new BDDDomain<>(other._asPathRegexAtomicPredicates);
+    _asPathLength = new MutableBDDInteger(other._asPathLength);
     _clusterListLength = new MutableBDDInteger(other._clusterListLength);
     _communityAtomicPredicates = other._communityAtomicPredicates.clone();
     _prefixLength = new MutableBDDInteger(other._prefixLength);
@@ -404,6 +417,7 @@ public final class BDDRoute implements IDeepCopy<BDDRoute> {
     }
 
     _asPathRegexAtomicPredicates = new BDDDomain<>(pred, route._asPathRegexAtomicPredicates);
+    _asPathLength = route.getAsPathLength().and(pred);
     _clusterListLength = route.getClusterListLength().and(pred);
     _communityAtomicPredicates = communityAtomicPredicates;
     _prefixLength = route._prefixLength.and(pred);
@@ -519,6 +533,7 @@ public final class BDDRoute implements IDeepCopy<BDDRoute> {
    */
   public void augmentPairing(BDDRoute other, BDDPairing pairing) {
     _asPathRegexAtomicPredicates.augmentPairing(other._asPathRegexAtomicPredicates, pairing);
+    _asPathLength.augmentPairing(other._asPathLength, pairing);
     _clusterListLength.augmentPairing(other._clusterListLength, pairing);
     pairing.set(other._communityAtomicPredicates, _communityAtomicPredicates);
     _prefixLength.augmentPairing(other._prefixLength, pairing);
@@ -596,6 +611,14 @@ public final class BDDRoute implements IDeepCopy<BDDRoute> {
 
   public BDDDomain<Integer> getAsPathRegexAtomicPredicates() {
     return _asPathRegexAtomicPredicates;
+  }
+
+  public MutableBDDInteger getAsPathLength() {
+    return _asPathLength;
+  }
+
+  public void setAsPathLength(MutableBDDInteger asPathLength) {
+    _asPathLength = asPathLength;
   }
 
   public void setAsPathRegexAtomicPredicates(BDDDomain<Integer> asPathRegexAtomicPredicates) {
@@ -774,6 +797,7 @@ public final class BDDRoute implements IDeepCopy<BDDRoute> {
         && Objects.equals(_prefixLength, other._prefixLength)
         && Arrays.equals(_communityAtomicPredicates, other._communityAtomicPredicates)
         && Objects.equals(_asPathRegexAtomicPredicates, other._asPathRegexAtomicPredicates)
+        && Objects.equals(_asPathLength, other._asPathLength)
         && Objects.equals(_prependedASes, other._prependedASes)
         && Objects.equals(_nextHopInterfaces, other._nextHopInterfaces)
         && Objects.equals(_peerAddress, other._peerAddress)
@@ -798,6 +822,7 @@ public final class BDDRoute implements IDeepCopy<BDDRoute> {
         _prefix,
         _prefixLength,
         _asPathRegexAtomicPredicates,
+        _asPathLength,
         _prependedASes);
   }
 }

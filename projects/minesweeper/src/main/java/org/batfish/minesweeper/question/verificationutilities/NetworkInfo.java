@@ -1,24 +1,31 @@
 package org.batfish.minesweeper.question.verificationutilities;
 
 import net.sf.javabdd.BDD;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
+import org.batfish.common.BatfishException;
 import org.batfish.datamodel.BgpProcess;
 import org.batfish.datamodel.Bgpv4Route;
 import org.batfish.datamodel.Configuration;
 import org.batfish.datamodel.Ip;
+import org.batfish.datamodel.LongSpace;
 import org.batfish.datamodel.PrefixSpace;
 import org.batfish.datamodel.Vrf;
 import org.batfish.datamodel.bgp.Ipv4UnicastAddressFamily;
 import org.batfish.datamodel.routing_policy.RoutingPolicy;
 import org.batfish.datamodel.table.Row;
 import org.batfish.datamodel.table.TableAnswerElement;
+import org.batfish.minesweeper.ConfigAtomicPredicates;
 import org.batfish.minesweeper.bdd.ModelGeneration;
 import org.batfish.minesweeper.bdd.TransferBDD;
 import org.batfish.minesweeper.question.liveness.InterferenceCheck;
 import org.batfish.minesweeper.question.liveness.Path;
 import org.batfish.minesweeper.question.liveness.PathAnalyzer;
 import org.batfish.minesweeper.question.safety.Infer;
+import org.batfish.minesweeper.question.searchroutepolicies.RegexConstraint;
 
 import javax.annotation.Nonnull;
+import javax.annotation.Nullable;
 import java.util.Collection;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -27,14 +34,19 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
 import static java.util.Objects.isNull;
 import static java.util.Objects.nonNull;
+import static org.batfish.minesweeper.question.verificationutilities.Setup.getConfigAtomicPredicates;
 import static org.batfish.minesweeper.question.verificationutilities.Setup.metadata_locations;
+import static org.batfish.minesweeper.question.verificationutilities.Setup.nonDefaultRoute;
 
 public class NetworkInfo {
+  private static final Logger LOGGER = LogManager.getLogger(NetworkInfo.class);
+
   public final TransferBDD tbdd;
   public final Invariant defaultIncoming;
 
@@ -42,26 +54,44 @@ public class NetworkInfo {
   private final Set<Location> locations = new HashSet<>();
   private final Map<Edge, RoutingPolicy> imports = new HashMap<>();
   private final Map<Edge, RoutingPolicy> exports = new HashMap<>();
+
+  /// Assumptions on edges where we do not have the config for the source of the edge
   private final Map<Location, Invariant> checkedAssumptions = new HashMap<>();
+  /// Assumptions on nodes in network or edges originating within network
   private final Map<Location, Invariant> enforcedAssumptions = new HashMap<>();
 
+  // information to deal with internal/external ASN
+  private final Set<Location> externalOutgoing = new HashSet<>();
+
   /// Processes the provided config files to determine the network's topology and relevant
-  // information
-  private void processConfigs(@Nonnull Map<String, Configuration> configs) {
+  /// information, returns a map including the relevant RoutingPolicies
+  private Map<Configuration, Collection<RoutingPolicy>> processConfigs(
+      @Nonnull Map<String, Configuration> configs) {
+    LOGGER.info("Processing each config provided...");
+    Map<Configuration, Collection<RoutingPolicy>> policies = new HashMap<>();
+    Map<LongSpace, Set<Location>> outgoingByDstASn = new HashMap<>();
+    Long[] thisAS = {null};
+
     for (String nodeName : configs.keySet()) {
       Configuration config = configs.get(nodeName);
+      policies.put(config, new HashSet<>());
       // no need to evaluate any configs which are null or don't yield anything
       if (isNull(config) || isNull(config.getVrfs())) {
         continue;
       }
       // filter out any null VRFs
-      Stream<Vrf> forwarding = config.getVrfs().values().stream().filter(Objects::nonNull);
+      Stream<Vrf> forwarding =
+          config.getVrfs().values().stream()
+              .filter(vrf -> nonNull(vrf) && vrf.getName().equals("default"));
       // gets the bgp processes and filters out any null processes
       List<BgpProcess> bgpProcesses =
           forwarding.map(Vrf::getBgpProcess).filter(Objects::nonNull).toList();
       // note, getRouterId's return value is Nonnull
       Set<Ip> nodeIps =
-          bgpProcesses.stream().map(BgpProcess::getRouterId).collect(Collectors.toSet());
+          bgpProcesses.stream()
+              .map(BgpProcess::getRouterId)
+              .filter(ip -> !ip.equals(Ip.ZERO))
+              .collect(Collectors.toSet());
       // gather the policies
       bgpProcesses.stream()
           .flatMap(proc -> proc.getActiveNeighbors().entrySet().stream())
@@ -70,21 +100,45 @@ public class NetworkInfo {
           .filter(
               entry ->
                   nonNull(entry)
+                      // make sure entry doesn't have nulls
                       && nonNull(entry.getKey())
                       && nonNull(entry.getValue())
+                      // if the local IP address is 0.0.0.0, we remove
+                      && (entry.getValue().getLocalIp() == null
+                          || !entry.getValue().getLocalIp().equals(Ip.ZERO))
+                      // make sure there is a relevant IP
                       && (nodeIps.stream().findFirst().isPresent()
                           || nonNull(entry.getValue().getLocalIp())))
           .forEach(
               entry -> {
-                // at least one of these will be non-null based on filter, null pointer exception
-                // should never be thrown
+                assert nodeIps.stream().findFirst().isPresent()
+                    || nonNull(entry.getValue().getLocalIp());
                 Ip nodeIp =
                     nonNull(entry.getValue().getLocalIp())
                         ? entry.getValue().getLocalIp()
                         : nodeIps.stream().findFirst().get();
                 nodeIps.add(nodeIp);
+                assert !nodeIp.equals(Ip.ZERO);
                 Edge incoming = new Edge(entry.getKey(), nodeIp);
                 Edge outgoing = new Edge(nodeIp, entry.getKey());
+
+                // REASONING ABOUT INTERNAL/EXTERNAL VIA ASN
+                // gather the as that are considered in internal, to keep track of externals
+                if (thisAS[0] == null && entry.getValue().getLocalAs() != null) {
+                  thisAS[0] = entry.getValue().getLocalAs();
+                } else if (entry.getValue().getLocalAs() != null
+                    && !entry.getValue().getLocalAs().equals(thisAS[0])) {
+                  // we only want to consider one local AS
+                  throw new BatfishException(
+                      "You've provide configs from multiple AS. Current AS "
+                          + thisAS[0]
+                          + ", found AS "
+                          + entry.getValue().getLocalAs());
+                }
+                outgoingByDstASn
+                    .computeIfAbsent(entry.getValue().getRemoteAsns(), k -> new HashSet<>())
+                    .add(outgoing);
+
                 Ipv4UnicastAddressFamily unicast = entry.getValue().getIpv4UnicastAddressFamily();
                 // only add policies which exist, otherwise a default is used for weakest
                 // precondition
@@ -93,11 +147,13 @@ public class NetworkInfo {
                       && !isNull(config.getRoutingPolicies().get(unicast.getImportPolicy()))) {
                     imports.put(
                         incoming, config.getRoutingPolicies().get(unicast.getImportPolicy()));
+                    policies.get(config).add(imports.get(incoming));
                   }
                   if (!isNull(unicast.getExportPolicy())
                       && !isNull(config.getRoutingPolicies().get(unicast.getExportPolicy()))) {
                     exports.put(
                         outgoing, config.getRoutingPolicies().get(unicast.getExportPolicy()));
+                    policies.get(config).add(exports.get(outgoing));
                   }
                 }
                 // add anywhere edge is going into this node (i.e. the incoming edge above)
@@ -107,6 +163,50 @@ public class NetworkInfo {
       locations.add(node); // add node
       nodeIps.forEach(nodeIp -> nodes.put(nodeIp, node));
     }
+
+    // REASONING ABOUT INTERNAL/EXTERNAL VIA ASN
+    // keeps track of the external nodes according the AS path
+    if (thisAS[0] != null) {
+      outgoingByDstASn.forEach(
+          (remote, outgoing) -> {
+            if (!remote.contains(thisAS[0])) {
+              this.externalOutgoing.addAll(outgoing);
+            }
+          });
+    }
+    assert thisAS[0] != null || externalOutgoing.isEmpty();
+    assert this.externalOutgoing.stream().allMatch(l -> l instanceof Edge);
+    return policies;
+  }
+
+  public NetworkInfo(
+      @Nonnull Map<String, Configuration> configs,
+      @Nonnull Set<RegexConstraint> communityRegexes,
+      @Nonnull Set<RegexConstraint> asPathRegexes) {
+    this(configs, communityRegexes, asPathRegexes, null);
+  }
+
+  public NetworkInfo(
+      @Nonnull Map<String, Configuration> configs,
+      @Nonnull Set<RegexConstraint> communityRegexes,
+      @Nonnull Set<RegexConstraint> asPathRegexes,
+      @Nullable Invariant.Builder defaultIncoming) {
+    Map<Configuration, Collection<RoutingPolicy>> relevantPolicies = processConfigs(configs);
+    LOGGER.info("Creating ConfigAtomicPredicates for TransferBDD...");
+    ConfigAtomicPredicates configAtomicPredicates =
+        getConfigAtomicPredicates(communityRegexes, asPathRegexes, relevantPolicies);
+    LOGGER.info("COMPLETED ConfigAtomicPredicates");
+    this.tbdd = new TransferBDD(configAtomicPredicates);
+    this.defaultIncoming =
+        defaultIncoming == null ? new Invariant(this.tbdd) : defaultIncoming.build(this.tbdd, null);
+    // default assumption for incoming edges in the checkedAssumptions
+    for (Location location : locations) {
+      if (location instanceof Edge edge
+          && (isIncomingEdge(edge) || !this.nodes.containsKey(edge.getSrc()))) {
+        checkedAssumptions.put(edge, this.defaultIncoming);
+      }
+    }
+    LOGGER.info("COMPLETED NetworkInfo");
   }
 
   public NetworkInfo(@Nonnull TransferBDD tbdd, @Nonnull Map<String, Configuration> configs) {
@@ -163,14 +263,26 @@ public class NetworkInfo {
     return imports.containsKey(edge) || exports.containsKey(edge) || locations.contains(edge);
   }
 
-  /// Returns the policy (getImport flag indicates import or export) associated with the provided
-  // edge
+  /// Returns the policy (getImport flag indicates import or export) for the provided edge
   public RoutingPolicy getPolicy(Edge location, boolean getImport) {
     if (getImport) {
       return imports.getOrDefault(location, null);
     } else {
       return exports.getOrDefault(location, null);
     }
+  }
+
+  ///  Builds the provided invariant in the context of this network
+  public Invariant buildInvariant(Location location, Invariant.Builder inv, boolean wpQuery) {
+    RoutingPolicy policy;
+    assert location instanceof Edge || location instanceof Node;
+    boolean getImportPolicy = (location instanceof Edge) != wpQuery;
+    if (location instanceof Node node) {
+      policy = this.getPolicy(this.getAnyIncomingEdge(node), getImportPolicy);
+    } else {
+      policy = this.getPolicy((Edge) location, getImportPolicy);
+    }
+    return inv.build(this.tbdd, policy);
   }
 
   /// Included for pybatfish question development
@@ -185,6 +297,66 @@ public class NetworkInfo {
     return null;
   }
 
+  public Set<Location> getAllIncomingEdges(Node node) {
+    Set<Location> incoming = new HashSet<>();
+    for (Location location : locations) {
+      if (location instanceof Edge edge) {
+        if (edge.isDst(node)) {
+          incoming.add(edge.copy());
+        }
+      }
+    }
+    return incoming;
+  }
+
+  public Set<Location> getAllIncomingEdges(Ip ip) {
+    if (nodes.containsKey(ip)) {
+      return this.getAllIncomingEdges(nodes.get(ip));
+    } else {
+      Set<Location> incoming = new HashSet<>();
+      for (Location location : locations) {
+        if (location instanceof Edge edge) {
+          if (edge.getDst().equals(ip)) {
+            incoming.add(edge.copy());
+          } else if (edge.getSrc().equals(ip)) {
+            incoming.add(edge.flipEdge());
+          }
+        }
+      }
+      return incoming;
+    }
+  }
+
+  public Set<Location> getAllOutgoingEdges(Node node) {
+    Set<Location> outgoing = new HashSet<>();
+    for (Location location : locations) {
+      if (location instanceof Edge edge) {
+        if (edge.isDst(node)) {
+          outgoing.add(edge.flipEdge());
+        }
+      }
+    }
+    return outgoing;
+  }
+
+  public Set<Location> getAllOutgoingEdges(Ip ip) {
+    if (nodes.containsKey(ip)) {
+      return this.getAllOutgoingEdges(nodes.get(ip));
+    } else {
+      Set<Location> outgoing = new HashSet<>();
+      for (Location location : locations) {
+        if (location instanceof Edge edge) {
+          if (edge.getDst().equals(ip)) {
+            outgoing.add(edge.flipEdge());
+          } else if (edge.getSrc().equals(ip)) {
+            outgoing.add(edge.copy());
+          }
+        }
+      }
+      return outgoing;
+    }
+  }
+
   /// Used to add an assumption which indicates any traffic is possible at provided location
   public NetworkInfo anyRouteAllowedAt(Location anchor) {
     //    return this.addAssumption(anchor, new Invariant(this.tbdd));
@@ -192,17 +364,60 @@ public class NetworkInfo {
     return this;
   }
 
+  /// Checks according to ASN if applicable, otherwise checks if we have a config for the
+  /// destination (ONLY USED FOR VERIFYING PROPERTY GOING OUT ON ALL EXTERNAL EDGES)
+  public Set<Location> allOutgoingEdges() {
+    Set<Location> outgoing = new HashSet<>();
+    if (!this.externalOutgoing.isEmpty()) {
+      outgoing.addAll(this.externalOutgoing);
+    } else {
+      for (Location location : this.checkedAssumptions.keySet()) {
+        if (location instanceof Edge incoming && isIncomingEdge(incoming)) {
+          outgoing.add(incoming.flipEdge());
+        }
+      }
+    }
+    return outgoing;
+  }
+
+  /// Checks according to ASN if applicable, otherwise checks if we have a config for the
+  /// destination
+  private boolean isOutgoingEdge(Location location) {
+    if (location instanceof Edge edge) {
+      if (externalOutgoing.isEmpty()) {
+        return !nodes.containsKey(edge.getDst());
+      } else {
+        return externalOutgoing.contains(edge);
+      }
+    } else {
+      return false;
+    }
+  }
+
+  /// Checks according to ASN if applicable, otherwise checks if we have a config for the source
+  public boolean isIncomingEdge(Location location) {
+    return location instanceof Edge edge && this.isOutgoingEdge(edge.flipEdge());
+  }
+
   /// Used to add an assumption pertaining to traffic at provided location, we assume incoming edges
   /// are checked and internal locations/outgoing edges are enforced
   public void addAssumption(@Nonnull Location location, @Nonnull Invariant assumption) {
-    assert locations.contains(location)
-            || (location instanceof Edge e && nodes.containsKey(e.getSrc()))
-        : "Assumption must be on incoming edge or within the network.";
-    if (location instanceof Edge incoming && !nodes.containsKey(incoming.getSrc())) {
-      checkedAssumptions.put(location, assumption);
+    // we only want to add assumptions within network or connecting to external neighbor
+    if (locations.contains(location)
+        || (location instanceof Edge e && nodes.containsKey(e.getSrc()))) {
+      boolean noConfigAtSource = location instanceof Edge e && !nodes.containsKey(e.getSrc());
+      // check if edge is coming from external node or if we do not have a config for source
+      if (isIncomingEdge(location) || noConfigAtSource) {
+        checkedAssumptions.put(location, assumption);
+      } else {
+        // a location that is not an incoming edge, should be enforced during inference
+        enforcedAssumptions.put(location, assumption);
+      }
     } else {
-      // a location that is not an incoming edge, should be enforced during inference
-      enforcedAssumptions.put(location, assumption);
+      throw new BatfishException(
+          "Attempting to place assumption at "
+              + location
+              + ", but this location is not within nor connected to the analyzed network.");
     }
   }
 
@@ -210,22 +425,10 @@ public class NetworkInfo {
   /// and invariant in the context of this network
   public void addAssumption(
       @Nonnull Location.Builder locationBuilder, @Nonnull Invariant.Builder assumption) {
-    Location location = locationBuilder.instantiate(this);
-    assert location instanceof Edge || location instanceof Node;
-    // finding most relevant policy to help build invariant (for community from BDD function)
-    RoutingPolicy policy;
-    if (location instanceof Node node) {
-      Optional<Edge> incoming = imports.keySet().stream().filter(e -> e.isDst(node)).findFirst();
-      if (incoming.isPresent()) {
-        policy = imports.get(incoming.get());
-      } else {
-        Optional<Edge> outgoing = exports.keySet().stream().filter(e -> e.isSrc(node)).findFirst();
-        policy = outgoing.map(imports::get).orElse(null);
-      }
-    } else {
-      policy = exports.getOrDefault(location, imports.getOrDefault(location, null));
-    }
-    this.addAssumption(location, assumption.build(tbdd, policy));
+    Set<Location> locations = locationBuilder.instantiate(this);
+    assert !locations.isEmpty();
+    locations.forEach(
+        location -> this.addAssumption(location, this.buildInvariant(location, assumption, true)));
   }
 
   /// Creates instance of Lightyear objection, which can be used as a sanity check
@@ -328,6 +531,30 @@ public class NetworkInfo {
                         .put(Setup.NODES_COL, node)
                         .put(Setup.NEIGHBORS_COL, nodeNameToEdges.get(node))
                         .build()));
+
+    Set<String> externals = new HashSet<>();
+    AtomicInteger externalEdgeCount = new AtomicInteger();
+    this.allOutgoingEdges()
+        .forEach(
+            loc -> {
+              if (loc instanceof Edge e) {
+                externals.add(e.getDst().toString());
+                externalEdgeCount.addAndGet(1);
+              }
+            });
+
+    tae.addRow(
+        Row.builder()
+            .put(
+                Setup.NODES_COL,
+                "EXTERNAL NEIGHBORS ("
+                    + externals.size()
+                    + " distinct neighbors, "
+                    + externalEdgeCount
+                    + " distinct edges)")
+            .put(Setup.NEIGHBORS_COL, externals.stream().sorted().collect(Collectors.toList()))
+            .build());
+
     return tae;
   }
 
@@ -344,6 +571,12 @@ public class NetworkInfo {
     } else {
       return ModelGeneration.satAssignmentToBgpInputRoute(model, tbdd.getConfigAtomicPredicates());
     }
+  }
+
+  public String getRouteExampleStr(Invariant inv) {
+    BDD wf = inv.getBDD().and(this.tbdd.getOriginalRoute().wellFormednessConstraints(true));
+    Bgpv4Route rt = getRouteExample(this.tbdd, wf.satOne());
+    return rt != null ? nonDefaultRoute(rt) : "";
   }
 
   // CODE BELOW FOR DEBUGGING PURPOSES

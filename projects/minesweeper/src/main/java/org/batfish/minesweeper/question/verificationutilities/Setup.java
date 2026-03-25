@@ -2,6 +2,9 @@ package org.batfish.minesweeper.question.verificationutilities;
 
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableSet;
+import org.apache.commons.lang3.tuple.Pair;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 import org.batfish.datamodel.BgpRoute;
 import org.batfish.datamodel.Bgpv4Route;
 import org.batfish.datamodel.Configuration;
@@ -17,8 +20,8 @@ import org.batfish.minesweeper.ConfigAtomicPredicates;
 import org.batfish.minesweeper.communities.CommunityMatchExprVarCollector;
 import org.batfish.minesweeper.question.searchroutepolicies.RegexConstraint;
 
-import java.util.AbstractMap;
 import java.util.Collection;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
@@ -27,6 +30,7 @@ import java.util.Set;
 import static org.batfish.datamodel.answers.Schema.STRING;
 
 public class Setup {
+  private static final Logger LOGGER = LogManager.getLogger(Setup.class);
 
   /// Used to get any extra regexes from configs for creating the atomic predicates...
   /// I believe the line that gets the community from the configs is redundant based on how we
@@ -54,42 +58,44 @@ public class Setup {
     return communityVars;
   }
 
-  /// Returns relevant ConfigAtomicPredicates (contains code from SearchRoutePoliciesAnswerer)
+  /// Returns relevant ConfigAtomicPredicates for all policies in all configs
   public static ConfigAtomicPredicates getConfigAtomicPredicates(
       Set<RegexConstraint> communityRegexes,
       Set<RegexConstraint> asPathRegexes,
       Collection<Configuration> configs) {
+    int policyCount =
+        configs.stream().map(c -> c.getRoutingPolicies().size()).reduce(0, Integer::sum);
+    LOGGER.info("Policies in all configs: {}", policyCount);
+    Map<Configuration, Collection<RoutingPolicy>> configAndPolicies = new HashMap<>();
+    configs.forEach(config -> configAndPolicies.put(config, config.getRoutingPolicies().values()));
+    return getConfigAtomicPredicates(communityRegexes, asPathRegexes, configAndPolicies);
+  }
+
+  /// Returns relevant ConfigAtomicPredicates for the policies present in the map
+  public static ConfigAtomicPredicates getConfigAtomicPredicates(
+      Set<RegexConstraint> communityRegexes,
+      Set<RegexConstraint> asPathRegexes,
+      Map<Configuration, Collection<RoutingPolicy>> configAndPolicies) {
+    int policyCount =
+        configAndPolicies.values().stream().map(Collection::size).reduce(0, Integer::sum);
+    LOGGER.info("Policies in relevant configs: {}", policyCount);
     return new ConfigAtomicPredicates(
-        configs.stream()
-            .map(
-                config -> {
-                  Collection<RoutingPolicy> policies = config.getRoutingPolicies().values();
-                  // need to create variables to adhere to types
-                  return (Map.Entry<Configuration, Collection<RoutingPolicy>>)
-                      new AbstractMap.SimpleImmutableEntry<>(config, policies);
-                })
-            .toList(),
-        getCommunityVars(communityRegexes, configs),
+        configAndPolicies.entrySet().stream().toList(),
+        getCommunityVars(communityRegexes, configAndPolicies.keySet()),
         asPathRegexes.stream()
             .map(RegexConstraint::getRegex)
             .collect(ImmutableSet.toImmutableSet()));
   }
 
   /// This function takes the provided invariants and builds them in the context of the current
-  // network and tbdd
-  public static Map.Entry<Location, Invariant> buildInvariant(
+  /// network and tbdd
+  public static Map.Entry<Location, Invariant> buildLocationInvariant(
       NetworkInfo info, boolean wpQuery, Map.Entry<Location.Builder, Invariant.Builder> entry) {
-    RoutingPolicy policy;
-    Location location = entry.getKey().instantiate(info);
-    assert location instanceof Edge || location instanceof Node;
-    boolean getImportPolicy = (location instanceof Edge) != wpQuery;
-    if (location instanceof Node node) {
-      policy = info.getPolicy(info.getAnyIncomingEdge(node), getImportPolicy);
-    } else {
-      policy = info.getPolicy((Edge) location, getImportPolicy);
-    }
-    return new AbstractMap.SimpleEntry<>(
-        entry.getKey().instantiate(info), entry.getValue().build(info.tbdd, policy));
+    Set<Location> locations = entry.getKey().instantiate(info);
+    assert locations.size() == 1;
+    Location location = locations.stream().findFirst().get();
+    Invariant invariant = info.buildInvariant(location, entry.getValue(), wpQuery);
+    return Pair.of(location, invariant);
   }
 
   /// In cases where there is some counterexample, format counterexample in a more readable manner

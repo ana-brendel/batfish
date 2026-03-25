@@ -17,17 +17,18 @@ public class Node extends Location {
   private final @Nonnull String name;
 
   public Node(@Nonnull Ip ip, @Nonnull String name) {
+    assert !ip.equals(Ip.ZERO);
     this.ips = List.of(ip);
     this.name = name;
   }
 
   public Node(@Nonnull String ip, @Nonnull String name) {
-    this.ips = List.of(Ip.parse(ip));
-    this.name = name;
+    this(Ip.parse(ip), name);
   }
 
   public Node(@Nonnull Collection<Ip> ips, @Nonnull String name) {
-    this.ips = ips.stream().sorted().collect(Collectors.toList());
+    this.ips = ips.stream().filter(ip -> !ip.equals(Ip.ZERO)).sorted().collect(Collectors.toList());
+    assert !ips.isEmpty();
     this.name = name;
   }
 

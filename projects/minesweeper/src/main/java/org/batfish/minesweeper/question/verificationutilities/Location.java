@@ -61,9 +61,48 @@ public abstract class Location implements Comparable<Location> {
 
     /// Gets the Location based on the Verifier (which is based on Network Snapshot)
     /// -- maybe change to only succeed if provided with IPs
-    public Location instantiate(NetworkInfo info) {
+    public Set<Location> instantiate(NetworkInfo info) {
       assert _head != null : "Expect non-null 'head' field for Location.Builder.";
-      if (_tail != null) {
+      if (_tail != null && _head.equals("*")) {
+        Collection<Ip> tails =
+            info.ipsFromNodeName(_tail)
+                .orElse(Ip.tryParse(_tail).<Collection<Ip>>map(Set::of).orElse(null));
+        if (tails == null || tails.isEmpty()) {
+          throw new BatfishException(
+              "Location.instantiate() - Destination of abstract edge ("
+                  + _tail
+                  + ") not within network.");
+        }
+        Set<Location> incoming = info.getAllIncomingEdges(tails.stream().findFirst().get());
+        if (incoming.isEmpty()) {
+          throw new BatfishException(
+              "Location.instantiate() - Destination of abstract edge ("
+                  + _head
+                  + ") has no sources.");
+        } else {
+          return incoming;
+        }
+      } else if (_tail != null && _tail.equals("*")) {
+        Collection<Ip> heads =
+            info.ipsFromNodeName(_head)
+                .orElse(Ip.tryParse(_head).<Collection<Ip>>map(Set::of).orElse(null));
+        if (heads == null || heads.isEmpty()) {
+          throw new BatfishException(
+              "Location.instantiate() - Source of abstract edge ("
+                  + _head
+                  + ") not within network.");
+        } else {
+          Set<Location> outgoing = info.getAllOutgoingEdges(heads.stream().findFirst().get());
+          if (outgoing.isEmpty()) {
+            throw new BatfishException(
+                "Location.instantiate() - Source of abstract edge ("
+                    + _head
+                    + ") has no destinations.");
+          } else {
+            return outgoing;
+          }
+        }
+      } else if (_tail != null) {
         Collection<Ip> heads =
             info.ipsFromNodeName(_head)
                 .orElse(Ip.tryParse(_head).<Collection<Ip>>map(Set::of).orElse(null));
@@ -106,11 +145,13 @@ public abstract class Location implements Comparable<Location> {
                       + _tail
                       + ") within network.");
             }
-            return new Edge(head, tail);
+            return Set.of(new Edge(head, tail));
           } else {
-            return edge.get();
+            return Set.of(edge.get());
           }
         }
+      } else if (_head.equals("ALL-OUTGOING")) {
+        return info.allOutgoingEdges();
       } else {
         Collection<Ip> ips =
             info.ipsFromNodeName(_head)
@@ -121,7 +162,7 @@ public abstract class Location implements Comparable<Location> {
                   + _head
                   + ") in network.");
         } else {
-          return new Node(ips, _head);
+          return Set.of(new Node(ips, _head));
         }
       }
     }
@@ -152,7 +193,7 @@ public abstract class Location implements Comparable<Location> {
 
     public List<Location> instantiate(NetworkInfo info) {
       ImmutableList.Builder<Location> builder = ImmutableList.builder();
-      _builders.forEach(loc -> builder.add(loc.instantiate(info)));
+      _builders.forEach(loc -> builder.addAll(loc.instantiate(info)));
       return builder.build();
     }
 

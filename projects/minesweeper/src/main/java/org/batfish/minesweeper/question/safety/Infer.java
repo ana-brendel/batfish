@@ -93,6 +93,10 @@ public class Infer {
     this.enforcedAssumptions = context.enforcedAssumptions();
   }
 
+  public Map<Location, Invariant> getTargets() {
+    return this.targets;
+  }
+
   /**
    * Add a property to be verified at provided location. If provided a node, this will add the node
    * that we've created which includes all IP addresses that may be associated with it.
@@ -134,6 +138,14 @@ public class Infer {
       // we don't expect the target to be in the inferred map
       assert !inferred.containsKey(location);
       inferred.putIfAbsent(location, this.targets.get(location).copy());
+      working.add(location);
+    }
+    for (Location location : enforcedAssumptions.keySet()) {
+      if (location instanceof Edge edge && !nodes.containsKey(edge.getDst())) {
+        assert !inferred.containsKey(location);
+        inferred.putIfAbsent(location, this.enforcedAssumptions.get(location).copy());
+        working.add(location);
+      }
     }
   }
 
@@ -144,7 +156,6 @@ public class Infer {
       assert inferred.containsKey(location)
           : "Trying to get existing invariant for unvisited location: " + location;
       Invariant property = inferred.get(location);
-      LOGGER.info("Working to weakest precondition for property to hold at: {}", location);
       assert !property.isFalse();
       if (location instanceof Edge edge && nodes.containsKey(edge.getSrc())) {
         RoutingPolicy exportPolicy = exports.get(edge);
@@ -158,6 +169,7 @@ public class Infer {
         Invariant updated = strongestCommonImplicant(existing, wp);
         wp.free();
         inferred.put(src, updated);
+        // a node will never be a checked assumption
         if (updated.isFalse()) {
           existing.free();
           return Optional.of(new CounterExample(src, property, location));
@@ -179,7 +191,9 @@ public class Infer {
             Invariant updated = strongestCommonImplicant(existing, wp);
             wp.free();
             inferred.put(edge, updated);
-            if (updated.isFalse()) {
+            // if we inferred false, but the edge is incoming then this isn't necessarily a
+            // counterexample - rather a condition which should be checked if it holds
+            if (updated.isFalse() && !checkedAssumptions.containsKey(edge)) {
               existing.free();
               return Optional.of(new CounterExample(edge, property, location));
             } else if ((firstVisit || !existing.equals(updated)) && !working.contains(edge)) {
@@ -233,8 +247,7 @@ public class Infer {
     inferred.clear();
     working.clear();
     LOGGER.info("Initializing invariants for inference.");
-    initializeInvariants();
-    working.addAll(targets.keySet());
+    initializeInvariants(); // adds to working list
     LOGGER.info("Beginning initial inference of safety invariants.");
     Optional<CounterExample> counter = inferenceLoop();
     LOGGER.info("Inference loop terminated.");

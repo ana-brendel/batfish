@@ -13,6 +13,7 @@ public class Edge extends Location {
 
   public Edge(@Nonnull Ip src, @Nonnull Ip dst) {
     assert !src.equals(dst);
+    assert !src.equals(Ip.ZERO) && !dst.equals(Ip.ZERO);
     this.src = src;
     this.dst = dst;
   }

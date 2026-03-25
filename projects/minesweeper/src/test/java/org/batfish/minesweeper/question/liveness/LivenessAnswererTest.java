@@ -522,7 +522,7 @@ public class LivenessAnswererTest {
         new Invariant(
             net.tbdd(),
             Invariant.clauseBuilder().setCommunities(comm).build(net.tbdd(), net.template()));
-    LivenessAnswerer.Result result = LivenessAnswerer.run(info, TARGET_PREFIX, GAMMANODE, target);
+    LivenessResult result = LivenessAnswerer.run(info, TARGET_PREFIX, GAMMANODE, target);
 
     assertTrue(result.goodPath().isPresent());
     assertTrue(result.potentialInterferences().isEmpty());

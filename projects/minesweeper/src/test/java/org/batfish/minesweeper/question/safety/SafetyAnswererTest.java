@@ -263,7 +263,7 @@ public class SafetyAnswererTest {
     return allOf(
         hasColumn(
             LOCATION_RELEVANCE_COL,
-            equalTo(type == 0 ? "Target" : type == 1 ? "Assumption" : "Intermediate"),
+            equalTo(type == 0 ? "Target" : type == 1 ? "Assumption" : "Internal Location"),
             Schema.STRING),
         hasColumn(PROVIDED_INVARIANT_COL, equalTo(provided), Schema.STRING),
         hasColumn(LOCATIONS_COL, equalTo(locations), Schema.STRING),

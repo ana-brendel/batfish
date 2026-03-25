@@ -8,7 +8,6 @@ import org.batfish.datamodel.BgpProcess;
 import org.batfish.datamodel.Bgpv4Route;
 import org.batfish.datamodel.Configuration;
 import org.batfish.datamodel.Ip;
-import org.batfish.datamodel.LongSpace;
 import org.batfish.datamodel.PrefixSpace;
 import org.batfish.datamodel.Vrf;
 import org.batfish.datamodel.bgp.Ipv4UnicastAddressFamily;
@@ -42,7 +41,6 @@ import static java.util.Objects.isNull;
 import static java.util.Objects.nonNull;
 import static org.batfish.minesweeper.question.verificationutilities.Setup.getConfigAtomicPredicates;
 import static org.batfish.minesweeper.question.verificationutilities.Setup.metadata_locations;
-import static org.batfish.minesweeper.question.verificationutilities.Setup.nonDefaultRoute;
 
 public class NetworkInfo {
   private static final Logger LOGGER = LogManager.getLogger(NetworkInfo.class);
@@ -69,7 +67,6 @@ public class NetworkInfo {
       @Nonnull Map<String, Configuration> configs) {
     LOGGER.info("Processing each config provided...");
     Map<Configuration, Collection<RoutingPolicy>> policies = new HashMap<>();
-    Long[] thisAS = {null};
 
     for (String nodeName : configs.keySet()) {
       Configuration config = configs.get(nodeName);
@@ -119,20 +116,6 @@ public class NetworkInfo {
                 nodeIps.add(nodeIp);
                 assert !nodeIp.equals(Ip.ZERO);
 
-                // REASONING ABOUT INTERNAL/EXTERNAL VIA ASN
-                // gather the as that are considered in internal, to keep track of externals
-                if (thisAS[0] == null && entry.getValue().getLocalAs() != null) {
-                  thisAS[0] = entry.getValue().getLocalAs();
-                } else if (entry.getValue().getLocalAs() != null
-                    && !entry.getValue().getLocalAs().equals(thisAS[0])) {
-                  // we only want to consider one local AS
-                  throw new BatfishException(
-                      "You've provide configs from multiple AS. Current AS "
-                          + thisAS[0]
-                          + ", found AS "
-                          + entry.getValue().getLocalAs());
-                }
-
                 // TODO this may need to be updated
                 // currently we determine that a session is EBGP if the local ASN is not in the list
                 // of remote ASNs
@@ -145,8 +128,8 @@ public class NetworkInfo {
                 Edge incoming = new Edge(entry.getKey(), nodeIp, eBGP);
                 Edge outgoing = new Edge(nodeIp, entry.getKey(), eBGP);
                 if (eBGP) {
-                    // to keep traffic of all outgoing edges
-                    this.externalOutgoing.add(outgoing);
+                  // to keep traffic of all outgoing edges
+                  this.externalOutgoing.add(outgoing);
                 }
                 Ipv4UnicastAddressFamily unicast = entry.getValue().getIpv4UnicastAddressFamily();
                 // only add policies which exist, otherwise a default is used for weakest
@@ -406,7 +389,7 @@ public class NetworkInfo {
         || (location instanceof Edge e && nodes.containsKey(e.getSrc()))) {
       boolean noConfigAtSource = location instanceof Edge e && !nodes.containsKey(e.getSrc());
       // check if edge is coming from external node or if we do not have a config for source
-        // TODO would there ever be an external node we don't have config for?
+      // TODO would there ever be an external node we don't have config for?
       if (isIncomingEdge(location) || noConfigAtSource) {
         checkedAssumptions.put(location, assumption);
       } else {

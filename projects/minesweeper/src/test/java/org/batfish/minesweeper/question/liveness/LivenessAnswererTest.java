@@ -840,7 +840,7 @@ public class LivenessAnswererTest {
         new Invariant(
             net.tbdd(),
             Invariant.clauseBuilder().setCommunities(comm).build(net.tbdd(), net.template()));
-    LivenessAnswerer.Result result = LivenessAnswerer.run(info, TARGET_PREFIX, GAMMANODE, target);
+    LivenessResult result = LivenessAnswerer.run(info, TARGET_PREFIX, GAMMANODE, target);
 
     assertTrue(result.goodPath().isPresent());
     // the interfering path has a lower local preference
@@ -875,7 +875,7 @@ public class LivenessAnswererTest {
         new Invariant(
             net.tbdd(),
             Invariant.clauseBuilder().setCommunities(comm).build(net.tbdd(), net.template()));
-    LivenessAnswerer.Result result = LivenessAnswerer.run(info, TARGET_PREFIX, GAMMANODE, target);
+    LivenessResult result = LivenessAnswerer.run(info, TARGET_PREFIX, GAMMANODE, target);
 
     assertTrue(result.goodPath().isPresent());
     // the only possible interference occurs on a longer path, whose AS length

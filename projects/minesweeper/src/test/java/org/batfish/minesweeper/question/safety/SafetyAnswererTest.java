@@ -297,6 +297,7 @@ public class SafetyAnswererTest {
                                 null,
                                 new PrefixSpace(PrefixRange.fromString(p_str)),
                                 null,
+                                null,
                                 null)))),
             new Location.Builders(
                 List.of(new Location.Builder(NODE_C.getName(), exit.toString(), null))),
@@ -354,6 +355,7 @@ public class SafetyAnswererTest {
                                 null,
                                 new PrefixSpace(PrefixRange.fromString(p_str)),
                                 null,
+                                null,
                                 null)))),
             new Location.Builders(
                 List.of(new Location.Builder(NODE_C.getName(), exit.toString(), null))),
@@ -366,6 +368,7 @@ public class SafetyAnswererTest {
                         null,
                         null,
                         new RegexConstraints(List.of(RegexConstraint.parse("10:10"))),
+                        null,
                         null)),
             true,
             true);

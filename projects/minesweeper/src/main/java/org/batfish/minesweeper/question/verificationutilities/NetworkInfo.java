@@ -83,8 +83,17 @@ public class NetworkInfo {
                         ? entry.getValue().getLocalIp()
                         : nodeIps.stream().findFirst().get();
                 nodeIps.add(nodeIp);
-                Edge incoming = new Edge(entry.getKey(), nodeIp);
-                Edge outgoing = new Edge(nodeIp, entry.getKey());
+                // TODO this may need to be updated
+                // currently we determine that a session is EBGP if the local ASN is not in the list
+                // of remote ASNs
+                boolean eBGP =
+                    !(entry.getValue().getLocalAs() == null
+                        || entry
+                            .getValue()
+                            .getRemoteAsns()
+                            .contains(entry.getValue().getLocalAs()));
+                Edge incoming = new Edge(entry.getKey(), nodeIp, eBGP);
+                Edge outgoing = new Edge(nodeIp, entry.getKey(), eBGP);
                 Ipv4UnicastAddressFamily unicast = entry.getValue().getIpv4UnicastAddressFamily();
                 // only add policies which exist, otherwise a default is used for weakest
                 // precondition
@@ -101,7 +110,7 @@ public class NetworkInfo {
                   }
                 }
                 // add anywhere edge is going into this node (i.e. the incoming edge above)
-                locations.add(new Edge(entry.getKey(), nodeIp));
+                locations.add(new Edge(entry.getKey(), nodeIp, eBGP));
               });
       Node node = new Node(nodeIps, nodeName);
       locations.add(node); // add node

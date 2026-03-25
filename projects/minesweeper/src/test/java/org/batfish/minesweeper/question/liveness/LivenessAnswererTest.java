@@ -21,6 +21,7 @@ import org.batfish.datamodel.routing_policy.RoutingPolicy;
 import org.batfish.datamodel.routing_policy.expr.LiteralLong;
 import org.batfish.datamodel.routing_policy.statement.SetLocalPreference;
 import org.batfish.datamodel.routing_policy.statement.Statement;
+import org.batfish.datamodel.routing_policy.statement.Statements;
 import org.batfish.minesweeper.ConfigAtomicPredicates;
 import org.batfish.minesweeper.bdd.TransferBDD;
 import org.batfish.minesweeper.question.searchroutepolicies.RegexConstraint;
@@ -28,6 +29,7 @@ import org.batfish.minesweeper.question.searchroutepolicies.RegexConstraints;
 import org.batfish.minesweeper.question.verificationutilities.Invariant;
 import org.batfish.minesweeper.question.verificationutilities.NetworkInfo;
 import org.batfish.minesweeper.question.verificationutilities.Node;
+import org.batfish.minesweeper.question.verificationutilities.Edge;
 import org.batfish.minesweeper.question.verificationutilities.TestConfigConstructionUtils;
 import org.junit.Before;
 import org.junit.Test;
@@ -501,6 +503,294 @@ public class LivenessAnswererTest {
     return new TestConfigConstructionUtils.Networkv2(tbdd, configs, alphaBetaImport, List.of());
   }
 
+  private TestConfigConstructionUtils.Networkv2 pathWithLocalPreferenceExample2(
+      Node ALPHANODE,
+      Node BETANODE,
+      Node GAMMANODE,
+      Ip alphaIncoming,
+      Ip gammaIncoming,
+      String prefixString) {
+    Map<Node, Configuration> configs = new HashMap<>();
+
+    String community1 = "1:1";
+    String regex_community1 = "^" + community1 + "$";
+    String community2 = "2:2";
+    String regex_community2 = "^" + community2 + "$";
+
+    String EXTERNAL = "externalNeighbor";
+    String INTERNAL = "internalNeighbor";
+
+    String externalAlphaImport = "incomingFromOutsideAlpha";
+    String externalGammaImport = "incomingFromOutsideGamma";
+    String importALPHA2BETA = "importA2B";
+    String importBETA2GAMMA = "importB2C";
+    String importDefault = "defaultImportPolicy";
+    String exportDefault = "defaultExportPolicy";
+
+    String PREFIX_LABEL = "prefixMatch";
+    RouteFilterList prefixMatch =
+        new RouteFilterList(
+            PREFIX_LABEL,
+            ImmutableList.of(
+                new RouteFilterLine(PERMIT, PrefixRange.fromPrefix(Prefix.parse(prefixString)))));
+
+    // Set up the configs and add what features they know about
+    setUpConfigs(configs, ALPHANODE, BETANODE, GAMMANODE);
+
+    includeCommunities(configs.get(ALPHANODE), regex_community1);
+    configs.get(ALPHANODE).setRouteFilterLists(ImmutableMap.of(PREFIX_LABEL, prefixMatch));
+    includeCommunities(configs.get(BETANODE), regex_community1, regex_community2);
+    configs.get(BETANODE).setRouteFilterLists(ImmutableMap.of(PREFIX_LABEL, prefixMatch));
+    includeCommunities(configs.get(GAMMANODE), regex_community2);
+
+    // Create the BGP processes
+    Map<Node, BgpProcess> processes = getBgpProcesses(configs, ALPHANODE, BETANODE, GAMMANODE);
+
+    processes
+        .get(ALPHANODE)
+        .setNeighbors(
+            ImmutableSortedMap.of(
+                alphaIncoming,
+                getBgpActivePeerConfig(EXTERNAL, externalAlphaImport, exportDefault),
+                BETANODE.getSingleIp(),
+                getBgpActivePeerConfig(INTERNAL, importDefault, exportDefault)));
+    processes
+        .get(BETANODE)
+        .setNeighbors(
+            ImmutableSortedMap.of(
+                ALPHANODE.getSingleIp(),
+                getBgpActivePeerConfig(INTERNAL, importALPHA2BETA, exportDefault),
+                GAMMANODE.getSingleIp(),
+                getBgpActivePeerConfig(INTERNAL, importDefault, exportDefault)));
+    processes
+        .get(GAMMANODE)
+        .setNeighbors(
+            ImmutableSortedMap.of(
+                BETANODE.getSingleIp(),
+                getBgpActivePeerConfig(INTERNAL, importBETA2GAMMA, exportDefault),
+                gammaIncoming,
+                getBgpActivePeerConfig(EXTERNAL, externalGammaImport, exportDefault)));
+
+    // Create the policies
+    makePolicy(
+        configs.get(ALPHANODE),
+        externalAlphaImport,
+        ifStatement(
+            checkForPrefixListMatch(PREFIX_LABEL),
+            replaceCommunities(community1),
+            clearCommunities()));
+    makePolicy(configs.get(ALPHANODE), importDefault, permitRoute(true));
+    makePolicy(configs.get(ALPHANODE), exportDefault, permitRoute(true));
+
+    List<Statement> alphaBetaImportStatements =
+        new java.util.ArrayList<>(
+            TestConfigConstructionUtils.ifStatement(
+                checkForCommunity(community1), addToCommunities(community2), permitRoute(true)));
+    RoutingPolicy alphaBetaImport =
+        makePolicy(configs.get(BETANODE), importALPHA2BETA, alphaBetaImportStatements);
+
+    makePolicy(configs.get(BETANODE), importDefault, permitRoute(true));
+    makePolicy(configs.get(BETANODE), exportDefault, permitRoute(true));
+
+    // import from beta to gamma with high local preference
+    List<Statement> betaGammaImportStatements =
+        ifStatement(
+            checkForCommunity(community2),
+            ImmutableList.of(
+                new SetLocalPreference(new LiteralLong(200L)),
+                new Statements.StaticStatement(Statements.ExitAccept)),
+            permitRoute(false));
+
+    makePolicy(configs.get(GAMMANODE), importBETA2GAMMA, betaGammaImportStatements);
+    makePolicy(
+        configs.get(BETANODE),
+        externalGammaImport,
+        ifStatement(
+            checkForPrefixListMatch(PREFIX_LABEL),
+            replaceCommunities(community2),
+            clearCommunities()));
+    makePolicy(configs.get(GAMMANODE), exportDefault, permitRoute(true));
+
+    // Set up the tbdd
+    Set<RegexConstraint> communityRegexes =
+        ImmutableSet.<RegexConstraint>builder()
+            .add(RegexConstraint.parse(community1))
+            .add(RegexConstraint.parse(community2))
+            .build();
+    ConfigAtomicPredicates configAPs =
+        getConfigAtomicPredicates(communityRegexes, Set.of(), configs.values());
+    TransferBDD tbdd = new TransferBDD(configAPs);
+
+    return new TestConfigConstructionUtils.Networkv2(tbdd, configs, alphaBetaImport, List.of());
+  }
+
+  private TestConfigConstructionUtils.Networkv2 pathWithAsPathLengthExample(
+      Node ALPHANODE, Node BETANODE, Node GAMMANODE, Ip alphaIncoming, String prefixString) {
+    Map<Node, Configuration> configs = new HashMap<>();
+
+    String community1 = "1:1";
+    String regex_community1 = "^" + community1 + "$";
+
+    String EXTERNAL = "externalNeighbor";
+    String INTERNAL = "internalNeighbor";
+
+    String externalAlphaImport = "incomingFromOutsideAlpha";
+    String importALPHA2BETA = "importA2B";
+    String importDefault = "defaultImportPolicy";
+    String exportDefault = "defaultExportPolicy";
+
+    long alphaAs = 65001L;
+    long betaAs = 65002L;
+    long gammaAs = 65003L;
+    long externalAs = 65100L;
+
+    String PREFIX_LABEL = "prefixMatch";
+    RouteFilterList prefixMatch =
+        new RouteFilterList(
+            PREFIX_LABEL,
+            ImmutableList.of(
+                new RouteFilterLine(PERMIT, PrefixRange.fromPrefix(Prefix.parse(prefixString)))));
+
+    // Set up the configs and add what features they know about
+    setUpConfigs(configs, ALPHANODE, BETANODE, GAMMANODE);
+
+    includeCommunities(configs.get(ALPHANODE), regex_community1);
+    configs.get(ALPHANODE).setRouteFilterLists(ImmutableMap.of(PREFIX_LABEL, prefixMatch));
+    includeCommunities(configs.get(BETANODE), regex_community1);
+    configs.get(BETANODE).setRouteFilterLists(ImmutableMap.of(PREFIX_LABEL, prefixMatch));
+    includeCommunities(configs.get(GAMMANODE), regex_community1);
+
+    // Create the BGP processes
+    Map<Node, BgpProcess> processes = getBgpProcesses(configs, ALPHANODE, BETANODE, GAMMANODE);
+
+    processes
+        .get(ALPHANODE)
+        .setNeighbors(
+            ImmutableSortedMap.of(
+                alphaIncoming,
+                org.batfish.datamodel.BgpActivePeerConfig.builder()
+                    .setGroup(EXTERNAL)
+                    .setLocalAs(alphaAs)
+                    .setRemoteAs(externalAs)
+                    .setIpv4UnicastAddressFamily(
+                        org.batfish.datamodel.bgp.Ipv4UnicastAddressFamily.builder()
+                            .setImportPolicy(externalAlphaImport)
+                            .setExportPolicy(exportDefault)
+                            .build())
+                    .build(),
+                BETANODE.getSingleIp(),
+                org.batfish.datamodel.BgpActivePeerConfig.builder()
+                    .setGroup(INTERNAL)
+                    .setLocalAs(alphaAs)
+                    .setRemoteAs(betaAs)
+                    .setIpv4UnicastAddressFamily(
+                        org.batfish.datamodel.bgp.Ipv4UnicastAddressFamily.builder()
+                            .setImportPolicy(importDefault)
+                            .setExportPolicy(exportDefault)
+                            .build())
+                    .build(),
+                GAMMANODE.getSingleIp(),
+                org.batfish.datamodel.BgpActivePeerConfig.builder()
+                    .setGroup(INTERNAL)
+                    .setLocalAs(alphaAs)
+                    .setRemoteAs(gammaAs)
+                    .setIpv4UnicastAddressFamily(
+                        org.batfish.datamodel.bgp.Ipv4UnicastAddressFamily.builder()
+                            .setImportPolicy(importDefault)
+                            .setExportPolicy(exportDefault)
+                            .build())
+                    .build()));
+    processes
+        .get(BETANODE)
+        .setNeighbors(
+            ImmutableSortedMap.of(
+                ALPHANODE.getSingleIp(),
+                org.batfish.datamodel.BgpActivePeerConfig.builder()
+                    .setGroup(INTERNAL)
+                    .setLocalAs(betaAs)
+                    .setRemoteAs(alphaAs)
+                    .setIpv4UnicastAddressFamily(
+                        org.batfish.datamodel.bgp.Ipv4UnicastAddressFamily.builder()
+                            .setImportPolicy(importALPHA2BETA)
+                            .setExportPolicy(exportDefault)
+                            .build())
+                    .build(),
+                GAMMANODE.getSingleIp(),
+                org.batfish.datamodel.BgpActivePeerConfig.builder()
+                    .setGroup(INTERNAL)
+                    .setLocalAs(betaAs)
+                    .setRemoteAs(gammaAs)
+                    .setIpv4UnicastAddressFamily(
+                        org.batfish.datamodel.bgp.Ipv4UnicastAddressFamily.builder()
+                            .setImportPolicy(importDefault)
+                            .setExportPolicy(exportDefault)
+                            .build())
+                    .build()));
+    processes
+        .get(GAMMANODE)
+        .setNeighbors(
+            ImmutableSortedMap.of(
+                BETANODE.getSingleIp(),
+                org.batfish.datamodel.BgpActivePeerConfig.builder()
+                    .setGroup(INTERNAL)
+                    .setLocalAs(gammaAs)
+                    .setRemoteAs(betaAs)
+                    .setIpv4UnicastAddressFamily(
+                        org.batfish.datamodel.bgp.Ipv4UnicastAddressFamily.builder()
+                            .setImportPolicy(importDefault)
+                            .setExportPolicy(exportDefault)
+                            .build())
+                    .build(),
+                ALPHANODE.getSingleIp(),
+                org.batfish.datamodel.BgpActivePeerConfig.builder()
+                    .setGroup(INTERNAL)
+                    .setLocalAs(gammaAs)
+                    .setRemoteAs(alphaAs)
+                    .setIpv4UnicastAddressFamily(
+                        org.batfish.datamodel.bgp.Ipv4UnicastAddressFamily.builder()
+                            .setImportPolicy(importDefault)
+                            .setExportPolicy(exportDefault)
+                            .build())
+                    .build()));
+
+    // Create the policies
+    makePolicy(
+        configs.get(ALPHANODE),
+        externalAlphaImport,
+        ifStatement(
+            checkForPrefixListMatch(PREFIX_LABEL),
+            replaceCommunities(community1),
+            clearCommunities()));
+    RoutingPolicy alphaDefaultImport =
+        makePolicy(configs.get(ALPHANODE), importDefault, permitRoute(true));
+    makePolicy(configs.get(ALPHANODE), exportDefault, permitRoute(true));
+
+    List<Statement> betaImportFromAlphaStatements =
+        ImmutableList.of(
+            new org.batfish.datamodel.routing_policy.communities.SetCommunities(
+                new org.batfish.datamodel.routing_policy.communities.CommunitySetDifference(
+                    org.batfish.datamodel.routing_policy.communities.InputCommunities.instance(),
+                    new org.batfish.datamodel.routing_policy.communities.CommunityIs(
+                        org.batfish.datamodel.bgp.community.StandardCommunity.parse(community1)))),
+            new org.batfish.datamodel.routing_policy.statement.Statements.StaticStatement(
+                Statements.ExitAccept));
+    makePolicy(configs.get(BETANODE), importALPHA2BETA, betaImportFromAlphaStatements);
+    makePolicy(configs.get(BETANODE), importDefault, permitRoute(true));
+    makePolicy(configs.get(BETANODE), exportDefault, permitRoute(true));
+
+    makePolicy(configs.get(GAMMANODE), importDefault, permitRoute(true));
+    makePolicy(configs.get(GAMMANODE), exportDefault, permitRoute(true));
+
+    // Set up the tbdd
+    Set<RegexConstraint> communityRegexes =
+        ImmutableSet.<RegexConstraint>builder().add(RegexConstraint.parse(community1)).build();
+    ConfigAtomicPredicates configAPs =
+        getConfigAtomicPredicates(communityRegexes, Set.of(), configs.values());
+    TransferBDD tbdd = new TransferBDD(configAPs);
+
+    return new TestConfigConstructionUtils.Networkv2(tbdd, configs, alphaDefaultImport, List.of());
+  }
+
   @Test
   public void pathWithLocalPreferenceNoInterferenceTest() {
     Node ALPHANODE = new Node("10.0.0.1", "alphaNode");
@@ -525,6 +815,71 @@ public class LivenessAnswererTest {
     LivenessAnswerer.Result result = LivenessAnswerer.run(info, TARGET_PREFIX, GAMMANODE, target);
 
     assertTrue(result.goodPath().isPresent());
+    // the interfering path has a lower local preference
+    assertTrue(result.potentialInterferences().isEmpty());
+  }
+
+  @Test
+  public void pathWithLocalPreferenceNoInterferenceTest2() {
+    Node ALPHANODE = new Node("10.0.0.1", "alphaNode");
+    Node BETANODE = new Node("10.0.0.2", "betaNode");
+    Node GAMMANODE = new Node("10.0.0.3", "gammaNode");
+    Ip incomingAlpha = Ip.parse("100.0.0.10");
+    Ip incomingBeta = Ip.parse("100.0.0.20");
+    String prefixStr = "2.4.8.0/24";
+
+    PrefixSpace TARGET_PREFIX = new PrefixSpace(PrefixRange.fromString(prefixStr));
+
+    TestConfigConstructionUtils.Networkv2 net =
+        pathWithLocalPreferenceExample2(
+            ALPHANODE, BETANODE, GAMMANODE, incomingAlpha, incomingBeta, prefixStr);
+    NetworkInfo info = net.getInfo(TARGET_PREFIX);
+
+    RegexConstraints comm = new RegexConstraints(List.of(RegexConstraint.parse("1:1")));
+    Invariant target =
+        new Invariant(
+            net.tbdd(),
+            Invariant.clauseBuilder().setCommunities(comm).build(net.tbdd(), net.template()));
+    LivenessAnswerer.Result result = LivenessAnswerer.run(info, TARGET_PREFIX, GAMMANODE, target);
+
+    assertTrue(result.goodPath().isPresent());
+    // the interfering path has a lower local preference
+    assertTrue(result.potentialInterferences().isEmpty());
+  }
+
+  @Test
+  public void pathWithAsPathLengthNoInterferenceTest() {
+    Node ALPHANODE = new Node("10.0.0.1", "alphaNode");
+    Node BETANODE = new Node("10.0.0.2", "betaNode");
+    Node GAMMANODE = new Node("10.0.0.3", "gammaNode");
+    Ip incomingAlpha = Ip.parse("100.0.0.10");
+    String prefixStr = "2.4.8.0/24";
+
+    PrefixSpace TARGET_PREFIX = new PrefixSpace(PrefixRange.fromString(prefixStr));
+
+    TestConfigConstructionUtils.Networkv2 net =
+        pathWithAsPathLengthExample(ALPHANODE, BETANODE, GAMMANODE, incomingAlpha, prefixStr);
+    NetworkInfo info = net.getInfo(TARGET_PREFIX);
+
+    // the incoming traffic is assumed to all have AS-path length of 1;
+    // this (or a similar assumption setting the AS-path length to some constant) is required for us
+    // to determine that there is no interference
+    Invariant incomingAtAlphaAssumption =
+        new Invariant(
+            net.tbdd(),
+            Invariant.clauseBuilder().setAsPathLength(1).build(net.tbdd(), net.template()));
+    info.addAssumption(new Edge(incomingAlpha, ALPHANODE.getSingleIp()), incomingAtAlphaAssumption);
+
+    RegexConstraints comm = new RegexConstraints(List.of(RegexConstraint.parse("1:1")));
+    Invariant target =
+        new Invariant(
+            net.tbdd(),
+            Invariant.clauseBuilder().setCommunities(comm).build(net.tbdd(), net.template()));
+    LivenessAnswerer.Result result = LivenessAnswerer.run(info, TARGET_PREFIX, GAMMANODE, target);
+
+    assertTrue(result.goodPath().isPresent());
+    // the only possible interference occurs on a longer path, whose AS length
+    // is therefore longer (since all edges are eBGP), so there is no interference
     assertTrue(result.potentialInterferences().isEmpty());
   }
 }

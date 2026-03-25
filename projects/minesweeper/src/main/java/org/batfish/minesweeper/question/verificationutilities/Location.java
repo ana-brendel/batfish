@@ -106,6 +106,7 @@ public abstract class Location implements Comparable<Location> {
                       + _tail
                       + ") within network.");
             }
+            // TODO: Implicitly we are treating this edge as not being EBGP -- is that a problem?
             return new Edge(head, tail);
           } else {
             return edge.get();

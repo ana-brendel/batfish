@@ -1434,6 +1434,11 @@ public class TransferBDD {
     }
     prependedASes.addAll(route.getPrependedASes());
     route.setPrependedASes(prependedASes);
+    // update the path length
+    // TODO: check for or handle overflow
+    MutableBDDInteger increment =
+        MutableBDDInteger.makeFromValue(route.getFactory(), 4, asList.getList().size());
+    route.setAsPathLength(route.getAsPathLength().addClipping(increment));
   }
 
   // Update community atomic predicates based on the given CommunityAPDispositions object

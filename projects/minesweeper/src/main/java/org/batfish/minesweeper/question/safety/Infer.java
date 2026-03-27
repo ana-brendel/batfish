@@ -238,19 +238,27 @@ public class Infer {
 
   /**
    * Based on configured values, runs verification by inferring invariants in order to verify
-   * whatever target properties and locations are provided.
+   * whatever target properties and locations are provided. Included for violation analysis to avoid
+   * logging every inference query in the loop.
    *
+   * @param log indicates if logging message should be displayed
    * @return Result indicating if verification succeeded, what the inferred invariants are and a
    *     counterexample if applicable
    */
-  public Result run() {
+  public Result run(boolean log) {
     inferred.clear();
     working.clear();
-    LOGGER.info("Initializing invariants for inference.");
+    if (log) {
+      LOGGER.info("Initializing invariants for inference.");
+    }
     initializeInvariants(); // adds to working list
-    LOGGER.info("Beginning initial inference of safety invariants.");
+    if (log) {
+      LOGGER.info("Beginning initial inference of safety invariants.");
+    }
     Optional<CounterExample> counter = inferenceLoop();
-    LOGGER.info("Inference loop terminated.");
+    if (log) {
+      LOGGER.info("Inference loop terminated.");
+    }
     Map<Location, Bgpv4Route> checks = verificationAssumptionCheck();
 
     // Lightyear style check to only run during testing
@@ -259,6 +267,17 @@ public class Infer {
         : "Checks that all invariants are sufficient as preconditions to imply the following postcondition";
 
     return new Result(counter.isEmpty() && checks.isEmpty(), inferred, counter, checks);
+  }
+
+  /**
+   * Based on configured values, runs verification by inferring invariants in order to verify
+   * whatever target properties and locations are provided.
+   *
+   * @return Result indicating if verification succeeded, what the inferred invariants are and a
+   *     counterexample if applicable
+   */
+  public Result run() {
+    return this.run(true);
   }
 
   /// Returns a Refiner object which is used to refine invariants in order to tease out key

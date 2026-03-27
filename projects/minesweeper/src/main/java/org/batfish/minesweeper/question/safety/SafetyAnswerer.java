@@ -20,7 +20,6 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
-import java.util.stream.Collectors;
 
 // Currently the question takes in a single target location-invariant pair whereas the assumptions
 // might be a list
@@ -155,12 +154,10 @@ public final class SafetyAnswerer extends Answerer {
     LOGGER.info("Constructed Verification.NetworkInfo object");
 
     LOGGER.info("Adding any provided assumptions to the NetworkInfo object");
-    _assumptions.forEach(info::addAssumption);
-    Set<Location> instantiatedAssumptions =
-        _assumptions.keySet().stream()
-            .flatMap(b -> b.instantiate(info).stream())
-            .collect(Collectors.toSet());
-    LOGGER.info(info.displayNodes());
+    Set<Location> instantiatedAssumptions = new HashSet<>();
+    for (Map.Entry<Location.Builder, Invariant.Builder> entry : _assumptions.entrySet()) {
+      instantiatedAssumptions.addAll(info.addAssumption(entry.getKey(), entry.getValue()));
+    }
 
     // if there is no provided target, return a list of the network locations
     if (_targets.isEmpty()) {
@@ -189,9 +186,12 @@ public final class SafetyAnswerer extends Answerer {
                     }));
     SafetyResult result = run(info, _refine, targetBuilders);
 
+    // potential special case to more efficiently isolate violations (if multiple targets), unused
+    // Optional<String> violations = ViolationAnalysis.run(info, result)
+
     LOGGER.info("Completed analysis. Working on displaying results...");
 
     // return the answer element associated with desired level of granularity
-    return _showAll ? result.getAnswerElementAll() : result.getAnswerElementLimited();
+    return _showAll ? result.getAnswerElementAll("") : result.getAnswerElementLimited("");
   }
 }

@@ -406,12 +406,13 @@ public class NetworkInfo {
 
   /// Used to add an assumption pertaining to traffic at provided location, need to build location
   /// and invariant in the context of this network
-  public void addAssumption(
+  public Set<Location> addAssumption(
       @Nonnull Location.Builder locationBuilder, @Nonnull Invariant.Builder assumption) {
     Set<Location> locations = locationBuilder.instantiate(this);
     assert !locations.isEmpty();
     locations.forEach(
         location -> this.addAssumption(location, this.buildInvariant(location, assumption, true)));
+    return locations;
   }
 
   /// Creates instance of Lightyear objection, which can be used as a sanity check
@@ -554,23 +555,5 @@ public class NetworkInfo {
     } else {
       return ModelGeneration.satAssignmentToBgpInputRoute(model, tbdd.getConfigAtomicPredicates());
     }
-  }
-
-  // CODE BELOW FOR DEBUGGING PURPOSES
-  public String displayNodes() {
-    StringBuilder builder = new StringBuilder();
-    Set<Node> done = new HashSet<>();
-    for (Node n : nodes.values().stream().sorted().toList()) {
-      if (!done.contains(n)) {
-        done.add(n);
-        builder.append("\n + ").append(n);
-        for (Location l : locations) {
-          if (l instanceof Edge e && e.isSrc(n)) {
-            builder.append("\n    - ").append(e.getDst());
-          }
-        }
-      }
-    }
-    return builder.toString();
   }
 }

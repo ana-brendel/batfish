@@ -72,11 +72,28 @@ public record SafetyResult(
             .build());
   }
 
+  private void addViolationNote(TableAnswerElement tae, String violation) {
+    if (!violation.isEmpty()) {
+      tae.addRow(
+          Row.builder()
+              .put(Setup.LOCATION_RELEVANCE_COL, "Violation Note")
+              .put(Setup.PROVIDED_INVARIANT_COL, "")
+              .put(Setup.LOCATIONS_COL, violation)
+              .put(Setup.INFERRED_INVARIANTS_COL, "")
+              .put(Setup.COUNTEREXAMPLE_COL, "...")
+              .build());
+    }
+  }
+
   /// Gather the answer element needed for a question return
-  public TableAnswerElement getAnswerElementAll() {
+  public TableAnswerElement getAnswerElementAll(String violations) {
     Map<Location, Invariant> results = refinement.refined;
     Map<BDD, String> cache = new HashMap<>();
     TableAnswerElement tae = new TableAnswerElement(metadata_safety());
+
+    // added to try to isolate exact violations with verification failure
+    addViolationNote(tae, violations);
+
     // assumption -> inferred invariant -> counterexample -> set of locations
     Map<String, Map<String, Map<String, Set<String>>>> assumptionGroups = new HashMap<>();
     Map<String, Map<String, Map<String, Set<String>>>> intermediateGroups = new HashMap<>();
@@ -164,9 +181,13 @@ public record SafetyResult(
 
   /// Gather the answer element needed for a question return, only include information associated
   /// with assumptions and targets, only include intermediate invariants if false inferred
-  public TableAnswerElement getAnswerElementLimited() {
+  public TableAnswerElement getAnswerElementLimited(String violations) {
     Map<BDD, String> cache = new HashMap<>();
     TableAnswerElement tae = new TableAnswerElement(metadata_safety());
+
+    // added to try to isolate exact violations with verification failure
+    addViolationNote(tae, violations);
+
     // at the target to the top, refinement included if it occurred
     assert !targets.isEmpty() : "We need to have some assumption";
     Map.Entry<Location, Invariant> target = targets.entrySet().stream().findFirst().get();

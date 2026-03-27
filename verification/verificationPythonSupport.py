@@ -1,15 +1,17 @@
 # Python clauses useful for easily calling pybatfish API
 class Clause:
-    def __init__(self,communities:list[str]=[],as_path:list[str]=[],prefixes:list[str]=[]):
+    def __init__(self,communities:list[str]=[],as_path:list[str]=[],prefixes:list[str]=[],as_path_length:int=-1):
         self.communities = communities
         self.prefixes = prefixes
         self.as_path = as_path
+        self.as_path_length = as_path_length
 
     def format(self) -> str:
         communityStrings = list(map(lambda c: f"comm = {c}",self.communities))
         asPathStrings = list(map(lambda c: f"asPath = {c}",self.as_path))
         prefixStrings = list(map(lambda p: f"prefix = {p}",self.prefixes))
-        joined = " & ".join(communityStrings+asPathStrings+prefixStrings)
+        asPathLengthString = [f"asPathLength = {self.as_path_length}"] if 0 <= self.as_path_length else []
+        joined = " & ".join(communityStrings+asPathStrings+prefixStrings+asPathLengthString)
         return f"~{joined}~"
     
 class Property:
@@ -17,7 +19,10 @@ class Property:
         self.clauses = clauses
 
     def formatProperty(self) -> str:
-        return "".join(map(lambda c: c.format(),self.clauses))
+        if self.clauses == []:
+            return "~~"
+        else:
+            return "".join(map(lambda c: c.format(),self.clauses))
 
 class LocationPropertyPair:
     # location should be either: ip -> ip for edge or ip for node (already formatted)
@@ -27,7 +32,10 @@ class LocationPropertyPair:
         self.property = property
 
     def formatProperty(self) -> str:
-        return "".join(map(lambda c: c.format(),self.property))
+        if self.property == []:
+            return "~~"
+        else:
+            return "".join(map(lambda c: c.format(),self.property))
 
 class LivenessQuery:
     def __init__(self, prefix:str, target:LocationPropertyPair,assumptions:list[LocationPropertyPair]=[],default:Property=None,ingress:str=None):
@@ -98,3 +106,14 @@ def trueAtLocation(location : str) -> LocationPropertyPair:
 def falseAtLocation(location :str) -> LocationPropertyPair:
     falses = falseProperty()
     return LocationPropertyPair(location=location,property=falses.clauses)
+
+OUTGOING = "ALL-OUTGOING"
+
+def negate(s):
+    return f"!{s}"
+
+def incomingEdgesTo(dst):
+    return f"* -> {dst}"
+
+def outgoingEdgesFrom(src):
+    return f"{src} -> *"

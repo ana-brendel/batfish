@@ -156,13 +156,6 @@ public class Invariant {
       String[] splits = value.trim().split("~");
       for (String clause : splits) {
         String trimmed = clause.trim();
-        //        if (!trimmed.isEmpty()) {
-        //          throw new BatfishException(
-        //              "String parsing into property (Invariant.Builder) failed. "
-        //                  + "A property should be in DNF form - [clause1][clause2]...[clause_n]. "
-        //                  + "The trimmed clause is: "
-        //                  + trimmed);
-        //        } else
         if (!trimmed.isEmpty()) {
           builder.addClause(ClauseBuilder.parseForClauseBuilder(trimmed));
         }

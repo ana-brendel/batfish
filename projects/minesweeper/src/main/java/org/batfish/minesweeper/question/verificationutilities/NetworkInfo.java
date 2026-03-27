@@ -347,7 +347,7 @@ public class NetworkInfo {
 
   /// Checks according to ASN if applicable, otherwise checks if we have a config for the
   /// destination (ONLY USED FOR VERIFYING PROPERTY GOING OUT ON ALL EXTERNAL EDGES)
-  public Set<Location> allOutgoingEdges() {
+  public Set<Location> allEdgesLeavingNetwork() {
     Set<Location> outgoing = new HashSet<>();
     if (!this.externalOutgoing.isEmpty()) {
       outgoing.addAll(this.externalOutgoing);
@@ -518,7 +518,7 @@ public class NetworkInfo {
 
     Set<String> externals = new HashSet<>();
     AtomicInteger externalEdgeCount = new AtomicInteger();
-    this.allOutgoingEdges()
+    this.allEdgesLeavingNetwork()
         .forEach(
             loc -> {
               if (loc instanceof Edge e) {

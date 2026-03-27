@@ -200,6 +200,15 @@ public class Path {
     return result.build();
   }
 
+  public boolean isPartialPath() {
+    for (Invariant inv : properties) {
+      if (inv.isFalse()) {
+        return true;
+      }
+    }
+    return false;
+  }
+
   /// A Path.Builder represents a path which should be connected but has not had any liveness
   /// inference performed. This could be provided by user if we want the user to provide the path.
   @VisibleForTesting

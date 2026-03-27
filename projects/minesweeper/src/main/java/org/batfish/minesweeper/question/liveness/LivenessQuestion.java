@@ -34,7 +34,7 @@ public final class LivenessQuestion extends Question {
   private final Location.Builders _assumption_locations;
   private final Invariant.Builders _assumptions;
   private final Invariant.Builder _default_assumption;
-  private final Location.Builder _ingress;
+  private final Location.Builders _ingress;
 
   public LivenessQuestion() {
     this(DEFAULT_PREFIX, null, null, null, null, null, null);
@@ -47,7 +47,7 @@ public final class LivenessQuestion extends Question {
       @Nullable Location.Builders assumptions_locations,
       @Nullable Invariant.Builders assumptions,
       @Nullable Invariant.Builder default_assumption,
-      @Nullable Location.Builder ingress) {
+      @Nullable Location.Builders ingress) {
     if (target != null && location != null) {
       _target.put(location, target);
     }
@@ -66,7 +66,7 @@ public final class LivenessQuestion extends Question {
       @JsonProperty(PROP_ASSUMPTION_LOCATIONS) @Nullable Location.Builders assumption_locations,
       @JsonProperty(PROP_ASSUMPTIONS) @Nullable Invariant.Builders assumptions,
       @JsonProperty(PROP_DEFAULT_ASSUMPTION) Invariant.Builder default_assumption,
-      @JsonProperty(PROP_INGRESS) Location.Builder ingress) {
+      @JsonProperty(PROP_INGRESS) Location.Builders ingress) {
     return new LivenessQuestion(
         prefix, target, location, assumption_locations, assumptions, default_assumption, ingress);
   }
@@ -100,7 +100,7 @@ public final class LivenessQuestion extends Question {
   }
 
   @Nullable
-  public Location.Builder get_ingress() {
+  public Location.Builders get_ingress() {
     return _ingress;
   }
 

@@ -27,6 +27,7 @@ public class PathAnalyzer {
 
   private final Map<Ip, Node> nodes;
   private final Map<Node, Set<Edge>> edgesByDestination;
+  private final Set<Location> origins = new HashSet<>();
 
   public PathAnalyzer(
       @Nonnull Path.Context context,
@@ -41,12 +42,14 @@ public class PathAnalyzer {
     this.target = target;
     this.nodes = nodes;
     this.edgesByDestination = edgesByDestination;
+    // automatically sets potential origins to checked assumptions
+    origins.addAll(context.checkedAssumptions().keySet());
   }
 
   /// Based on potential paths provided, see if there is at least one which satisfies the liveness
   // property (is a good path)
   private Pair<Optional<Path>, List<Path>> generateGoodPaths(
-      @Nonnull List<Path.Builder> potentialPaths, Edge ingress) {
+      @Nonnull List<Path.Builder> potentialPaths) {
     if (prefix.isEmpty()) {
       throw new BatfishException(
           "PathAnalyzer.generateGoodPaths() - Prefix space is empty, cannot perform liveness analysis.");
@@ -59,25 +62,36 @@ public class PathAnalyzer {
       return Pair.of(Optional.empty(), List.of());
     }
 
-    List<Path> badPaths = new LinkedList<>();
+    List<Path> interferingPaths = new LinkedList<>();
+    List<Path> incompletePaths = new LinkedList<>();
     for (Path.Builder builder : potentialPaths) {
-      // if there is an ingress node provided, we only want to try paths which start from there
-      if (ingress == null || builder.previous().map(ingress::equals).orElse(false)) {
+      // make sure the start edge is in our set of considered origins
+      if (builder.previous().map(this.origins::contains).orElse(false)) {
         Path path = builder.build(location, condition.copy(), this.prefix);
         if (path != null && path.isGoodPath()) {
           // can free the BDDs in the bad paths
-          badPaths.forEach(Path::freeBDDs);
+          interferingPaths.forEach(Path::freeBDDs);
+          incompletePaths.forEach(Path::freeBDDs);
           return Pair.of(Optional.of(path), List.of());
-        } else if (path != null && badPaths.size() < 5) {
-          // only keep up to the 5 shortest possible paths to report
-          badPaths.add(path);
         } else if (path != null) {
-          // can free the BDDs in any leftover bad paths
-          path.freeBDDs();
+          boolean isPartial = path.isPartialPath();
+          if (isPartial && incompletePaths.size() < 5) {
+            incompletePaths.add(path);
+          } else if (!isPartial && interferingPaths.size() < 5) {
+            interferingPaths.add(path);
+          } else {
+            // can free the BDDs in any leftover bad paths
+            path.freeBDDs();
+          }
         }
       }
     }
-    return Pair.of(Optional.empty(), badPaths);
+    if (interferingPaths.isEmpty()) {
+      return Pair.of(Optional.empty(), incompletePaths);
+    } else {
+      incompletePaths.forEach(Path::freeBDDs);
+      return Pair.of(Optional.empty(), interferingPaths);
+    }
   }
 
   /// Returns set of possible paths from ingress node to the target properties location
@@ -93,29 +107,25 @@ public class PathAnalyzer {
       if (prev.isEmpty()) {
         throw new BatfishException(
             "PathAnalyzer.generatePathBuilders() - This should be unreachable.");
-      } else if (context.checkedAssumptions().containsKey(prev.get())) {
+      } else if (this.origins.contains(prev.get())) { // at a potential starting point
         paths.add(curr);
       } else if (prev.get() instanceof Edge edge && nodes.containsKey(edge.getSrc())) {
         // source node of edge is still in network so we just there, if valid path
         if (curr.addToPath(nodes.get(edge.getSrc()))) {
           working.add(curr);
         }
-      } else if (prev.get() instanceof Edge) {
-        // this means this edge comes from outside, so we've reach edge of network so add to result
-        paths.add(curr);
+        // if we don't have the config for an edge's src, we only want to consider it if it is in
+        // the desired origin set (so for lingering edges, we don't add)
       } else if (prev.get() instanceof Node node) {
         // this means we are at a node, so we need to expand outwards
         Set<Edge> potentialSteps = edgesByDestination.get(node);
         working.addAll(curr.expand(potentialSteps));
       }
     }
-    // filters out any paths which don't start at an assumption and then sorts by the length of the
-    // path
+    // filters out any paths which don't start at a desired origin and then sorts by the length of
+    // the path
     return paths.stream()
-        .filter(
-            p ->
-                p.previous().isPresent()
-                    && context.checkedAssumptions().containsKey(p.previous().get()))
+        .filter(p -> p.previous().isPresent() && this.origins.contains(p.previous().get()))
         .sorted()
         .toList();
   }
@@ -124,11 +134,16 @@ public class PathAnalyzer {
   /// this is a Path object so the necessary invariants have been inferred, and we've checked that
   /// the ingress assumptions satisfies the inferred ingress invariant.
   public Pair<Optional<Path>, List<Path>> run() {
-    return this.run(null);
+    return this.run(Set.of());
   }
 
-  public Pair<Optional<Path>, List<Path>> run(Edge ingress) {
+  public Pair<Optional<Path>, List<Path>> run(@Nonnull Set<Edge> ingress) {
+    if (!ingress.isEmpty()) {
+      // update the origin to only include the ingress
+      this.origins.clear();
+      this.origins.addAll(ingress);
+    }
     List<Path.Builder> potentialPaths = this.generatePathBuilders();
-    return this.generateGoodPaths(potentialPaths, ingress);
+    return this.generateGoodPaths(potentialPaths);
   }
 }

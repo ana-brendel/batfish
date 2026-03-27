@@ -145,14 +145,14 @@ public abstract class Location implements Comparable<Location> {
                       + _tail
                       + ") within network.");
             }
-              // TODO: Implicitly we are treating this edge as not being EBGP -- is that a problem?
+            // TODO: Implicitly we are treating this edge as not being EBGP -- is that a problem?
             return Set.of(new Edge(head, tail));
           } else {
             return Set.of(edge.get());
           }
         }
       } else if (_head.equals("ALL-OUTGOING")) {
-        return info.allOutgoingEdges();
+        return info.allEdgesLeavingNetwork();
       } else {
         Collection<Ip> ips =
             info.ipsFromNodeName(_head)

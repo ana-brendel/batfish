@@ -4,6 +4,7 @@ import org.apache.commons.lang3.tuple.Pair;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.batfish.common.Answerer;
+import org.batfish.common.BatfishException;
 import org.batfish.common.NetworkSnapshot;
 import org.batfish.common.plugin.IBatfish;
 import org.batfish.datamodel.Configuration;
@@ -37,7 +38,7 @@ public class LivenessAnswerer extends Answerer {
   private final @Nonnull Set<RegexConstraint> _communityRegexes = new HashSet<>();
   private final @Nonnull Set<RegexConstraint> _asPathRegexes = new HashSet<>();
   private final @Nullable Invariant.Builder _default_assumption;
-  private final @Nullable Location.Builder _ingress;
+  private final @Nullable Location.Builders _ingress;
 
   public LivenessAnswerer(LivenessQuestion question, IBatfish batfish) {
     super(question, batfish);
@@ -105,7 +106,11 @@ public class LivenessAnswerer extends Answerer {
    * @return LivenessAnswerer.Result object storing corresponding verification result
    */
   public static LivenessResult run(
-      NetworkInfo info, PrefixSpace prefix, Location location, Invariant target, Edge ingress) {
+      NetworkInfo info,
+      PrefixSpace prefix,
+      Location location,
+      Invariant target,
+      Set<Edge> ingress) {
     LOGGER.info("Beginning to run liveness property analysis...");
     PathAnalyzer analyzer = info.toPathAnalyzer(prefix, location, target);
     InterferenceCheck interferenceCheck = info.toInterferenceCheck(prefix, location, target);
@@ -147,8 +152,20 @@ public class LivenessAnswerer extends Answerer {
     } else {
       Map.Entry<Location, Invariant> target = buildLocationInvariant(info, true, _target);
       LivenessResult result;
-      if (_ingress != null && _ingress.instantiate(info) instanceof Edge ingress) {
-        result = run(info, _prefix, target.getKey(), target.getValue(), ingress);
+      if (_ingress != null) {
+        Set<Edge> origins = new HashSet<>();
+        _ingress
+            .instantiate(info)
+            .forEach(
+                loc -> {
+                  if (loc instanceof Edge edge) {
+                    origins.add(edge);
+                  } else {
+                    throw new BatfishException(
+                        "Only considers traffic coming in on an edge (not originating at a node).");
+                  }
+                });
+        result = run(info, _prefix, target.getKey(), target.getValue(), origins);
       } else {
         result = run(info, _prefix, target.getKey(), target.getValue());
       }

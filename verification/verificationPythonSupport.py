@@ -38,7 +38,7 @@ class LocationPropertyPair:
             return "".join(map(lambda c: c.format(),self.property))
 
 class LivenessQuery:
-    def __init__(self, prefix:str, target:LocationPropertyPair,assumptions:list[LocationPropertyPair]=[],default:Property=None,ingress:str=None):
+    def __init__(self, prefix:str, target:LocationPropertyPair,assumptions:list[LocationPropertyPair]=[],default:Property=None,ingress:list[str]=[]):
         self.prefix = prefix
         self.target = target
         self.assumptions = assumptions
@@ -49,7 +49,7 @@ class LivenessQuery:
         return self.prefix
     
     def getIngress(self):
-        return self.ingress
+        return None if self.ingress == [] else ",".join(self.ingress)
     
     def defaultAssumption(self):
         return None if self.default == None else self.default.formatProperty()

@@ -75,13 +75,11 @@ public class PathAnalyzer {
           return Pair.of(Optional.of(path), List.of());
         } else if (path != null) {
           boolean isPartial = path.isPartialPath();
-          if (isPartial && incompletePaths.size() < 5) {
+          // no limit on the amount of paths returned
+          if (isPartial) {
             incompletePaths.add(path);
-          } else if (!isPartial && interferingPaths.size() < 5) {
-            interferingPaths.add(path);
           } else {
-            // can free the BDDs in any leftover bad paths
-            path.freeBDDs();
+            interferingPaths.add(path);
           }
         }
       }

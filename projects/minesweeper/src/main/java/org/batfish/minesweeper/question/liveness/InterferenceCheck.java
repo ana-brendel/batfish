@@ -2,6 +2,8 @@ package org.batfish.minesweeper.question.liveness;
 
 import net.sf.javabdd.BDD;
 import net.sf.javabdd.BDDPairing;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 import org.batfish.common.bdd.MutableBDDInteger;
 import org.batfish.datamodel.Bgpv4Route;
 import org.batfish.datamodel.PrefixSpace;
@@ -23,6 +25,7 @@ import java.util.Set;
 import static org.batfish.minesweeper.question.verificationutilities.NetworkInfo.getRouteExample;
 
 public class InterferenceCheck {
+  private static final Logger LOGGER = LogManager.getLogger(InterferenceCheck.class);
   private final Path.Context context;
 
   private final PrefixSpace prefix;
@@ -163,6 +166,7 @@ public class InterferenceCheck {
   /// The reachableGood parameter allows us to restrict the inference to only consider routes that
   // are not less preferred than the good routes that can reach nodes along the "good" path.
   public Optional<Map<Location, Bgpv4Route>> run(Map<Node, Invariant> reachableGood) {
+    LOGGER.info("Isolating local preference conditions...");
     inferred.clear();
     working.clear();
     BDD conditionBDD = target.negate().getBDD().and(context.prefixSpaceToBDD(prefix));
@@ -181,6 +185,7 @@ public class InterferenceCheck {
     }
     inferred.put(location, condition);
     working.add(location.copy());
+    LOGGER.info("Running interference check via inference loop...");
     inferenceLoop(reachableGood);
     Map<Location, Bgpv4Route> checks = interferenceExample();
     return checks.isEmpty() ? Optional.empty() : Optional.of(checks);

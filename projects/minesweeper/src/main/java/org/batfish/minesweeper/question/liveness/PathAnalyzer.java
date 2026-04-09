@@ -1,6 +1,8 @@
 package org.batfish.minesweeper.question.liveness;
 
 import org.apache.commons.lang3.tuple.Pair;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 import org.batfish.common.BatfishException;
 import org.batfish.datamodel.PrefixSpace;
 import org.batfish.minesweeper.question.verificationutilities.Edge;
@@ -19,6 +21,7 @@ import java.util.Set;
 
 public class PathAnalyzer {
   private final Path.Context context;
+  private static final Logger LOGGER = LogManager.getLogger(PathAnalyzer.class);
 
   private final PrefixSpace prefix;
   private final Location location;
@@ -68,6 +71,7 @@ public class PathAnalyzer {
           // can free the BDDs in the bad paths
           interferingPaths.forEach(Path::freeBDDs);
           incompletePaths.forEach(Path::freeBDDs);
+          LOGGER.info("FOUND good path");
           return Pair.of(Optional.of(path), List.of());
         } else if (path != null) {
           boolean isPartial = path.isPartialPath();
@@ -80,9 +84,12 @@ public class PathAnalyzer {
         }
       }
     }
+    LOGGER.info("no good path found");
     if (interferingPaths.isEmpty()) {
+      LOGGER.info("--> no paths from ingress locations found");
       return Pair.of(Optional.empty(), incompletePaths);
     } else {
+      LOGGER.info("--> found paths from ingress locations but assumptions not strong enough");
       incompletePaths.forEach(Path::freeBDDs);
       return Pair.of(Optional.empty(), interferingPaths);
     }
@@ -138,7 +145,11 @@ public class PathAnalyzer {
       this.origins.clear();
       this.origins.addAll(ingress);
     }
+    LOGGER.info("Searching for paths...");
     List<Path.Builder> potentialPaths = this.generatePathBuilders();
+    LOGGER.info("FINISHED, found potential paths");
+
+    LOGGER.info("Beginning to check if any path found is a good path...");
     return this.generateGoodPaths(potentialPaths);
   }
 }

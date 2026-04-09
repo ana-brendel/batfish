@@ -113,12 +113,14 @@ public class LivenessAnswerer extends Answerer {
     PathAnalyzer analyzer = info.toPathAnalyzer(prefix, location, target);
     InterferenceCheck interferenceCheck = info.toInterferenceCheck(prefix, location, target);
 
+    LOGGER.info("LOOKING FOR GOOD PATH");
     Pair<Optional<Path>, List<Path>> paths =
         ingress == null ? analyzer.run() : analyzer.run(ingress);
 
     if (paths.getLeft().isEmpty()) {
       return new LivenessResult(Optional.empty(), paths.getRight(), Optional.empty());
     } else {
+      LOGGER.info("CHECKING INTERFERENCE");
       // compute the reachable set of routes along the good path, at each node on that path
       Path goodPath = paths.getLeft().get();
       Map<Node, Invariant> reachableGood = goodPath.reachableRoutes();

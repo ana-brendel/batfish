@@ -11,6 +11,8 @@ import org.batfish.minesweeper.question.verificationutilities.Location;
 import org.batfish.minesweeper.question.verificationutilities.Node;
 
 import javax.annotation.Nonnull;
+import java.lang.management.ManagementFactory;
+import java.lang.management.MemoryUsage;
 import java.util.HashSet;
 import java.util.LinkedList;
 import java.util.List;
@@ -140,6 +142,8 @@ public class PathAnalyzer {
   }
 
   public Pair<Optional<Path>, List<Path>> run(@Nonnull Set<Edge> ingress) {
+    MemoryUsage usage = ManagementFactory.getMemoryMXBean().getHeapMemoryUsage();
+    LOGGER.info("Heap Max (bytes): {}", usage.getMax());
     if (!ingress.isEmpty()) {
       // update the origin to only include the ingress
       this.origins.clear();
@@ -148,6 +152,9 @@ public class PathAnalyzer {
     LOGGER.info("Searching for paths...");
     List<Path.Builder> potentialPaths = this.generatePathBuilders();
     LOGGER.info("FINISHED, found potential paths");
+
+    LOGGER.info("Heap Used (bytes): {}", usage.getUsed());
+    LOGGER.info("Heap Max (bytes): {}", usage.getMax());
 
     LOGGER.info("Beginning to check if any path found is a good path...");
     return this.generateGoodPaths(potentialPaths);

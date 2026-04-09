@@ -5,13 +5,11 @@ import org.apache.logging.log4j.Logger;
 import org.batfish.common.Answerer;
 import org.batfish.common.NetworkSnapshot;
 import org.batfish.common.plugin.IBatfish;
-import org.batfish.datamodel.Configuration;
 import org.batfish.datamodel.answers.AnswerElement;
 import org.batfish.minesweeper.question.searchroutepolicies.RegexConstraint;
 import org.batfish.minesweeper.question.verificationutilities.Invariant;
 import org.batfish.minesweeper.question.verificationutilities.Location;
 import org.batfish.minesweeper.question.verificationutilities.NetworkInfo;
-import org.batfish.specifier.SpecifierContext;
 
 import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
@@ -40,7 +38,8 @@ public final class SafetyAnswerer extends Answerer {
     _refine = question.get_refine();
     _default_assumption = question.get_default_assumption().orElse(null);
 
-    // we take target property and corresponding locations as two lists with corresponding inputs
+    // we take target property and corresponding locations as two lists with
+    // corresponding inputs
     List<Invariant.Builder> targetProperties =
         question.get_target().isPresent() ? question.get_target().get().get_builders() : List.of();
     List<Location.Builder> targetLocations =
@@ -117,19 +116,23 @@ public final class SafetyAnswerer extends Answerer {
     LOGGER.info("Finished inferring weakest conditions needed for property to hold.");
 
     // Run the refinement of invariants, if the initial inference supports the safety condition
-    Refine.Result refined;
-    boolean refinementOccurred = true;
+    //    Refine.Result refined;
+    //    boolean refinementOccurred = true;
 
-    if (result.counter.isPresent() || !refine || !result.verified) {
-      // should only refine if verification succeeds and flag is set to refine
-      LOGGER.info("No invariant refinement.");
-      refinementOccurred = false;
-      refined = inference.refiner().noRefinement();
-    } else {
-      LOGGER.info("Beginning invariant refinement...");
-      refined = inference.refiner().refine();
-      LOGGER.info("Finished refining invariants.");
-    }
+    //    if (result.counter.isPresent() || !refine || !result.verified) {
+    //      // should only refine if verification succeeds and flag is set to refine
+    //      LOGGER.info("No invariant refinement.");
+    //      refinementOccurred = false;
+    //      refined = inference.refiner().noRefinement();
+    //    } else {
+    //      LOGGER.info("Beginning invariant refinement...");
+    //      refined = inference.refiner().refine();
+    //      LOGGER.info("Finished refining invariants.");
+    //    }
+
+    LOGGER.info("Fixed to no refinement.");
+    boolean refinementOccurred = false;
+    Refine.Result refined = inference.refiner().noRefinement();
 
     assert result.verified == refined.verified : "Refine should NOT change verification outcome.";
 
@@ -139,18 +142,11 @@ public final class SafetyAnswerer extends Answerer {
 
   @Override
   public AnswerElement answer(NetworkSnapshot snapshot) {
-    LOGGER.info("Within the answerer for verification.");
+    LOGGER.info("Within the answerer for safety verification.");
 
-    // Gather information from the network
-    SpecifierContext context = _batfish.specifierContext(snapshot);
-    LOGGER.info("Created BATFISH context");
-    Map<String, Configuration> configs = context.getConfigs();
-
-    LOGGER.info("Gathering relevant information from configs...");
+    LOGGER.info("Gathering relevant information from snapshot...");
     NetworkInfo info =
-        _default_assumption == null
-            ? new NetworkInfo(configs, _communityRegexes, _asPathRegexes)
-            : new NetworkInfo(configs, _communityRegexes, _asPathRegexes, _default_assumption);
+        new NetworkInfo(_batfish, snapshot, _communityRegexes, _asPathRegexes, _default_assumption);
     LOGGER.info("Constructed Verification.NetworkInfo object");
 
     LOGGER.info("Adding any provided assumptions to the NetworkInfo object");

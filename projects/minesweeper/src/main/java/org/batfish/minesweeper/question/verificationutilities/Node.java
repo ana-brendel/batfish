@@ -4,45 +4,76 @@ import org.batfish.common.BatfishException;
 import org.batfish.datamodel.Ip;
 
 import javax.annotation.Nonnull;
-import java.util.ArrayList;
-import java.util.Collection;
-import java.util.List;
+import javax.annotation.Nullable;
+import java.util.HashMap;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.Set;
 import java.util.stream.Collectors;
 
 public class Node extends Location {
-  private final @Nonnull List<Ip> ips;
+  /// neighbor map: neighbor ip -> edge incoming into this node
+  private final @Nonnull Map<Ip, Map<Ip, Edge>> neighbors = new HashMap<>();
   private final @Nonnull String name;
+  /// Included for sorting purposes only
+  private @Nullable Ip representativeIp;
 
-  public Node(@Nonnull Ip ip, @Nonnull String name) {
-    assert !ip.equals(Ip.ZERO);
-    this.ips = List.of(ip);
-    this.name = name;
+  public Node(@Nonnull Set<Edge> incomingEdges, @Nonnull String name) {
+    this.name = name.toLowerCase();
+    this.resetNeighbors(incomingEdges);
   }
 
-  public Node(@Nonnull String ip, @Nonnull String name) {
-    this(Ip.parse(ip), name);
+  public Node(@Nonnull String name) {
+    this.name = name.toLowerCase();
   }
 
-  public Node(@Nonnull Collection<Ip> ips, @Nonnull String name) {
-    this.ips = ips.stream().filter(ip -> !ip.equals(Ip.ZERO)).sorted().collect(Collectors.toList());
-    assert !ips.isEmpty();
-    this.name = name;
+  public boolean addIncomingNeighbor(@Nonnull Edge incoming) {
+    if (this.representativeIp == null || incoming.getDst().compareTo(this.representativeIp) < 0) {
+      this.representativeIp = incoming.getDst();
+    }
+    Map<Ip, Edge> interfaces =
+        this.neighbors.computeIfAbsent(incoming.getSrc(), k -> new HashMap<>());
+    Edge prev = interfaces.put(incoming.getDst(), incoming);
+    return prev != null;
   }
 
+  public void resetNeighbors(@Nonnull Set<Edge> incomingEdges) {
+    incomingEdges.forEach(
+        incoming -> {
+          Map<Ip, Edge> interfaces =
+              this.neighbors.computeIfAbsent(incoming.getSrc(), k -> new HashMap<>());
+          assert !interfaces.containsKey(incoming.getDst());
+          interfaces.put(incoming.getDst(), incoming);
+        });
+    this.representativeIp =
+        incomingEdges.isEmpty()
+            ? null
+            : this.neighbors.values().stream()
+                .flatMap(map -> map.values().stream())
+                .map(Edge::getDst)
+                .sorted()
+                .toList()
+                .get(0);
+  }
+
+  /// This should only be used for comparison (sorting) purposes
   @Nonnull
   public Optional<Ip> getRepresentativeIp() {
-    return ips.isEmpty() ? Optional.empty() : Optional.of(Ip.create(ips.get(0).asLong()));
+    return this.representativeIp == null ? Optional.empty() : Optional.of(this.representativeIp);
   }
 
   @Nonnull
   public Ip getSingleIp() {
     // used mainly for testing and edge creation - in edge creation, we want to know which explicit
     // ip addresses are connected
-    if (this.ips.size() == 1) {
-      return Ip.create(ips.get(0).asLong());
+    Set<Ip> reps =
+        this.neighbors.values().stream()
+            .flatMap(map -> map.values().stream())
+            .map(Edge::getDst)
+            .collect(Collectors.toSet());
+    if (this.representativeIp != null && reps.size() == 1) {
+      return Ip.create(this.representativeIp.asLong());
     } else {
       throw new BatfishException(
           "Node.getIp() - Trying to get distinct Ip address from node with multiple.");
@@ -50,33 +81,80 @@ public class Node extends Location {
   }
 
   @Nonnull
-  public Collection<Ip> getIps() {
-    return new ArrayList<>(ips);
-  }
-
-  @Nonnull
   public String getName() {
     return name;
   }
 
+  public Optional<Edge> getIncoming(Ip neighbor, Ip inter) {
+    if (neighbors.containsKey(neighbor) && neighbors.get(neighbor).containsKey(inter)) {
+      return Optional.of(neighbors.get(neighbor).get(inter));
+    }
+    return Optional.empty();
+  }
+
   /// Returns true if the provided edge is outgoing from this node
   public boolean outgoing(@Nonnull Edge edge) {
-    return ips.stream().anyMatch(ip -> ip.equals(edge.getSrc()));
+    return this.neighbors.containsKey(edge.getDst())
+        && this.neighbors.get(edge.getDst()).equals(edge.flipEdge());
   }
 
   /// Returns true if the provided edge is incoming to this node
   public boolean incoming(@Nonnull Edge edge) {
-    return ips.stream().anyMatch(ip -> ip.equals(edge.getDst()));
+    return this.neighbors.containsKey(edge.getSrc())
+        && this.neighbors.get(edge.getDst()).equals(edge);
+  }
+
+  public boolean tiedToIp(Ip ip) {
+    for (Map<Ip, Edge> incomingEdges : neighbors.values()) {
+      if (incomingEdges.containsKey(ip)) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  public Optional<Edge> getIncomingFrom(Node src) {
+    for (Map<Ip, Edge> incomingEdges : neighbors.values()) {
+      for (Edge incoming : incomingEdges.values()) {
+        if (incoming.isSrc(src)) {
+          return Optional.of(incoming);
+        }
+      }
+    }
+    return Optional.empty();
+  }
+
+  /// Returns empty if there are multiple nodes incoming from Ip
+  public Optional<Edge> getIncomingFrom(Ip src) {
+    if (neighbors.containsKey(src) && neighbors.get(src).size() == 1) {
+      assert neighbors.get(src).values().stream().findFirst().isPresent();
+      return Optional.of(neighbors.get(src).values().stream().findFirst().get());
+    } else {
+      return Optional.empty();
+    }
+  }
+
+  public Set<Edge> getAllIncomingEdges() {
+    return neighbors.values().stream()
+        .flatMap(map -> map.values().stream())
+        .collect(Collectors.toSet());
+  }
+
+  public Set<Edge> getAllOutgoingEdges() {
+    return neighbors.values().stream()
+        .flatMap(map -> map.values().stream())
+        .map(Edge::flipEdge)
+        .collect(Collectors.toSet());
   }
 
   @Override
   public Node copy() {
-    return new Node(ips, name);
-  }
-
-  @Override
-  public String contextString(Map<Ip, Node> nodes) {
-    return name;
+    return new Node(
+        neighbors.values().stream()
+            .flatMap(map -> map.values().stream())
+            .map(Edge::copy)
+            .collect(Collectors.toSet()),
+        name);
   }
 
   @Override
@@ -84,7 +162,12 @@ public class Node extends Location {
     if (this.getClass() == obj.getClass()) {
       Node node = (Node) obj;
       // equality for ips compares the longs
-      return node.ips.equals(this.ips);
+      return node.neighbors.keySet().equals(this.neighbors.keySet())
+          && node.neighbors.keySet().stream()
+              .allMatch(
+                  neighbor ->
+                      this.neighbors.containsKey(neighbor)
+                          && node.neighbors.get(neighbor).equals(this.neighbors.get(neighbor)));
     } else {
       return false;
     }
@@ -92,21 +175,27 @@ public class Node extends Location {
 
   @Override
   public int hashCode() {
-    return Objects.hash(ips);
+    return Objects.hash(neighbors);
   }
 
   @Override
   public String toString() {
     return name
         + " ("
-        + String.join(",", ips.stream().map(Ip::toString).collect(Collectors.toSet()))
+        + String.join(
+            ",",
+            neighbors.values().stream()
+                .flatMap(map -> map.values().stream())
+                .sorted()
+                .map(e -> e.getDst().toString())
+                .collect(Collectors.toSet()))
         + ")";
   }
 
   @Override
   public int compareTo(@Nonnull Location location) {
     if (location instanceof Edge edge) {
-      if (this.getIps().contains(edge.getSrc())) {
+      if (this.outgoing(edge)) {
         return -1; // this is an edge coming out of provided node, so edges should follow
       } else {
         // use the single ip, so that comparisons can remain consistent

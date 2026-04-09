@@ -3,7 +3,6 @@ package org.batfish.minesweeper.question.safety;
 import net.sf.javabdd.BDD;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
-import org.batfish.datamodel.Ip;
 import org.batfish.datamodel.routing_policy.RoutingPolicy;
 import org.batfish.minesweeper.bdd.TransferBDD;
 import org.batfish.minesweeper.question.verificationutilities.Edge;
@@ -26,7 +25,6 @@ public class Refine {
   private static final Logger LOGGER = LogManager.getLogger(Refine.class);
 
   private final TransferBDD tbdd;
-  private final Map<Ip, Node> nodes;
   private final Map<Edge, RoutingPolicy> imports;
   private final Map<Edge, RoutingPolicy> exports;
   private final Set<Edge> enteringNetwork;
@@ -40,7 +38,6 @@ public class Refine {
   /// Class to build Refine object, used by Infer class to get a Refine object from Infer object
   public static class Builder {
     private final TransferBDD tbdd;
-    private Map<Ip, Node> nodes;
     private Map<Edge, RoutingPolicy> imports;
     private Map<Edge, RoutingPolicy> exports;
     private Map<Location, Invariant> targets;
@@ -52,10 +49,10 @@ public class Refine {
       this.tbdd = tbdd;
     }
 
-    public Builder setNodes(Map<Ip, Node> nodes) {
-      this.nodes = nodes;
-      return this;
-    }
+    //    public Builder setNodes(Map<Ip, Map<Ip, Node>> nodes) {
+    //      this.nodes = nodes;
+    //      return this;
+    //    }
 
     public Builder setImports(Map<Edge, RoutingPolicy> imports) {
       this.imports = imports;
@@ -90,11 +87,11 @@ public class Refine {
     }
 
     public Refine build() {
-      assert this.incoming.stream().noneMatch(e -> this.nodes.containsKey(e.getSrc()))
-          : "Incoming edges set contains an edge originating from within the network.";
+      //      assert this.incoming.stream().noneMatch(e -> this.nodes.containsKey(e.getSrc()))
+      //          : "Incoming edges set contains an edge originating from within the network.";
       return new Refine(
           this.tbdd,
-          this.nodes,
+          // this.nodes,
           this.imports,
           this.exports,
           this.targets,
@@ -141,7 +138,7 @@ public class Refine {
 
   private Refine(
       TransferBDD tbdd,
-      Map<Ip, Node> nodes,
+      // Map<Ip, Map<Ip, Node>> nodes,
       Map<Edge, RoutingPolicy> imports,
       Map<Edge, RoutingPolicy> exports,
       Map<Location, Invariant> targets,
@@ -149,7 +146,7 @@ public class Refine {
       Set<Edge> incoming,
       Map<Location, Invariant> inferred) {
     this.tbdd = tbdd;
-    this.nodes = nodes;
+    // this.nodes = nodes;
     this.imports = imports;
     this.exports = exports;
     this.targets = targets;
@@ -180,8 +177,8 @@ public class Refine {
     while (!working.isEmpty()) {
       Location lastKnown = working.remove();
       LOGGER.info("Working to refine the property following: {}", lastKnown);
-      if (lastKnown instanceof Edge edge && nodes.containsKey(edge.getDst())) {
-        Node toRefine = nodes.get(edge.getDst());
+      if (lastKnown instanceof Edge edge && edge.hasDstNode()) {
+        Node toRefine = edge.getDstNode();
         assert inferred.containsKey(toRefine)
             : "Any reachable node should have a corresponding inferred invariant.";
         Invariant weakest = inferred.get(toRefine).copy();
@@ -220,10 +217,10 @@ public class Refine {
             Invariant previous = refinements.put(toRefine, new Invariant(tbdd, interpolant));
             if (previous == null || !refinements.get(toRefine).equals(previous)) {
               // if there is already an edge entering this destination, we don't need to add it
-              // twice
-              if (!working.contains(nodes.get(toRefine.getDst()))) {
-                working.add(toRefine);
-              }
+              // twice -- unsure why, not relevant right now, not doing refinement
+              // if (!working.contains(nodes.get(toRefine.getDst()))) {
+              working.add(toRefine);
+              // }
             }
             weakest.free();
             strongest.free();
@@ -254,7 +251,7 @@ public class Refine {
     assert assumptions.entrySet().stream()
             .allMatch(a -> a.getValue().implies(inferred.get(a.getKey())))
         : "Whenever we call refine, we want all the assumptions to sufficiently imply the inferred invariants.";
-    assert (new Lightyear(this.nodes, this.imports, this.exports)).check(inferred).isEmpty()
+    assert (new Lightyear(this.imports, this.exports)).check(inferred).isEmpty()
         : "Checks that all invariants are sufficient as preconditions to imply the following postcondition";
 
     working.addAll(enteringNetwork);

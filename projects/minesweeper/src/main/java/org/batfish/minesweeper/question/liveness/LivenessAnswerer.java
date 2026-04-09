@@ -7,7 +7,6 @@ import org.batfish.common.Answerer;
 import org.batfish.common.BatfishException;
 import org.batfish.common.NetworkSnapshot;
 import org.batfish.common.plugin.IBatfish;
-import org.batfish.datamodel.Configuration;
 import org.batfish.datamodel.PrefixSpace;
 import org.batfish.datamodel.answers.AnswerElement;
 import org.batfish.minesweeper.question.searchroutepolicies.RegexConstraint;
@@ -16,7 +15,6 @@ import org.batfish.minesweeper.question.verificationutilities.Invariant;
 import org.batfish.minesweeper.question.verificationutilities.Location;
 import org.batfish.minesweeper.question.verificationutilities.NetworkInfo;
 import org.batfish.minesweeper.question.verificationutilities.Node;
-import org.batfish.specifier.SpecifierContext;
 
 import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
@@ -135,13 +133,11 @@ public class LivenessAnswerer extends Answerer {
 
   @Override
   public AnswerElement answer(NetworkSnapshot snapshot) {
-    // Gathering and formatting information from snapshot
-    SpecifierContext context = _batfish.specifierContext(snapshot);
-    Map<String, Configuration> configs = context.getConfigs();
+    LOGGER.info("Within the answerer for liveness verification.");
 
-    LOGGER.info("Gathering relevant information from configs...");
+    LOGGER.info("Gathering relevant information from snapshot...");
     NetworkInfo info =
-        new NetworkInfo(configs, _communityRegexes, _asPathRegexes, _default_assumption);
+        new NetworkInfo(_batfish, snapshot, _communityRegexes, _asPathRegexes, _default_assumption);
     LOGGER.info("Constructed Verification.NetworkInfo object");
 
     _assumptions.forEach(info::addAssumption);

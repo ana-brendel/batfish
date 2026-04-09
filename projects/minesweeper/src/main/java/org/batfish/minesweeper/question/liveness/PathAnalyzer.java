@@ -2,7 +2,6 @@ package org.batfish.minesweeper.question.liveness;
 
 import org.apache.commons.lang3.tuple.Pair;
 import org.batfish.common.BatfishException;
-import org.batfish.datamodel.Ip;
 import org.batfish.datamodel.PrefixSpace;
 import org.batfish.minesweeper.question.verificationutilities.Edge;
 import org.batfish.minesweeper.question.verificationutilities.Invariant;
@@ -25,7 +24,6 @@ public class PathAnalyzer {
   private final Location location;
   private final Invariant target;
 
-  private final Map<Ip, Node> nodes;
   private final Map<Node, Set<Edge>> edgesByDestination;
   private final Set<Location> origins = new HashSet<>();
 
@@ -34,13 +32,11 @@ public class PathAnalyzer {
       @Nonnull PrefixSpace prefix,
       @Nonnull Location location,
       @Nonnull Invariant target,
-      @Nonnull Map<Ip, Node> nodes,
       @Nonnull Map<Node, Set<Edge>> edgesByDestination) {
     this.context = context;
     this.prefix = prefix;
     this.location = location;
     this.target = target;
-    this.nodes = nodes;
     this.edgesByDestination = edgesByDestination;
     // automatically sets potential origins to checked assumptions
     origins.addAll(context.checkedAssumptions().keySet());
@@ -107,9 +103,10 @@ public class PathAnalyzer {
             "PathAnalyzer.generatePathBuilders() - This should be unreachable.");
       } else if (this.origins.contains(prev.get())) { // at a potential starting point
         paths.add(curr);
-      } else if (prev.get() instanceof Edge edge && nodes.containsKey(edge.getSrc())) {
+      } else if (prev.get() instanceof Edge edge && edge.hasSrcNode()) {
         // source node of edge is still in network so we just there, if valid path
-        if (curr.addToPath(nodes.get(edge.getSrc()))) {
+        assert edge.getSrcNode() != null;
+        if (curr.addToPath(edge.getSrcNode())) {
           working.add(curr);
         }
         // if we don't have the config for an edge's src, we only want to consider it if it is in

@@ -4,12 +4,14 @@ import org.batfish.common.BatfishException;
 import org.batfish.datamodel.Ip;
 
 import javax.annotation.Nonnull;
-import java.util.Map;
+import javax.annotation.Nullable;
 import java.util.Objects;
 
 public class Edge extends Location {
   private final @Nonnull Ip src;
+  private @Nullable Node srcNode;
   private final @Nonnull Ip dst;
+  private @Nullable Node dstNode;
 
   private final boolean eBGP;
 
@@ -30,9 +32,28 @@ public class Edge extends Location {
   }
 
   /// Will throw error if the nodes provided have more than Ip address, need to provide the explicit
-  /// connection represented by this edge
+  /// connection represented by this edge. References provided nodes (no copy)
   public Edge(@Nonnull Node src, @Nonnull Node dst) {
-    this(Ip.create(src.getSingleIp().asLong()), Ip.create(dst.getSingleIp().asLong()));
+    this.srcNode = src;
+    this.dstNode = dst;
+    assert !src.equals(dst);
+    this.src = Ip.create(src.getSingleIp().asLong());
+    this.dst = Ip.create(dst.getSingleIp().asLong());
+    assert !this.src.equals(Ip.ZERO) && !this.dst.equals(Ip.ZERO);
+    this.eBGP = false;
+  }
+
+  private Edge(
+      @Nonnull Ip src,
+      @Nonnull Ip dst,
+      boolean eBGP,
+      @Nullable Node srcNode,
+      @Nullable Node dstNode) {
+    this.src = src;
+    this.dst = dst;
+    this.eBGP = eBGP;
+    this.srcNode = srcNode;
+    this.dstNode = dstNode;
   }
 
   @Nonnull
@@ -45,33 +66,68 @@ public class Edge extends Location {
     return dst;
   }
 
+  @Nullable
+  public Node getSrcNode() {
+    return srcNode;
+  }
+
+  @Nullable
+  public Node getDstNode() {
+    return dstNode;
+  }
+
   public boolean isEBGP() {
     return eBGP;
   }
 
   @Nonnull
   public Edge flipEdge() {
-    return new Edge(dst, src, eBGP);
+    return new Edge(dst, src, eBGP, dstNode, srcNode);
+  }
+
+  public void setSrcNode(Node src) {
+    if (this.hasSrcNode()) {
+      throw new BatfishException("ERROR cannot reset the source node of an edge once set");
+    } else {
+      this.srcNode = src;
+    }
+  }
+
+  public boolean hasSrcNode() {
+    return this.srcNode != null;
+  }
+
+  public void setDstNode(Node dst) {
+    if (this.hasDstNode()) {
+      throw new BatfishException("ERROR cannot reset the destination node of an edge once set");
+    } else {
+      this.dstNode = dst;
+    }
+  }
+
+  public boolean hasDstNode() {
+    return this.dstNode != null;
   }
 
   public boolean isSrc(@Nonnull Node node) {
-    return node.getIps().stream().anyMatch(ip -> ip.equals(src));
+    if (this.hasSrcNode()) {
+      return node.equals(this.srcNode);
+    } else {
+      return node.outgoing(this);
+    }
   }
 
   public boolean isDst(@Nonnull Node node) {
-    return node.getIps().stream().anyMatch(ip -> ip.equals(dst));
+    if (this.hasDstNode()) {
+      return node.equals(this.dstNode);
+    } else {
+      return node.incoming(this);
+    }
   }
 
   @Override
   public Edge copy() {
-    return new Edge(Ip.create(src.asLong()), Ip.create(dst.asLong()), eBGP);
-  }
-
-  @Override
-  public String contextString(Map<Ip, Node> nodes) {
-    String srcStr = nodes.containsKey(src) ? nodes.get(src).getName() : src.toString();
-    String dstStr = nodes.containsKey(dst) ? nodes.get(dst).getName() : dst.toString();
-    return srcStr + " -> " + dstStr;
+    return new Edge(Ip.create(src.asLong()), Ip.create(dst.asLong()), eBGP, srcNode, dstNode);
   }
 
   @Override
@@ -91,7 +147,9 @@ public class Edge extends Location {
 
   @Override
   public String toString() {
-    return src + " -> " + dst;
+    String srcStr = this.srcNode != null ? this.srcNode.getName() : this.src.toString();
+    String dstStr = this.dstNode != null ? this.dstNode.getName() : this.dst.toString();
+    return srcStr + " -> " + dstStr;
   }
 
   @Override
@@ -103,7 +161,7 @@ public class Edge extends Location {
         return this.src.compareTo(edge.src);
       }
     } else if (location instanceof Node node) {
-      if (node.getIps().contains(this.src)) {
+      if (node.outgoing(this)) {
         return 1; // this is an edge coming out of provided node, so edges should follow
       } else {
         // use the single ip, so that comparisons can remain consistent

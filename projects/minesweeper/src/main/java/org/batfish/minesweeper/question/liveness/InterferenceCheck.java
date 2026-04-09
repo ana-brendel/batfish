@@ -4,7 +4,6 @@ import net.sf.javabdd.BDD;
 import net.sf.javabdd.BDDPairing;
 import org.batfish.common.bdd.MutableBDDInteger;
 import org.batfish.datamodel.Bgpv4Route;
-import org.batfish.datamodel.Ip;
 import org.batfish.datamodel.PrefixSpace;
 import org.batfish.datamodel.routing_policy.RoutingPolicy;
 import org.batfish.minesweeper.bdd.TransferBDDUtils;
@@ -30,7 +29,7 @@ public class InterferenceCheck {
   private final Location location;
   private final Invariant target;
 
-  private final Map<Ip, Node> nodes;
+  //  private final Map<Ip, Node> nodes;
   private final Map<Node, Set<Edge>> edgesByDestination;
 
   private final Queue<Location> working = new LinkedList<>();
@@ -41,13 +40,11 @@ public class InterferenceCheck {
       @Nonnull PrefixSpace prefix,
       @Nonnull Location location,
       @Nonnull Invariant target,
-      @Nonnull Map<Ip, Node> nodes,
       @Nonnull Map<Node, Set<Edge>> edgesByDestination) {
     this.context = context;
     this.prefix = prefix;
     this.location = location;
     this.target = target;
-    this.nodes = nodes;
     this.edgesByDestination = edgesByDestination;
   }
 
@@ -61,7 +58,8 @@ public class InterferenceCheck {
     while (!working.isEmpty()) {
       Location location = working.remove();
       Invariant property = inferred.get(location);
-      if (location instanceof Edge edge && nodes.containsKey(edge.getSrc())) {
+      if (location instanceof Edge edge && edge.hasSrcNode()) {
+        assert edge.getSrcNode() != null;
         if (edge.isEBGP()) {
           // Symbolically undo the effect of prepending the source node's ASN to the AS-path
           // on the property by replacing all references to the AS-path length (call it x) with
@@ -82,7 +80,7 @@ public class InterferenceCheck {
             exportPolicy == null
                 ? property.copy()
                 : property.weakestPrecondition(exportPolicy, false);
-        Node src = nodes.get(edge.getSrc());
+        Node src = edge.getSrcNode();
         // if there is no inferred assumption, use the negation of the enforced assumption if
         // present, otherwise default is false
         Invariant existing =

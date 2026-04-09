@@ -9,6 +9,7 @@ import net.sf.javabdd.BDDFactory;
 import org.batfish.datamodel.BgpProcess;
 import org.batfish.datamodel.Configuration;
 import org.batfish.datamodel.ConfigurationFormat;
+import org.batfish.datamodel.Ip;
 import org.batfish.datamodel.NetworkFactory;
 import org.batfish.datamodel.Prefix;
 import org.batfish.datamodel.PrefixRange;
@@ -65,13 +66,13 @@ import static org.junit.Assert.assertTrue;
 
 public class InvariantTest {
   private static final NetworkFactory nf = new NetworkFactory();
-  private static final Node ALPHANODE = new Node("10.0.0.1", "alphaNode");
-  private static final Node BETANODE = new Node("10.0.0.2", "betaNode");
-  private static final Node GAMMANODE = new Node("10.0.0.3", "gammaNode");
-  private static final Node DELTANODE = new Node("10.0.0.4", "deltaNode");
-  private static final Map<Node, Configuration> configs = new HashMap<>();
-  private static final Map<Node, RoutingPolicy> imports = new HashMap<>();
-  private static final Map<Node, RoutingPolicy> exports = new HashMap<>();
+  private static final Ip ALPHANODE = Ip.parse("10.0.0.1");
+  private static final Ip BETANODE = Ip.parse("10.0.0.2");
+  private static final Ip GAMMANODE = Ip.parse("10.0.0.3");
+  private static final Ip DELTANODE = Ip.parse("10.0.0.4");
+  private static final Map<Ip, Configuration> configs = new HashMap<>();
+  private static final Map<Ip, RoutingPolicy> imports = new HashMap<>();
+  private static final Map<Ip, RoutingPolicy> exports = new HashMap<>();
   private TransferBDD tbdd;
   private ConfigAtomicPredicates configAPs;
 
@@ -107,11 +108,11 @@ public class InvariantTest {
         new HashSet<>()); // for AS path stuff
   }
 
-  private BgpProcess getBgpProcess(Node node) {
+  private BgpProcess getBgpProcess(Ip ip) {
     Vrf vrf =
-        nf.vrfBuilder().setOwner(configs.get(node)).setName(Configuration.DEFAULT_VRF_NAME).build();
+        nf.vrfBuilder().setOwner(configs.get(ip)).setName(Configuration.DEFAULT_VRF_NAME).build();
     return nf.bgpProcessBuilder()
-        .setRouterId(node.getSingleIp())
+        .setRouterId(ip)
         .setEbgpAdminCost(0)
         .setIbgpAdminCost(0)
         .setLocalAdminCost(0)
@@ -134,7 +135,7 @@ public class InvariantTest {
             PREFIX_MATCH,
             ImmutableList.of(
                 new RouteFilterLine(PERMIT, PrefixRange.fromPrefix(Prefix.parse("25.13.0.0/16")))));
-    Configuration.Builder alphaCB = nf.configurationBuilder().setHostname(ALPHANODE.getName());
+    Configuration.Builder alphaCB = nf.configurationBuilder().setHostname("alphaNode");
     configs.put(
         ALPHANODE,
         alphaCB
@@ -148,7 +149,7 @@ public class InvariantTest {
         .setCommunitySetMatchExprs(
             ImmutableMap.of(
                 "comm_100_2", new HasCommunity(new CommunityIs(StandardCommunity.parse("100:2")))));
-    Configuration.Builder betaCB = nf.configurationBuilder().setHostname(BETANODE.getName());
+    Configuration.Builder betaCB = nf.configurationBuilder().setHostname("betaNode");
     configs.put(
         BETANODE,
         betaCB
@@ -161,7 +162,7 @@ public class InvariantTest {
         .setCommunitySetMatchExprs(
             ImmutableMap.of(
                 "comm_100_1", new HasCommunity(new CommunityIs(StandardCommunity.parse("100:1")))));
-    Configuration.Builder gammaCB = nf.configurationBuilder().setHostname(GAMMANODE.getName());
+    Configuration.Builder gammaCB = nf.configurationBuilder().setHostname("gammaNode");
     configs.put(
         GAMMANODE,
         gammaCB
@@ -174,7 +175,7 @@ public class InvariantTest {
         .setCommunitySetMatchExprs(
             ImmutableMap.of(
                 "comm_100_2", new HasCommunity(new CommunityIs(StandardCommunity.parse("100:2")))));
-    Configuration.Builder deltaCB = nf.configurationBuilder().setHostname(DELTANODE.getName());
+    Configuration.Builder deltaCB = nf.configurationBuilder().setHostname("deltaNode");
     configs.put(
         DELTANODE,
         deltaCB
@@ -186,21 +187,20 @@ public class InvariantTest {
     BgpProcess alphaBgp = getBgpProcess(ALPHANODE);
     alphaBgp.setNeighbors(
         ImmutableSortedMap.of(
-            BETANODE.getSingleIp(), getBgpActivePeerConfig(NEXT_DOOR, null, EXPORT_POLICY_NAME)));
+            BETANODE, getBgpActivePeerConfig(NEXT_DOOR, null, EXPORT_POLICY_NAME)));
     BgpProcess betaBgp = getBgpProcess(BETANODE);
     betaBgp.setNeighbors(
         ImmutableSortedMap.of(
-            ALPHANODE.getSingleIp(), getBgpActivePeerConfig(NEXT_DOOR, null, EXPORT_POLICY_NAME),
-            GAMMANODE.getSingleIp(), getBgpActivePeerConfig(NEXT_DOOR, null, EXPORT_POLICY_NAME)));
+            ALPHANODE, getBgpActivePeerConfig(NEXT_DOOR, null, EXPORT_POLICY_NAME),
+            GAMMANODE, getBgpActivePeerConfig(NEXT_DOOR, null, EXPORT_POLICY_NAME)));
     BgpProcess gammaBgp = getBgpProcess(GAMMANODE);
     gammaBgp.setNeighbors(
         ImmutableSortedMap.of(
-            BETANODE.getSingleIp(), getBgpActivePeerConfig(NEXT_DOOR, null, EXPORT_POLICY_NAME),
-            DELTANODE.getSingleIp(), getBgpActivePeerConfig(NEXT_DOOR, null, EXPORT_POLICY_NAME)));
+            BETANODE, getBgpActivePeerConfig(NEXT_DOOR, null, EXPORT_POLICY_NAME),
+            DELTANODE, getBgpActivePeerConfig(NEXT_DOOR, null, EXPORT_POLICY_NAME)));
     BgpProcess deltaBgp = getBgpProcess(DELTANODE);
     deltaBgp.setNeighbors(
-        ImmutableSortedMap.of(
-            GAMMANODE.getSingleIp(), getBgpActivePeerConfig(NEXT_DOOR, null, null)));
+        ImmutableSortedMap.of(GAMMANODE, getBgpActivePeerConfig(NEXT_DOOR, null, null)));
 
     BooleanExpr check_comm_100_1 =
         new MatchCommunities(

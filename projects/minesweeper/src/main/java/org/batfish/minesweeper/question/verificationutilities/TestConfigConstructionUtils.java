@@ -2,8 +2,10 @@ package org.batfish.minesweeper.question.verificationutilities;
 
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableSortedMap;
+import org.batfish.common.BatfishException;
 import org.batfish.datamodel.BgpActivePeerConfig;
 import org.batfish.datamodel.Configuration;
+import org.batfish.datamodel.Ip;
 import org.batfish.datamodel.PrefixSpace;
 import org.batfish.datamodel.bgp.Ipv4UnicastAddressFamily;
 import org.batfish.datamodel.bgp.community.StandardCommunity;
@@ -44,47 +46,60 @@ import java.util.SortedMap;
 public class TestConfigConstructionUtils {
   public record Network(
       TransferBDD tbdd,
-      Map<Node, Configuration> configs,
-      Map<Node, RoutingPolicy> imports,
-      Map<Node, RoutingPolicy> exports) {
+      Map<NodeRecord, Configuration> configs,
+      Map<NodeRecord, RoutingPolicy> imports,
+      Map<NodeRecord, RoutingPolicy> exports) {
     private Map<String, Configuration> configInput() {
       Map<String, Configuration> result = new HashMap<>();
-      for (Node node : configs.keySet()) {
-        result.put(node.getName(), configs.get(node));
+      for (NodeRecord node : configs.keySet()) {
+        result.put(node.name, configs.get(node));
       }
       return result;
     }
 
     public NetworkInfo getInfo() {
-      return new NetworkInfo(this.tbdd(), configInput());
+      return NetworkInfo.ofConfigs(this.tbdd(), configInput());
     }
   }
 
   public record Networkv2(
       TransferBDD tbdd,
-      Map<Node, Configuration> configs,
+      Map<NodeRecord, Configuration> configs,
       RoutingPolicy template,
       List<String> prefixes) {
     public SortedMap<String, Configuration> configInput() {
       ImmutableSortedMap.Builder<String, Configuration> builder =
           new ImmutableSortedMap.Builder<>(Comparator.naturalOrder());
-      for (Node node : configs.keySet()) {
-        builder.put(node.getName(), configs.get(node));
+      for (NodeRecord node : configs.keySet()) {
+        builder.put(node.name(), configs.get(node));
       }
       return builder.build();
     }
 
-    public NetworkInfo getInfo() {
-      return new NetworkInfo(this.tbdd(), configInput());
-    }
-
     public NetworkInfo getInfo(PrefixSpace prefix) {
-      return new NetworkInfo(
+      return NetworkInfo.ofConfigs(
           this.tbdd(),
           configInput(),
           Invariant.builder()
               .addClause(Invariant.clauseBuilder().matchPrefix(prefix))
               .build(tbdd, null));
+    }
+  }
+
+  public record NodeRecord(String ip, String name) {
+    public Node instantiate(NetworkInfo info) {
+      Location.Builder b = new Location.Builder(null, null, name);
+      List<Location> opt = b.instantiate(info).stream().toList();
+      if (opt.size() == 1 && opt.get(0) instanceof Node node) {
+        return node;
+      } else {
+        assert false : "Attempting to instantiate a node and didn't get exactly one";
+        throw new BatfishException("Attempting to instantiate a node and didn't get exactly one");
+      }
+    }
+
+    public Ip getIp() {
+      return Ip.parse(ip);
     }
   }
 

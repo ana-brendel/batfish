@@ -27,10 +27,11 @@ import org.batfish.minesweeper.bdd.TransferBDD;
 import org.batfish.minesweeper.question.searchroutepolicies.RegexConstraint;
 import org.batfish.minesweeper.question.searchroutepolicies.RegexConstraints;
 import org.batfish.minesweeper.question.verificationutilities.Invariant;
+import org.batfish.minesweeper.question.verificationutilities.Location;
 import org.batfish.minesweeper.question.verificationutilities.NetworkInfo;
 import org.batfish.minesweeper.question.verificationutilities.Node;
-import org.batfish.minesweeper.question.verificationutilities.Edge;
 import org.batfish.minesweeper.question.verificationutilities.TestConfigConstructionUtils;
+import org.batfish.minesweeper.question.verificationutilities.TestConfigConstructionUtils.NodeRecord;
 import org.junit.Before;
 import org.junit.Test;
 
@@ -60,10 +61,10 @@ public class LivenessAnswererTest {
   @Before
   public void setup() throws IOException {}
 
-  private BgpProcess getBgpProcess(Configuration config, Node node) {
+  private BgpProcess getBgpProcess(Configuration config, NodeRecord node) {
     Vrf vrf = nf.vrfBuilder().setOwner(config).setName(Configuration.DEFAULT_VRF_NAME).build();
     return nf.bgpProcessBuilder()
-        .setRouterId(node.getSingleIp())
+        .setRouterId(node.getIp())
         .setEbgpAdminCost(0)
         .setIbgpAdminCost(0)
         .setLocalAdminCost(0)
@@ -74,9 +75,9 @@ public class LivenessAnswererTest {
         .build();
   }
 
-  private void setUpConfigs(Map<Node, Configuration> configs, Node... nodes) {
-    for (Node node : nodes) {
-      Configuration.Builder configBuilder = nf.configurationBuilder().setHostname(node.getName());
+  private void setUpConfigs(Map<NodeRecord, Configuration> configs, NodeRecord... nodes) {
+    for (NodeRecord node : nodes) {
+      Configuration.Builder configBuilder = nf.configurationBuilder().setHostname(node.name());
       configs.put(
           node,
           configBuilder
@@ -86,9 +87,10 @@ public class LivenessAnswererTest {
     }
   }
 
-  private Map<Node, BgpProcess> getBgpProcesses(Map<Node, Configuration> configs, Node... nodes) {
-    Map<Node, BgpProcess> processes = new HashMap<>();
-    for (Node node : nodes) {
+  private Map<NodeRecord, BgpProcess> getBgpProcesses(
+      Map<NodeRecord, Configuration> configs, NodeRecord... nodes) {
+    Map<NodeRecord, BgpProcess> processes = new HashMap<>();
+    for (NodeRecord node : nodes) {
       processes.put(node, getBgpProcess(configs.get(node), node));
     }
     return processes;
@@ -99,13 +101,13 @@ public class LivenessAnswererTest {
   }
 
   private TestConfigConstructionUtils.Networkv2 initialExample(
-      Node ALPHANODE,
-      Node BETANODE,
-      Node GAMMANODE,
-      Node DELTANODE,
+      NodeRecord ALPHANODE,
+      NodeRecord BETANODE,
+      NodeRecord GAMMANODE,
+      NodeRecord DELTANODE,
       Ip alphaIncoming,
       int variation) {
-    Map<Node, Configuration> configs = new HashMap<>();
+    Map<NodeRecord, Configuration> configs = new HashMap<>();
 
     String community = "2:2";
     String regex_community = "^" + community + "$";
@@ -127,7 +129,7 @@ public class LivenessAnswererTest {
     }
 
     // Create the BGP processes
-    Map<Node, BgpProcess> processes =
+    Map<NodeRecord, BgpProcess> processes =
         getBgpProcesses(configs, ALPHANODE, BETANODE, GAMMANODE, DELTANODE);
 
     processes
@@ -136,17 +138,16 @@ public class LivenessAnswererTest {
             ImmutableSortedMap.of(
                 alphaIncoming,
                 getBgpActivePeerConfig(EXTERNAL, externalImport, exportDefault),
-                BETANODE.getSingleIp(),
+                BETANODE.getIp(),
                 getBgpActivePeerConfig(INTERNAL, importDefault, exportDefault),
-                DELTANODE.getSingleIp(),
+                DELTANODE.getIp(),
                 getBgpActivePeerConfig(INTERNAL, importDefault, exportDefault)));
     processes
         .get(BETANODE)
         .setNeighbors(
             ImmutableSortedMap.of(
-                ALPHANODE.getSingleIp(),
-                    getBgpActivePeerConfig(INTERNAL, importDefault, exportDefault),
-                GAMMANODE.getSingleIp(),
+                ALPHANODE.getIp(), getBgpActivePeerConfig(INTERNAL, importDefault, exportDefault),
+                GAMMANODE.getIp(),
                     getBgpActivePeerConfig(
                         INTERNAL,
                         importDefault,
@@ -155,18 +156,14 @@ public class LivenessAnswererTest {
         .get(GAMMANODE)
         .setNeighbors(
             ImmutableSortedMap.of(
-                BETANODE.getSingleIp(),
-                    getBgpActivePeerConfig(INTERNAL, importDefault, exportDefault),
-                DELTANODE.getSingleIp(),
-                    getBgpActivePeerConfig(INTERNAL, importDefault, exportDefault)));
+                BETANODE.getIp(), getBgpActivePeerConfig(INTERNAL, importDefault, exportDefault),
+                DELTANODE.getIp(), getBgpActivePeerConfig(INTERNAL, importDefault, exportDefault)));
     processes
         .get(DELTANODE)
         .setNeighbors(
             ImmutableSortedMap.of(
-                ALPHANODE.getSingleIp(),
-                    getBgpActivePeerConfig(INTERNAL, importDefault, exportDefault),
-                GAMMANODE.getSingleIp(),
-                    getBgpActivePeerConfig(INTERNAL, importDefault, exportDefault)));
+                ALPHANODE.getIp(), getBgpActivePeerConfig(INTERNAL, importDefault, exportDefault),
+                GAMMANODE.getIp(), getBgpActivePeerConfig(INTERNAL, importDefault, exportDefault)));
 
     // Create the policies
     makePolicy(configs.get(ALPHANODE), externalImport, addToCommunities(community));
@@ -198,17 +195,19 @@ public class LivenessAnswererTest {
 
   @Test
   public void initialExampleTest() {
-    Node ALPHANODE = new Node("10.0.0.1", "alphaNode");
-    Node BETANODE = new Node("10.0.0.2", "betaNode");
-    Node GAMMANODE = new Node("10.0.0.3", "gammaNode");
-    Node DELTANODE = new Node("10.0.0.4", "deltaNode");
+    NodeRecord ALPHANODE_R = new NodeRecord("10.0.0.1", "alphaNode");
+    NodeRecord BETANODE_R = new NodeRecord("10.0.0.2", "betaNode");
+    NodeRecord GAMMANODE_R = new NodeRecord("10.0.0.3", "gammaNode");
+    NodeRecord DELTANODE_R = new NodeRecord("10.0.0.4", "deltaNode");
     Ip incoming = Ip.parse("100.0.0.10");
 
     PrefixSpace BASIC_PREFIX = new PrefixSpace(PrefixRange.fromString(prefixStr));
 
     TestConfigConstructionUtils.Networkv2 net =
-        initialExample(ALPHANODE, BETANODE, GAMMANODE, DELTANODE, incoming, 0);
+        initialExample(ALPHANODE_R, BETANODE_R, GAMMANODE_R, DELTANODE_R, incoming, 0);
     NetworkInfo info = net.getInfo(BASIC_PREFIX);
+
+    Node GAMMANODE = GAMMANODE_R.instantiate(info);
 
     RegexConstraints comm = new RegexConstraints(List.of(RegexConstraint.parse("2:2")));
     Invariant target =
@@ -223,17 +222,19 @@ public class LivenessAnswererTest {
 
   @Test
   public void initialExampleV1Test() {
-    Node ALPHANODE = new Node("10.0.0.1", "alphaNode");
-    Node BETANODE = new Node("10.0.0.2", "betaNode");
-    Node GAMMANODE = new Node("10.0.0.3", "gammaNode");
-    Node DELTANODE = new Node("10.0.0.4", "deltaNode");
+    NodeRecord ALPHANODE_R = new NodeRecord("10.0.0.1", "alphaNode");
+    NodeRecord BETANODE_R = new NodeRecord("10.0.0.2", "betaNode");
+    NodeRecord GAMMANODE_R = new NodeRecord("10.0.0.3", "gammaNode");
+    NodeRecord DELTANODE_R = new NodeRecord("10.0.0.4", "deltaNode");
     Ip incoming = Ip.parse("100.0.0.10");
 
     PrefixSpace BASIC_PREFIX = new PrefixSpace(PrefixRange.fromString(prefixStr));
 
     TestConfigConstructionUtils.Networkv2 net =
-        initialExample(ALPHANODE, BETANODE, GAMMANODE, DELTANODE, incoming, 1);
+        initialExample(ALPHANODE_R, BETANODE_R, GAMMANODE_R, DELTANODE_R, incoming, 1);
     NetworkInfo info = net.getInfo(BASIC_PREFIX);
+
+    Node GAMMANODE = GAMMANODE_R.instantiate(info);
 
     RegexConstraints comm = new RegexConstraints(List.of(RegexConstraint.parse("2:2")));
     Invariant target =
@@ -247,13 +248,13 @@ public class LivenessAnswererTest {
   }
 
   private TestConfigConstructionUtils.Networkv2 pathWithInterferenceExample(
-      Node ALPHANODE,
-      Node BETANODE,
-      Node GAMMANODE,
+      NodeRecord ALPHANODE,
+      NodeRecord BETANODE,
+      NodeRecord GAMMANODE,
       Ip alphaIncoming,
       Ip betaIncoming,
       String prefixString) {
-    Map<Node, Configuration> configs = new HashMap<>();
+    Map<NodeRecord, Configuration> configs = new HashMap<>();
 
     String community1 = "1:1";
     String regex_community1 = "^" + community1 + "$";
@@ -287,7 +288,8 @@ public class LivenessAnswererTest {
     includeCommunities(configs.get(GAMMANODE), regex_community2);
 
     // Create the BGP processes
-    Map<Node, BgpProcess> processes = getBgpProcesses(configs, ALPHANODE, BETANODE, GAMMANODE);
+    Map<NodeRecord, BgpProcess> processes =
+        getBgpProcesses(configs, ALPHANODE, BETANODE, GAMMANODE);
 
     processes
         .get(ALPHANODE)
@@ -295,15 +297,15 @@ public class LivenessAnswererTest {
             ImmutableSortedMap.of(
                 alphaIncoming,
                 getBgpActivePeerConfig(EXTERNAL, externalAlphaImport, exportDefault),
-                BETANODE.getSingleIp(),
+                BETANODE.getIp(),
                 getBgpActivePeerConfig(INTERNAL, importDefault, exportDefault)));
     processes
         .get(BETANODE)
         .setNeighbors(
             ImmutableSortedMap.of(
-                ALPHANODE.getSingleIp(),
+                ALPHANODE.getIp(),
                 getBgpActivePeerConfig(INTERNAL, importALPHA2BETA, exportDefault),
-                GAMMANODE.getSingleIp(),
+                GAMMANODE.getIp(),
                 getBgpActivePeerConfig(INTERNAL, importDefault, exportDefault),
                 betaIncoming,
                 getBgpActivePeerConfig(EXTERNAL, externalBetaImport, exportDefault)));
@@ -311,7 +313,7 @@ public class LivenessAnswererTest {
         .get(GAMMANODE)
         .setNeighbors(
             ImmutableSortedMap.of(
-                BETANODE.getSingleIp(),
+                BETANODE.getIp(),
                 getBgpActivePeerConfig(INTERNAL, importBETA2GAMMA, exportDefault)));
 
     // Create the policies
@@ -361,9 +363,9 @@ public class LivenessAnswererTest {
 
   @Test
   public void pathWithInterferenceExampleTest() {
-    Node ALPHANODE = new Node("10.0.0.1", "alphaNode");
-    Node BETANODE = new Node("10.0.0.2", "betaNode");
-    Node GAMMANODE = new Node("10.0.0.3", "gammaNode");
+    NodeRecord ALPHANODE_R = new NodeRecord("10.0.0.1", "alphaNode");
+    NodeRecord BETANODE_R = new NodeRecord("10.0.0.2", "betaNode");
+    NodeRecord GAMMANODE_R = new NodeRecord("10.0.0.3", "gammaNode");
     Ip incomingAlpha = Ip.parse("100.0.0.10");
     Ip incomingBeta = Ip.parse("100.0.0.20");
     String prefixStr = "2.4.8.0/24";
@@ -372,8 +374,10 @@ public class LivenessAnswererTest {
 
     TestConfigConstructionUtils.Networkv2 net =
         pathWithInterferenceExample(
-            ALPHANODE, BETANODE, GAMMANODE, incomingAlpha, incomingBeta, prefixStr);
+            ALPHANODE_R, BETANODE_R, GAMMANODE_R, incomingAlpha, incomingBeta, prefixStr);
     NetworkInfo info = net.getInfo(TARGET_PREFIX);
+
+    Node GAMMANODE = GAMMANODE_R.instantiate(info);
 
     RegexConstraints comm = new RegexConstraints(List.of(RegexConstraint.parse("1:1")));
     Invariant target =
@@ -387,13 +391,13 @@ public class LivenessAnswererTest {
   }
 
   private TestConfigConstructionUtils.Networkv2 pathWithLocalPreferenceExample(
-      Node ALPHANODE,
-      Node BETANODE,
-      Node GAMMANODE,
+      NodeRecord ALPHANODE,
+      NodeRecord BETANODE,
+      NodeRecord GAMMANODE,
       Ip alphaIncoming,
       Ip betaIncoming,
       String prefixString) {
-    Map<Node, Configuration> configs = new HashMap<>();
+    Map<NodeRecord, Configuration> configs = new HashMap<>();
 
     String community1 = "1:1";
     String regex_community1 = "^" + community1 + "$";
@@ -427,7 +431,8 @@ public class LivenessAnswererTest {
     includeCommunities(configs.get(GAMMANODE), regex_community2);
 
     // Create the BGP processes
-    Map<Node, BgpProcess> processes = getBgpProcesses(configs, ALPHANODE, BETANODE, GAMMANODE);
+    Map<NodeRecord, BgpProcess> processes =
+        getBgpProcesses(configs, ALPHANODE, BETANODE, GAMMANODE);
 
     processes
         .get(ALPHANODE)
@@ -435,15 +440,15 @@ public class LivenessAnswererTest {
             ImmutableSortedMap.of(
                 alphaIncoming,
                 getBgpActivePeerConfig(EXTERNAL, externalAlphaImport, exportDefault),
-                BETANODE.getSingleIp(),
+                BETANODE.getIp(),
                 getBgpActivePeerConfig(INTERNAL, importDefault, exportDefault)));
     processes
         .get(BETANODE)
         .setNeighbors(
             ImmutableSortedMap.of(
-                ALPHANODE.getSingleIp(),
+                ALPHANODE.getIp(),
                 getBgpActivePeerConfig(INTERNAL, importALPHA2BETA, exportDefault),
-                GAMMANODE.getSingleIp(),
+                GAMMANODE.getIp(),
                 getBgpActivePeerConfig(INTERNAL, importDefault, exportDefault),
                 betaIncoming,
                 getBgpActivePeerConfig(EXTERNAL, externalBetaImport, exportDefault)));
@@ -451,7 +456,7 @@ public class LivenessAnswererTest {
         .get(GAMMANODE)
         .setNeighbors(
             ImmutableSortedMap.of(
-                BETANODE.getSingleIp(),
+                BETANODE.getIp(),
                 getBgpActivePeerConfig(INTERNAL, importBETA2GAMMA, exportDefault)));
 
     // Create the policies
@@ -504,13 +509,13 @@ public class LivenessAnswererTest {
   }
 
   private TestConfigConstructionUtils.Networkv2 pathWithLocalPreferenceExample2(
-      Node ALPHANODE,
-      Node BETANODE,
-      Node GAMMANODE,
+      NodeRecord ALPHANODE,
+      NodeRecord BETANODE,
+      NodeRecord GAMMANODE,
       Ip alphaIncoming,
       Ip gammaIncoming,
       String prefixString) {
-    Map<Node, Configuration> configs = new HashMap<>();
+    Map<NodeRecord, Configuration> configs = new HashMap<>();
 
     String community1 = "1:1";
     String regex_community1 = "^" + community1 + "$";
@@ -544,7 +549,8 @@ public class LivenessAnswererTest {
     includeCommunities(configs.get(GAMMANODE), regex_community2);
 
     // Create the BGP processes
-    Map<Node, BgpProcess> processes = getBgpProcesses(configs, ALPHANODE, BETANODE, GAMMANODE);
+    Map<NodeRecord, BgpProcess> processes =
+        getBgpProcesses(configs, ALPHANODE, BETANODE, GAMMANODE);
 
     processes
         .get(ALPHANODE)
@@ -552,21 +558,21 @@ public class LivenessAnswererTest {
             ImmutableSortedMap.of(
                 alphaIncoming,
                 getBgpActivePeerConfig(EXTERNAL, externalAlphaImport, exportDefault),
-                BETANODE.getSingleIp(),
+                BETANODE.getIp(),
                 getBgpActivePeerConfig(INTERNAL, importDefault, exportDefault)));
     processes
         .get(BETANODE)
         .setNeighbors(
             ImmutableSortedMap.of(
-                ALPHANODE.getSingleIp(),
+                ALPHANODE.getIp(),
                 getBgpActivePeerConfig(INTERNAL, importALPHA2BETA, exportDefault),
-                GAMMANODE.getSingleIp(),
+                GAMMANODE.getIp(),
                 getBgpActivePeerConfig(INTERNAL, importDefault, exportDefault)));
     processes
         .get(GAMMANODE)
         .setNeighbors(
             ImmutableSortedMap.of(
-                BETANODE.getSingleIp(),
+                BETANODE.getIp(),
                 getBgpActivePeerConfig(INTERNAL, importBETA2GAMMA, exportDefault),
                 gammaIncoming,
                 getBgpActivePeerConfig(EXTERNAL, externalGammaImport, exportDefault)));
@@ -625,8 +631,12 @@ public class LivenessAnswererTest {
   }
 
   private TestConfigConstructionUtils.Networkv2 pathWithAsPathLengthExample(
-      Node ALPHANODE, Node BETANODE, Node GAMMANODE, Ip alphaIncoming, String prefixString) {
-    Map<Node, Configuration> configs = new HashMap<>();
+      NodeRecord ALPHANODE,
+      NodeRecord BETANODE,
+      NodeRecord GAMMANODE,
+      Ip alphaIncoming,
+      String prefixString) {
+    Map<NodeRecord, Configuration> configs = new HashMap<>();
 
     String community1 = "1:1";
     String regex_community1 = "^" + community1 + "$";
@@ -661,7 +671,8 @@ public class LivenessAnswererTest {
     includeCommunities(configs.get(GAMMANODE), regex_community1);
 
     // Create the BGP processes
-    Map<Node, BgpProcess> processes = getBgpProcesses(configs, ALPHANODE, BETANODE, GAMMANODE);
+    Map<NodeRecord, BgpProcess> processes =
+        getBgpProcesses(configs, ALPHANODE, BETANODE, GAMMANODE);
 
     processes
         .get(ALPHANODE)
@@ -678,7 +689,7 @@ public class LivenessAnswererTest {
                             .setExportPolicy(exportDefault)
                             .build())
                     .build(),
-                BETANODE.getSingleIp(),
+                BETANODE.getIp(),
                 org.batfish.datamodel.BgpActivePeerConfig.builder()
                     .setGroup(INTERNAL)
                     .setLocalAs(alphaAs)
@@ -689,7 +700,7 @@ public class LivenessAnswererTest {
                             .setExportPolicy(exportDefault)
                             .build())
                     .build(),
-                GAMMANODE.getSingleIp(),
+                GAMMANODE.getIp(),
                 org.batfish.datamodel.BgpActivePeerConfig.builder()
                     .setGroup(INTERNAL)
                     .setLocalAs(alphaAs)
@@ -704,7 +715,7 @@ public class LivenessAnswererTest {
         .get(BETANODE)
         .setNeighbors(
             ImmutableSortedMap.of(
-                ALPHANODE.getSingleIp(),
+                ALPHANODE.getIp(),
                 org.batfish.datamodel.BgpActivePeerConfig.builder()
                     .setGroup(INTERNAL)
                     .setLocalAs(betaAs)
@@ -715,7 +726,7 @@ public class LivenessAnswererTest {
                             .setExportPolicy(exportDefault)
                             .build())
                     .build(),
-                GAMMANODE.getSingleIp(),
+                GAMMANODE.getIp(),
                 org.batfish.datamodel.BgpActivePeerConfig.builder()
                     .setGroup(INTERNAL)
                     .setLocalAs(betaAs)
@@ -730,7 +741,7 @@ public class LivenessAnswererTest {
         .get(GAMMANODE)
         .setNeighbors(
             ImmutableSortedMap.of(
-                BETANODE.getSingleIp(),
+                BETANODE.getIp(),
                 org.batfish.datamodel.BgpActivePeerConfig.builder()
                     .setGroup(INTERNAL)
                     .setLocalAs(gammaAs)
@@ -741,7 +752,7 @@ public class LivenessAnswererTest {
                             .setExportPolicy(exportDefault)
                             .build())
                     .build(),
-                ALPHANODE.getSingleIp(),
+                ALPHANODE.getIp(),
                 org.batfish.datamodel.BgpActivePeerConfig.builder()
                     .setGroup(INTERNAL)
                     .setLocalAs(gammaAs)
@@ -793,9 +804,9 @@ public class LivenessAnswererTest {
 
   @Test
   public void pathWithLocalPreferenceNoInterferenceTest() {
-    Node ALPHANODE = new Node("10.0.0.1", "alphaNode");
-    Node BETANODE = new Node("10.0.0.2", "betaNode");
-    Node GAMMANODE = new Node("10.0.0.3", "gammaNode");
+    NodeRecord ALPHANODE_R = new NodeRecord("10.0.0.1", "alphaNode");
+    NodeRecord BETANODE_R = new NodeRecord("10.0.0.2", "betaNode");
+    NodeRecord GAMMANODE_R = new NodeRecord("10.0.0.3", "gammaNode");
     Ip incomingAlpha = Ip.parse("100.0.0.10");
     Ip incomingBeta = Ip.parse("100.0.0.20");
     String prefixStr = "2.4.8.0/24";
@@ -804,8 +815,10 @@ public class LivenessAnswererTest {
 
     TestConfigConstructionUtils.Networkv2 net =
         pathWithLocalPreferenceExample(
-            ALPHANODE, BETANODE, GAMMANODE, incomingAlpha, incomingBeta, prefixStr);
+            ALPHANODE_R, BETANODE_R, GAMMANODE_R, incomingAlpha, incomingBeta, prefixStr);
     NetworkInfo info = net.getInfo(TARGET_PREFIX);
+
+    Node GAMMANODE = GAMMANODE_R.instantiate(info);
 
     RegexConstraints comm = new RegexConstraints(List.of(RegexConstraint.parse("1:1")));
     Invariant target =
@@ -821,9 +834,9 @@ public class LivenessAnswererTest {
 
   @Test
   public void pathWithLocalPreferenceNoInterferenceTest2() {
-    Node ALPHANODE = new Node("10.0.0.1", "alphaNode");
-    Node BETANODE = new Node("10.0.0.2", "betaNode");
-    Node GAMMANODE = new Node("10.0.0.3", "gammaNode");
+    NodeRecord ALPHANODE_R = new NodeRecord("10.0.0.1", "alphaNode");
+    NodeRecord BETANODE_R = new NodeRecord("10.0.0.2", "betaNode");
+    NodeRecord GAMMANODE_R = new NodeRecord("10.0.0.3", "gammaNode");
     Ip incomingAlpha = Ip.parse("100.0.0.10");
     Ip incomingBeta = Ip.parse("100.0.0.20");
     String prefixStr = "2.4.8.0/24";
@@ -832,8 +845,10 @@ public class LivenessAnswererTest {
 
     TestConfigConstructionUtils.Networkv2 net =
         pathWithLocalPreferenceExample2(
-            ALPHANODE, BETANODE, GAMMANODE, incomingAlpha, incomingBeta, prefixStr);
+            ALPHANODE_R, BETANODE_R, GAMMANODE_R, incomingAlpha, incomingBeta, prefixStr);
     NetworkInfo info = net.getInfo(TARGET_PREFIX);
+
+    Node GAMMANODE = GAMMANODE_R.instantiate(info);
 
     RegexConstraints comm = new RegexConstraints(List.of(RegexConstraint.parse("1:1")));
     Invariant target =
@@ -849,17 +864,20 @@ public class LivenessAnswererTest {
 
   @Test
   public void pathWithAsPathLengthNoInterferenceTest() {
-    Node ALPHANODE = new Node("10.0.0.1", "alphaNode");
-    Node BETANODE = new Node("10.0.0.2", "betaNode");
-    Node GAMMANODE = new Node("10.0.0.3", "gammaNode");
+    NodeRecord ALPHANODE_R = new NodeRecord("10.0.0.1", "alphaNode");
+    NodeRecord BETANODE_R = new NodeRecord("10.0.0.2", "betaNode");
+    NodeRecord GAMMANODE_R = new NodeRecord("10.0.0.3", "gammaNode");
     Ip incomingAlpha = Ip.parse("100.0.0.10");
     String prefixStr = "2.4.8.0/24";
 
     PrefixSpace TARGET_PREFIX = new PrefixSpace(PrefixRange.fromString(prefixStr));
 
     TestConfigConstructionUtils.Networkv2 net =
-        pathWithAsPathLengthExample(ALPHANODE, BETANODE, GAMMANODE, incomingAlpha, prefixStr);
+        pathWithAsPathLengthExample(ALPHANODE_R, BETANODE_R, GAMMANODE_R, incomingAlpha, prefixStr);
     NetworkInfo info = net.getInfo(TARGET_PREFIX);
+
+    Node ALPHANODE = ALPHANODE_R.instantiate(info);
+    Node GAMMANODE = GAMMANODE_R.instantiate(info);
 
     // the incoming traffic is assumed to all have AS-path length of 1;
     // this (or a similar assumption setting the AS-path length to some constant) is required for us
@@ -868,7 +886,8 @@ public class LivenessAnswererTest {
         new Invariant(
             net.tbdd(),
             Invariant.clauseBuilder().setAsPathLength(1).build(net.tbdd(), net.template()));
-    info.addAssumption(new Edge(incomingAlpha, ALPHANODE.getSingleIp()), incomingAtAlphaAssumption);
+    Location loc = info.checkForEdgeViaIps(incomingAlpha, ALPHANODE.getSingleIp()).get();
+    info.addAssumption(loc, incomingAtAlphaAssumption);
 
     RegexConstraints comm = new RegexConstraints(List.of(RegexConstraint.parse("1:1")));
     Invariant target =

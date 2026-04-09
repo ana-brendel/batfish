@@ -38,6 +38,7 @@ import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import java.util.stream.Stream;
 
@@ -50,6 +51,7 @@ import static org.batfish.minesweeper.question.verificationutilities.TestConfigC
 import static org.batfish.minesweeper.question.verificationutilities.TestConfigConstructionUtils.includeCommunities;
 import static org.batfish.minesweeper.question.verificationutilities.TestConfigConstructionUtils.permitRoute;
 import static org.batfish.minesweeper.question.verificationutilities.TestConfigConstructionUtils.replaceCommunities;
+import static org.batfish.minesweeper.question.verificationutilities.TestConfigConstructionUtils.NodeRecord;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
@@ -91,10 +93,10 @@ public class InferTest {
         new HashSet<>()); // for AS path stuff
   }
 
-  private BgpProcess getBgpProcess(Configuration config, Node node) {
+  private BgpProcess getBgpProcess(Configuration config, NodeRecord node) {
     Vrf vrf = nf.vrfBuilder().setOwner(config).setName(Configuration.DEFAULT_VRF_NAME).build();
     return nf.bgpProcessBuilder()
-        .setRouterId(node.getSingleIp())
+        .setRouterId(node.getIp())
         .setEbgpAdminCost(0)
         .setIbgpAdminCost(0)
         .setLocalAdminCost(0)
@@ -105,9 +107,9 @@ public class InferTest {
         .build();
   }
 
-  private void setUpConfigs(Map<Node, Configuration> configs, Node... nodes) {
-    for (Node node : nodes) {
-      Configuration.Builder configBuilder = nf.configurationBuilder().setHostname(node.getName());
+  private void setUpConfigs(Map<NodeRecord, Configuration> configs, NodeRecord... nodes) {
+    for (NodeRecord node : nodes) {
+      Configuration.Builder configBuilder = nf.configurationBuilder().setHostname(node.name());
       configs.put(
           node,
           configBuilder
@@ -117,9 +119,10 @@ public class InferTest {
     }
   }
 
-  private Map<Node, BgpProcess> getBgpProcesses(Map<Node, Configuration> configs, Node... nodes) {
-    Map<Node, BgpProcess> processes = new HashMap<>();
-    for (Node node : nodes) {
+  private Map<NodeRecord, BgpProcess> getBgpProcesses(
+      Map<NodeRecord, Configuration> configs, NodeRecord... nodes) {
+    Map<NodeRecord, BgpProcess> processes = new HashMap<>();
+    for (NodeRecord node : nodes) {
       processes.put(node, getBgpProcess(configs.get(node), node));
     }
     return processes;
@@ -130,10 +133,10 @@ public class InferTest {
   }
 
   private TestConfigConstructionUtils.Network originalExample(
-      Node ALPHANODE, Node BETANODE, Node GAMMANODE, Node DELTANODE) {
-    Map<Node, Configuration> configs = new HashMap<>();
-    Map<Node, RoutingPolicy> imports = new HashMap<>();
-    Map<Node, RoutingPolicy> exports = new HashMap<>();
+      NodeRecord ALPHANODE, NodeRecord BETANODE, NodeRecord GAMMANODE, NodeRecord DELTANODE) {
+    Map<NodeRecord, Configuration> configs = new HashMap<>();
+    Map<NodeRecord, RoutingPolicy> imports = new HashMap<>();
+    Map<NodeRecord, RoutingPolicy> exports = new HashMap<>();
 
     String plain_comm_1 = "100:1";
     String plain_comm_2 = "100:2";
@@ -155,36 +158,36 @@ public class InferTest {
     includeCommunities(configs.get(GAMMANODE), regex_comm_100_2);
 
     // Create the BGP processes
-    Map<Node, BgpProcess> processes =
+    Map<NodeRecord, BgpProcess> processes =
         getBgpProcesses(configs, ALPHANODE, BETANODE, GAMMANODE, DELTANODE);
 
     processes
         .get(ALPHANODE)
         .setNeighbors(
             ImmutableSortedMap.of(
-                BETANODE.getSingleIp(),
+                BETANODE.getIp(),
                 getBgpActivePeerConfig(NEXT_DOOR, IMPORT_POLICY_NAME, EXPORT_POLICY_NAME)));
     processes
         .get(BETANODE)
         .setNeighbors(
             ImmutableSortedMap.of(
-                ALPHANODE.getSingleIp(),
+                ALPHANODE.getIp(),
                     getBgpActivePeerConfig(NEXT_DOOR, IMPORT_POLICY_NAME, EXPORT_POLICY_NAME),
-                GAMMANODE.getSingleIp(),
+                GAMMANODE.getIp(),
                     getBgpActivePeerConfig(NEXT_DOOR, IMPORT_POLICY_NAME, EXPORT_POLICY_NAME)));
     processes
         .get(GAMMANODE)
         .setNeighbors(
             ImmutableSortedMap.of(
-                BETANODE.getSingleIp(),
+                BETANODE.getIp(),
                     getBgpActivePeerConfig(NEXT_DOOR, IMPORT_POLICY_NAME, EXPORT_POLICY_NAME),
-                DELTANODE.getSingleIp(),
+                DELTANODE.getIp(),
                     getBgpActivePeerConfig(NEXT_DOOR, IMPORT_POLICY_NAME, EXPORT_POLICY_NAME)));
     processes
         .get(DELTANODE)
         .setNeighbors(
             ImmutableSortedMap.of(
-                GAMMANODE.getSingleIp(),
+                GAMMANODE.getIp(),
                 getBgpActivePeerConfig(NEXT_DOOR, IMPORT_POLICY_NAME, EXPORT_POLICY_NAME)));
 
     // Create the policies
@@ -249,15 +252,21 @@ public class InferTest {
 
   @Test
   public void originalExampleTest() {
-    Node ALPHANODE = new Node("10.0.0.1", "alphaNode");
-    Node BETANODE = new Node("10.0.0.2", "betaNode");
-    Node GAMMANODE = new Node("10.0.0.3", "gammaNode");
-    Node DELTANODE = new Node("10.0.0.4", "deltaNode");
+    NodeRecord ALPHANODE_rec = new NodeRecord("10.0.0.1", "alphaNode");
+    NodeRecord BETANODE_rec = new NodeRecord("10.0.0.2", "betaNode");
+    NodeRecord GAMMANODE_rec = new NodeRecord("10.0.0.3", "gammaNode");
+    NodeRecord DELTANODE_rec = new NodeRecord("10.0.0.4", "deltaNode");
 
     TestConfigConstructionUtils.Network net =
-        originalExample(ALPHANODE, BETANODE, GAMMANODE, DELTANODE);
+        originalExample(ALPHANODE_rec, BETANODE_rec, GAMMANODE_rec, DELTANODE_rec);
 
     NetworkInfo info_1 = net.getInfo();
+
+    Node ALPHANODE = ALPHANODE_rec.instantiate(info_1);
+    Node BETANODE = BETANODE_rec.instantiate(info_1);
+    Node GAMMANODE = GAMMANODE_rec.instantiate(info_1);
+    Node DELTANODE = DELTANODE_rec.instantiate(info_1);
+
     info_1.anyRouteAllowedAt(ALPHANODE);
     Infer verifier_1 = info_1.toInfer();
     Invariant property_1 =
@@ -265,7 +274,7 @@ public class InferTest {
             net.tbdd(),
             Invariant.clauseBuilder()
                 .avoidPrefix(PREFIX)
-                .build(net.tbdd(), net.imports().get(DELTANODE)));
+                .build(net.tbdd(), net.imports().get(DELTANODE_rec)));
     verifier_1.addProperty(DELTANODE, property_1);
     Infer.Result result_1 = verifier_1.run();
     assertTrue(result_1.verified);
@@ -278,7 +287,7 @@ public class InferTest {
             net.tbdd(),
             Invariant.clauseBuilder()
                 .avoidPrefix(PREFIX)
-                .build(net.tbdd(), net.imports().get(DELTANODE)));
+                .build(net.tbdd(), net.imports().get(DELTANODE_rec)));
     verifier_2.addProperty(DELTANODE, property_2);
     Infer.Result result_2 = verifier_2.run();
     assertFalse(result_2.verified);
@@ -292,7 +301,7 @@ public class InferTest {
             net.tbdd(),
             Invariant.clauseBuilder()
                 .setCommunities(comm)
-                .build(net.tbdd(), net.imports().get(DELTANODE)));
+                .build(net.tbdd(), net.imports().get(DELTANODE_rec)));
     verifier_3.addProperty(DELTANODE, property_3);
     Infer.Result result_3 = verifier_3.run();
     assertFalse(result_3.verified);
@@ -308,7 +317,7 @@ public class InferTest {
             net.tbdd(),
             Invariant.clauseBuilder()
                 .setCommunities(comm_)
-                .build(net.tbdd(), net.imports().get(DELTANODE)));
+                .build(net.tbdd(), net.imports().get(DELTANODE_rec)));
     verifier_4.addProperty(DELTANODE, property_4);
     Infer.Result result_4 = verifier_4.run();
     assertFalse(result_4.verified);
@@ -324,7 +333,7 @@ public class InferTest {
             net.tbdd(),
             Invariant.clauseBuilder()
                 .setCommunities(comm__)
-                .build(net.tbdd(), net.imports().get(GAMMANODE)));
+                .build(net.tbdd(), net.imports().get(GAMMANODE_rec)));
     verifier_5.addProperty(GAMMANODE, property_5);
     Infer.Result result_5 = verifier_5.run();
     assertFalse(result_5.verified);
@@ -332,14 +341,20 @@ public class InferTest {
 
   @Test
   public void originalExampleInvariantsAsExpectedTest() {
-    Node ALPHANODE = new Node("10.0.0.10", "alphaNode");
-    Node BETANODE = new Node("10.0.0.20", "betaNode");
-    Node GAMMANODE = new Node("10.0.0.30", "gammaNode");
-    Node DELTANODE = new Node("10.0.0.40", "deltaNode");
+    NodeRecord ALPHANODE_R = new NodeRecord("10.0.0.10", "alphaNode");
+    NodeRecord BETANODE_R = new NodeRecord("10.0.0.20", "betaNode");
+    NodeRecord GAMMANODE_R = new NodeRecord("10.0.0.30", "gammaNode");
+    NodeRecord DELTANODE_R = new NodeRecord("10.0.0.40", "deltaNode");
     TestConfigConstructionUtils.Network net =
-        originalExample(ALPHANODE, BETANODE, GAMMANODE, DELTANODE);
+        originalExample(ALPHANODE_R, BETANODE_R, GAMMANODE_R, DELTANODE_R);
 
     NetworkInfo info = net.getInfo();
+
+    Node ALPHANODE = ALPHANODE_R.instantiate(info);
+    Node BETANODE = BETANODE_R.instantiate(info);
+    Node GAMMANODE = GAMMANODE_R.instantiate(info);
+    Node DELTANODE = DELTANODE_R.instantiate(info);
+
     info.anyRouteAllowedAt(ALPHANODE);
     Infer verifier = info.toInfer();
     Invariant property =
@@ -347,7 +362,7 @@ public class InferTest {
             net.tbdd(),
             Invariant.clauseBuilder()
                 .avoidPrefix(PREFIX)
-                .build(net.tbdd(), net.imports().get(DELTANODE)));
+                .build(net.tbdd(), net.imports().get(DELTANODE_R)));
     verifier.addProperty(DELTANODE, property);
     Infer.Result result = verifier.run();
     Map<Location, Invariant> inferred = result.invariants;
@@ -367,16 +382,16 @@ public class InferTest {
         Invariant.builder().addClause(avoidPrefix).addClause(match_100_2).addClause(match_100_1);
 
     // Node Invariants
-    Invariant betaNode = prefix_implies_100_1_2.build(net.tbdd(), net.imports().get(BETANODE));
-    Invariant gammaNode = prefix_implies_100_2.build(net.tbdd(), net.imports().get(GAMMANODE));
-    Invariant deltaNode = not_prefix.build(net.tbdd(), net.imports().get(DELTANODE));
+    Invariant betaNode = prefix_implies_100_1_2.build(net.tbdd(), net.imports().get(BETANODE_R));
+    Invariant gammaNode = prefix_implies_100_2.build(net.tbdd(), net.imports().get(GAMMANODE_R));
+    Invariant deltaNode = not_prefix.build(net.tbdd(), net.imports().get(DELTANODE_R));
 
     // Edge Invariants
-    Invariant alpha_beta = prefix_implies_100_1_2.build(net.tbdd(), net.exports().get(ALPHANODE));
-    Invariant beta_gamma = prefix_implies_100_2.build(net.tbdd(), net.exports().get(BETANODE));
-    Invariant gamma_beta = prefix_implies_100_1_2.build(net.tbdd(), net.exports().get(GAMMANODE));
-    Invariant gamma_delta = not_prefix.build(net.tbdd(), net.exports().get(GAMMANODE));
-    Invariant delta_gamma = prefix_implies_100_2.build(net.tbdd(), net.exports().get(DELTANODE));
+    Invariant alpha_beta = prefix_implies_100_1_2.build(net.tbdd(), net.exports().get(ALPHANODE_R));
+    Invariant beta_gamma = prefix_implies_100_2.build(net.tbdd(), net.exports().get(BETANODE_R));
+    Invariant gamma_beta = prefix_implies_100_1_2.build(net.tbdd(), net.exports().get(GAMMANODE_R));
+    Invariant gamma_delta = not_prefix.build(net.tbdd(), net.exports().get(GAMMANODE_R));
+    Invariant delta_gamma = prefix_implies_100_2.build(net.tbdd(), net.exports().get(DELTANODE_R));
 
     assertEquals(10, inferred.size());
 
@@ -396,10 +411,14 @@ public class InferTest {
   }
 
   private TestConfigConstructionUtils.Network faultyOriginalExample(
-      Node ALPHANODE, Node BETANODE, Node GAMMANODE, Node DELTANODE, int faulty) {
-    Map<Node, Configuration> configs = new HashMap<>();
-    Map<Node, RoutingPolicy> imports = new HashMap<>();
-    Map<Node, RoutingPolicy> exports = new HashMap<>();
+      NodeRecord ALPHANODE,
+      NodeRecord BETANODE,
+      NodeRecord GAMMANODE,
+      NodeRecord DELTANODE,
+      int faulty) {
+    Map<NodeRecord, Configuration> configs = new HashMap<>();
+    Map<NodeRecord, RoutingPolicy> imports = new HashMap<>();
+    Map<NodeRecord, RoutingPolicy> exports = new HashMap<>();
 
     String plain_comm_1 = "100:1";
     String plain_comm_2 = "100:2";
@@ -424,36 +443,36 @@ public class InferTest {
     includeCommunities(configs.get(GAMMANODE), faulty == 3 ? regex_comm_100_3 : regex_comm_100_2);
 
     // Create the BGP processes
-    Map<Node, BgpProcess> processes =
+    Map<NodeRecord, BgpProcess> processes =
         getBgpProcesses(configs, ALPHANODE, BETANODE, GAMMANODE, DELTANODE);
 
     processes
         .get(ALPHANODE)
         .setNeighbors(
             ImmutableSortedMap.of(
-                BETANODE.getSingleIp(),
+                BETANODE.getIp(),
                 getBgpActivePeerConfig(NEXT_DOOR, IMPORT_POLICY_NAME, EXPORT_POLICY_NAME)));
     processes
         .get(BETANODE)
         .setNeighbors(
             ImmutableSortedMap.of(
-                ALPHANODE.getSingleIp(),
+                ALPHANODE.getIp(),
                     getBgpActivePeerConfig(NEXT_DOOR, IMPORT_POLICY_NAME, EXPORT_POLICY_NAME),
-                GAMMANODE.getSingleIp(),
+                GAMMANODE.getIp(),
                     getBgpActivePeerConfig(NEXT_DOOR, IMPORT_POLICY_NAME, EXPORT_POLICY_NAME)));
     processes
         .get(GAMMANODE)
         .setNeighbors(
             ImmutableSortedMap.of(
-                BETANODE.getSingleIp(),
+                BETANODE.getIp(),
                     getBgpActivePeerConfig(NEXT_DOOR, IMPORT_POLICY_NAME, EXPORT_POLICY_NAME),
-                DELTANODE.getSingleIp(),
+                DELTANODE.getIp(),
                     getBgpActivePeerConfig(NEXT_DOOR, IMPORT_POLICY_NAME, EXPORT_POLICY_NAME)));
     processes
         .get(DELTANODE)
         .setNeighbors(
             ImmutableSortedMap.of(
-                GAMMANODE.getSingleIp(),
+                GAMMANODE.getIp(),
                 getBgpActivePeerConfig(NEXT_DOOR, IMPORT_POLICY_NAME, EXPORT_POLICY_NAME)));
 
     // Create the policies
@@ -536,27 +555,31 @@ public class InferTest {
 
   @Test
   public void faultyOriginalExampleTest() {
-    Node ALPHANODE = new Node("10.0.0.11", "alphaNode");
-    Node BETANODE = new Node("10.0.0.22", "betaNode");
-    Node GAMMANODE = new Node("10.0.0.33", "gammaNode");
-    Node DELTANODE = new Node("10.0.0.44", "deltaNode");
+    NodeRecord ALPHANODE_R = new NodeRecord("10.0.0.11", "alphaNode");
+    NodeRecord BETANODE_R = new NodeRecord("10.0.0.22", "betaNode");
+    NodeRecord GAMMANODE_R = new NodeRecord("10.0.0.33", "gammaNode");
+    NodeRecord DELTANODE_R = new NodeRecord("10.0.0.44", "deltaNode");
     Invariant.ClauseBuilder avoidPrefix = Invariant.clauseBuilder().avoidPrefix(PREFIX);
 
     for (int i = 1; i <= 5; i++) {
       TestConfigConstructionUtils.Network net =
-          faultyOriginalExample(ALPHANODE, BETANODE, GAMMANODE, DELTANODE, i);
+          faultyOriginalExample(ALPHANODE_R, BETANODE_R, GAMMANODE_R, DELTANODE_R, i);
       Invariant property =
           new Invariant(
               net.tbdd(),
               Invariant.clauseBuilder()
                   .avoidPrefix(PREFIX)
-                  .build(net.tbdd(), net.imports().get(DELTANODE)));
+                  .build(net.tbdd(), net.imports().get(DELTANODE_R)));
       Invariant not_prefix =
           Invariant.builder()
               .addClause(avoidPrefix)
-              .build(net.tbdd(), net.imports().get(ALPHANODE));
+              .build(net.tbdd(), net.imports().get(ALPHANODE_R));
 
       NetworkInfo info = net.getInfo();
+
+      Node ALPHANODE = ALPHANODE_R.instantiate(info);
+      Node DELTANODE = DELTANODE_R.instantiate(info);
+
       info.anyRouteAllowedAt(ALPHANODE);
       Infer verifier = info.toInfer();
       verifier.addProperty(DELTANODE, property);
@@ -567,10 +590,18 @@ public class InferTest {
   }
 
   private TestConfigConstructionUtils.Network meshNetworkExample(
-      Node A1, Node B1, Node G1, Node D1, Node A2, Node B2, Node G2, Node D2, int faulty) {
-    Map<Node, Configuration> configs = new HashMap<>();
-    Map<Node, RoutingPolicy> imports = new HashMap<>();
-    Map<Node, RoutingPolicy> exports = new HashMap<>();
+      NodeRecord A1,
+      NodeRecord B1,
+      NodeRecord G1,
+      NodeRecord D1,
+      NodeRecord A2,
+      NodeRecord B2,
+      NodeRecord G2,
+      NodeRecord D2,
+      int faulty) {
+    Map<NodeRecord, Configuration> configs = new HashMap<>();
+    Map<NodeRecord, RoutingPolicy> imports = new HashMap<>();
+    Map<NodeRecord, RoutingPolicy> exports = new HashMap<>();
 
     String plain_comm_1 = "100:1";
     String plain_comm_2 = "100:2";
@@ -600,90 +631,91 @@ public class InferTest {
     includeCommunities(configs.get(G2), faulty == 3 ? regex_comm_100_1 : regex_comm_100_2);
 
     // Create the BGP processes
-    Map<Node, BgpProcess> processes = getBgpProcesses(configs, A1, B1, G1, D1, A2, B2, G2, D2);
+    Map<NodeRecord, BgpProcess> processes =
+        getBgpProcesses(configs, A1, B1, G1, D1, A2, B2, G2, D2);
 
     processes
         .get(A1)
         .setNeighbors(
             ImmutableSortedMap.of(
-                B1.getSingleIp(),
+                B1.getIp(),
                     getBgpActivePeerConfig(NEXT_DOOR, IMPORT_POLICY_NAME, EXPORT_POLICY_NAME),
-                B2.getSingleIp(),
+                B2.getIp(),
                     getBgpActivePeerConfig(NEXT_DOOR, IMPORT_POLICY_NAME, EXPORT_POLICY_NAME)));
     processes
         .get(A2)
         .setNeighbors(
             ImmutableSortedMap.of(
-                B1.getSingleIp(),
+                B1.getIp(),
                     getBgpActivePeerConfig(NEXT_DOOR, IMPORT_POLICY_NAME, EXPORT_POLICY_NAME),
-                B2.getSingleIp(),
+                B2.getIp(),
                     getBgpActivePeerConfig(NEXT_DOOR, IMPORT_POLICY_NAME, EXPORT_POLICY_NAME)));
 
     processes
         .get(B1)
         .setNeighbors(
             ImmutableSortedMap.of(
-                A1.getSingleIp(),
+                A1.getIp(),
                     getBgpActivePeerConfig(NEXT_DOOR, IMPORT_POLICY_NAME, EXPORT_POLICY_NAME),
-                A2.getSingleIp(),
+                A2.getIp(),
                     getBgpActivePeerConfig(NEXT_DOOR, IMPORT_POLICY_NAME, EXPORT_POLICY_NAME),
-                G1.getSingleIp(),
+                G1.getIp(),
                     getBgpActivePeerConfig(NEXT_DOOR, IMPORT_POLICY_NAME, EXPORT_POLICY_NAME),
-                G2.getSingleIp(),
+                G2.getIp(),
                     getBgpActivePeerConfig(NEXT_DOOR, IMPORT_POLICY_NAME, EXPORT_POLICY_NAME)));
     processes
         .get(B2)
         .setNeighbors(
             ImmutableSortedMap.of(
-                A1.getSingleIp(),
+                A1.getIp(),
                     getBgpActivePeerConfig(NEXT_DOOR, IMPORT_POLICY_NAME, EXPORT_POLICY_NAME),
-                A2.getSingleIp(),
+                A2.getIp(),
                     getBgpActivePeerConfig(NEXT_DOOR, IMPORT_POLICY_NAME, EXPORT_POLICY_NAME),
-                G1.getSingleIp(),
+                G1.getIp(),
                     getBgpActivePeerConfig(NEXT_DOOR, IMPORT_POLICY_NAME, EXPORT_POLICY_NAME),
-                G2.getSingleIp(),
+                G2.getIp(),
                     getBgpActivePeerConfig(NEXT_DOOR, IMPORT_POLICY_NAME, EXPORT_POLICY_NAME)));
 
     processes
         .get(G1)
         .setNeighbors(
             ImmutableSortedMap.of(
-                B1.getSingleIp(),
+                B1.getIp(),
                     getBgpActivePeerConfig(NEXT_DOOR, IMPORT_POLICY_NAME, EXPORT_POLICY_NAME),
-                B2.getSingleIp(),
+                B2.getIp(),
                     getBgpActivePeerConfig(NEXT_DOOR, IMPORT_POLICY_NAME, EXPORT_POLICY_NAME),
-                D1.getSingleIp(),
+                D1.getIp(),
                     getBgpActivePeerConfig(NEXT_DOOR, IMPORT_POLICY_NAME, EXPORT_POLICY_NAME),
-                D2.getSingleIp(),
+                D2.getIp(),
                     getBgpActivePeerConfig(NEXT_DOOR, IMPORT_POLICY_NAME, EXPORT_POLICY_NAME)));
     processes
         .get(G2)
         .setNeighbors(
             ImmutableSortedMap.of(
-                B1.getSingleIp(),
+                B1.getIp(),
                     getBgpActivePeerConfig(NEXT_DOOR, IMPORT_POLICY_NAME, EXPORT_POLICY_NAME),
-                B2.getSingleIp(),
+                B2.getIp(),
                     getBgpActivePeerConfig(NEXT_DOOR, IMPORT_POLICY_NAME, EXPORT_POLICY_NAME),
-                D1.getSingleIp(),
+                D1.getIp(),
                     getBgpActivePeerConfig(NEXT_DOOR, IMPORT_POLICY_NAME, EXPORT_POLICY_NAME),
-                D2.getSingleIp(),
+                D2.getIp(),
                     getBgpActivePeerConfig(NEXT_DOOR, IMPORT_POLICY_NAME, EXPORT_POLICY_NAME)));
 
     processes
         .get(D1)
         .setNeighbors(
             ImmutableSortedMap.of(
-                G1.getSingleIp(),
+                G1.getIp(),
                     getBgpActivePeerConfig(NEXT_DOOR, IMPORT_POLICY_NAME, EXPORT_POLICY_NAME),
-                G2.getSingleIp(),
+                G2.getIp(),
                     getBgpActivePeerConfig(NEXT_DOOR, IMPORT_POLICY_NAME, EXPORT_POLICY_NAME)));
     processes
         .get(D2)
         .setNeighbors(
             ImmutableSortedMap.of(
-                G1.getSingleIp(),
+                G1.getIp(),
                     getBgpActivePeerConfig(NEXT_DOOR, IMPORT_POLICY_NAME, EXPORT_POLICY_NAME),
-                G2.getSingleIp(),
+                G2.getIp(),
                     getBgpActivePeerConfig(NEXT_DOOR, IMPORT_POLICY_NAME, EXPORT_POLICY_NAME)));
 
     // Create the policies
@@ -785,14 +817,14 @@ public class InferTest {
 
   @Test
   public void meshNetworkTest() {
-    Node A1 = new Node("100.0.0.11", "a1Node");
-    Node B1 = new Node("100.0.0.22", "b1Node");
-    Node G1 = new Node("100.0.0.33", "g1Node");
-    Node D1 = new Node("100.0.0.44", "d1Node");
-    Node A2 = new Node("101.0.0.11", "a2Node");
-    Node B2 = new Node("101.0.0.22", "b2Node");
-    Node G2 = new Node("101.0.0.33", "g2Node");
-    Node D2 = new Node("101.0.0.44", "d2Node");
+    NodeRecord A1_R = new NodeRecord("100.0.0.11", "a1Node");
+    NodeRecord B1_R = new NodeRecord("100.0.0.22", "b1Node");
+    NodeRecord G1_R = new NodeRecord("100.0.0.33", "g1Node");
+    NodeRecord D1_R = new NodeRecord("100.0.0.44", "d1Node");
+    NodeRecord A2_R = new NodeRecord("101.0.0.11", "a2Node");
+    NodeRecord B2_R = new NodeRecord("101.0.0.22", "b2Node");
+    NodeRecord G2_R = new NodeRecord("101.0.0.33", "g2Node");
+    NodeRecord D2_R = new NodeRecord("101.0.0.44", "d2Node");
     Invariant.ClauseBuilder avoidPrefix = Invariant.clauseBuilder().avoidPrefix(PREFIX);
     Invariant.ClauseBuilder match_100_1 =
         Invariant.clauseBuilder()
@@ -802,14 +834,21 @@ public class InferTest {
             .setCommunities(new RegexConstraints(List.of(RegexConstraint.parse("100:2"))));
 
     TestConfigConstructionUtils.Network net_0 =
-        meshNetworkExample(A1, B1, G1, D1, A2, B2, G2, D2, 0);
+        meshNetworkExample(A1_R, B1_R, G1_R, D1_R, A2_R, B2_R, G2_R, D2_R, 0);
     Invariant property_0 =
         new Invariant(
             net_0.tbdd(),
             Invariant.clauseBuilder()
                 .avoidPrefix(PREFIX)
-                .build(net_0.tbdd(), net_0.imports().get(D1)));
+                .build(net_0.tbdd(), net_0.imports().get(D1_R)));
+
     NetworkInfo info_0 = net_0.getInfo();
+
+    Node A1 = A1_R.instantiate(info_0);
+    Node D1 = D1_R.instantiate(info_0);
+    Node A2 = A2_R.instantiate(info_0);
+    Node D2 = D2_R.instantiate(info_0);
+
     info_0.anyRouteAllowedAt(A1).anyRouteAllowedAt(A2);
     Infer verifier_0 = info_0.toInfer();
     verifier_0.addProperty(D1, property_0).addProperty(D2, property_0);
@@ -817,14 +856,20 @@ public class InferTest {
     assertTrue(result_0.verified);
 
     TestConfigConstructionUtils.Network net_1 =
-        meshNetworkExample(A1, B1, G1, D1, A2, B2, G2, D2, 1);
+        meshNetworkExample(A1_R, B1_R, G1_R, D1_R, A2_R, B2_R, G2_R, D2_R, 1);
     Invariant property_1 =
         new Invariant(
             net_1.tbdd(),
             Invariant.clauseBuilder()
                 .avoidPrefix(PREFIX)
-                .build(net_1.tbdd(), net_1.imports().get(D1)));
+                .build(net_1.tbdd(), net_1.imports().get(D1_R)));
+
     NetworkInfo info_1 = net_1.getInfo();
+
+    A1 = A1_R.instantiate(info_1);
+    D1 = D1_R.instantiate(info_1);
+    A2 = A2_R.instantiate(info_1);
+
     info_1.anyRouteAllowedAt(A1).anyRouteAllowedAt(A2);
     Infer verifier_1 = info_1.toInfer();
     verifier_1.addProperty(D1, property_1);
@@ -832,16 +877,22 @@ public class InferTest {
     assertTrue(result_1.verified);
 
     TestConfigConstructionUtils.Network net_2 =
-        meshNetworkExample(A1, B1, G1, D1, A2, B2, G2, D2, 2);
+        meshNetworkExample(A1_R, B1_R, G1_R, D1_R, A2_R, B2_R, G2_R, D2_R, 2);
     Invariant property_2 =
         new Invariant(
             net_2.tbdd(),
             Invariant.clauseBuilder()
                 .avoidPrefix(PREFIX)
-                .build(net_2.tbdd(), net_2.imports().get(D1)));
+                .build(net_2.tbdd(), net_2.imports().get(D1_R)));
     Invariant not_prefix_2 =
-        Invariant.builder().addClause(avoidPrefix).build(net_2.tbdd(), net_2.imports().get(A1));
+        Invariant.builder().addClause(avoidPrefix).build(net_2.tbdd(), net_2.imports().get(A1_R));
     NetworkInfo info_2 = net_2.getInfo();
+
+    A1 = A1_R.instantiate(info_2);
+    D1 = D1_R.instantiate(info_2);
+    A2 = A2_R.instantiate(info_2);
+    D2 = D2_R.instantiate(info_2);
+
     info_2.anyRouteAllowedAt(A1).anyRouteAllowedAt(A2);
     Infer verifier_2 = info_2.toInfer();
     verifier_2.addProperty(D1, property_2).addProperty(D2, property_2);
@@ -851,16 +902,22 @@ public class InferTest {
     assertEquals(result_2.invariants.get(A2), not_prefix_2);
 
     TestConfigConstructionUtils.Network net_3 =
-        meshNetworkExample(A1, B1, G1, D1, A2, B2, G2, D2, 3);
+        meshNetworkExample(A1_R, B1_R, G1_R, D1_R, A2_R, B2_R, G2_R, D2_R, 3);
     Invariant property_3 =
         new Invariant(
             net_3.tbdd(),
             Invariant.clauseBuilder()
                 .avoidPrefix(PREFIX)
-                .build(net_3.tbdd(), net_3.imports().get(D1)));
+                .build(net_3.tbdd(), net_3.imports().get(D1_R)));
     Invariant not_prefix_3 =
-        Invariant.builder().addClause(avoidPrefix).build(net_3.tbdd(), net_3.imports().get(A1));
+        Invariant.builder().addClause(avoidPrefix).build(net_3.tbdd(), net_3.imports().get(A1_R));
     NetworkInfo info_3 = net_3.getInfo();
+
+    A1 = A1_R.instantiate(info_3);
+    D1 = D1_R.instantiate(info_3);
+    A2 = A2_R.instantiate(info_3);
+    D2 = D2_R.instantiate(info_3);
+
     info_3.anyRouteAllowedAt(A1).anyRouteAllowedAt(A2);
     Infer verifier_3 = info_3.toInfer();
     verifier_3.addProperty(D1, property_3).addProperty(D2, property_3);
@@ -870,26 +927,32 @@ public class InferTest {
     assertEquals(result_3.invariants.get(A2), not_prefix_3);
 
     TestConfigConstructionUtils.Network net_4 =
-        meshNetworkExample(A1, B1, G1, D1, A2, B2, G2, D2, 0);
+        meshNetworkExample(A1_R, B1_R, G1_R, D1_R, A2_R, B2_R, G2_R, D2_R, 0);
     Invariant property_4 =
         new Invariant(
             net_4.tbdd(),
             Invariant.clauseBuilder()
                 .avoidPrefix(PREFIX)
-                .build(net_4.tbdd(), net_4.imports().get(D1)));
+                .build(net_4.tbdd(), net_4.imports().get(D1_R)));
     Invariant property_alt =
         new Invariant(
             net_4.tbdd(),
             Invariant.clauseBuilder()
                 .matchPrefix(PREFIX)
-                .build(net_4.tbdd(), net_4.imports().get(D1)));
+                .build(net_4.tbdd(), net_4.imports().get(D1_R)));
     Invariant expected =
         Invariant.builder()
             .addClause(Invariant.clauseBuilder().matchPrefix(PREFIX))
             .addClause(match_100_1)
             .addClause(match_100_2)
-            .build(net_4.tbdd(), net_4.imports().get(A1));
+            .build(net_4.tbdd(), net_4.imports().get(A1_R));
     NetworkInfo info_4 = net_4.getInfo();
+
+    A1 = A1_R.instantiate(info_4);
+    D1 = D1_R.instantiate(info_4);
+    A2 = A2_R.instantiate(info_4);
+    D2 = D2_R.instantiate(info_4);
+
     info_4.anyRouteAllowedAt(A1).anyRouteAllowedAt(A2);
     Infer verifier_4 = info_4.toInfer();
     verifier_4.addProperty(D1, property_4).addProperty(D2, property_alt);
@@ -900,10 +963,17 @@ public class InferTest {
   }
 
   private TestConfigConstructionUtils.Network threeProngedNetwork(
-      Node a0, Node b0, Node c0, Node node1, Node node2, Node node3, Node node4, int faulty) {
-    Map<Node, Configuration> configs = new HashMap<>();
-    Map<Node, RoutingPolicy> imports = new HashMap<>();
-    Map<Node, RoutingPolicy> exports = new HashMap<>();
+      NodeRecord a0,
+      NodeRecord b0,
+      NodeRecord c0,
+      NodeRecord node1,
+      NodeRecord node2,
+      NodeRecord node3,
+      NodeRecord node4,
+      int faulty) {
+    Map<NodeRecord, Configuration> configs = new HashMap<>();
+    Map<NodeRecord, RoutingPolicy> imports = new HashMap<>();
+    Map<NodeRecord, RoutingPolicy> exports = new HashMap<>();
 
     String plain_comm_1_10 = "1:10";
     String plain_comm_1_20 = "1:20";
@@ -950,75 +1020,75 @@ public class InferTest {
     includeCommunities(
         configs.get(node3), regex_comm_10_10, regex_comm_10_30, regex_comm_20_10, regex_comm_20_30);
 
-    Map<Node, BgpProcess> processes =
+    Map<NodeRecord, BgpProcess> processes =
         getBgpProcesses(configs, a0, b0, c0, node1, node2, node3, node4);
 
     processes
         .get(a0)
         .setNeighbors(
             ImmutableSortedMap.of(
-                node1.getSingleIp(),
+                node1.getIp(),
                     getBgpActivePeerConfig(NEXT_DOOR, IMPORT_POLICY_NAME, EXPORT_POLICY_NAME),
-                node2.getSingleIp(),
+                node2.getIp(),
                     getBgpActivePeerConfig(NEXT_DOOR, IMPORT_POLICY_NAME, EXPORT_POLICY_NAME)));
     processes
         .get(b0)
         .setNeighbors(
             ImmutableSortedMap.of(
-                node1.getSingleIp(),
+                node1.getIp(),
                     getBgpActivePeerConfig(NEXT_DOOR, IMPORT_POLICY_NAME, EXPORT_POLICY_NAME),
-                node2.getSingleIp(),
+                node2.getIp(),
                     getBgpActivePeerConfig(NEXT_DOOR, IMPORT_POLICY_NAME, EXPORT_POLICY_NAME)));
     processes
         .get(c0)
         .setNeighbors(
             ImmutableSortedMap.of(
-                node1.getSingleIp(),
+                node1.getIp(),
                     getBgpActivePeerConfig(NEXT_DOOR, IMPORT_POLICY_NAME, EXPORT_POLICY_NAME),
-                node2.getSingleIp(),
+                node2.getIp(),
                     getBgpActivePeerConfig(NEXT_DOOR, IMPORT_POLICY_NAME, EXPORT_POLICY_NAME)));
 
     processes
         .get(node1)
         .setNeighbors(
             ImmutableSortedMap.of(
-                a0.getSingleIp(),
+                a0.getIp(),
                     getBgpActivePeerConfig(NEXT_DOOR, IMPORT_POLICY_NAME, EXPORT_POLICY_NAME),
-                b0.getSingleIp(),
+                b0.getIp(),
                     getBgpActivePeerConfig(NEXT_DOOR, IMPORT_POLICY_NAME, EXPORT_POLICY_NAME),
-                c0.getSingleIp(),
+                c0.getIp(),
                     getBgpActivePeerConfig(NEXT_DOOR, IMPORT_POLICY_NAME, EXPORT_POLICY_NAME),
-                node3.getSingleIp(),
+                node3.getIp(),
                     getBgpActivePeerConfig(NEXT_DOOR, IMPORT_POLICY_NAME, EXPORT_POLICY_NAME)));
     processes
         .get(node2)
         .setNeighbors(
             ImmutableSortedMap.of(
-                a0.getSingleIp(),
+                a0.getIp(),
                     getBgpActivePeerConfig(NEXT_DOOR, IMPORT_POLICY_NAME, EXPORT_POLICY_NAME),
-                b0.getSingleIp(),
+                b0.getIp(),
                     getBgpActivePeerConfig(NEXT_DOOR, IMPORT_POLICY_NAME, EXPORT_POLICY_NAME),
-                c0.getSingleIp(),
+                c0.getIp(),
                     getBgpActivePeerConfig(NEXT_DOOR, IMPORT_POLICY_NAME, EXPORT_POLICY_NAME),
-                node3.getSingleIp(),
+                node3.getIp(),
                     getBgpActivePeerConfig(NEXT_DOOR, IMPORT_POLICY_NAME, EXPORT_POLICY_NAME)));
 
     processes
         .get(node3)
         .setNeighbors(
             ImmutableSortedMap.of(
-                node1.getSingleIp(),
+                node1.getIp(),
                     getBgpActivePeerConfig(NEXT_DOOR, IMPORT_POLICY_NAME, EXPORT_POLICY_NAME),
-                node2.getSingleIp(),
+                node2.getIp(),
                     getBgpActivePeerConfig(NEXT_DOOR, IMPORT_POLICY_NAME, EXPORT_POLICY_NAME),
-                node4.getSingleIp(),
+                node4.getIp(),
                     getBgpActivePeerConfig(NEXT_DOOR, IMPORT_POLICY_NAME, EXPORT_POLICY_NAME)));
 
     processes
         .get(node4)
         .setNeighbors(
             ImmutableSortedMap.of(
-                node3.getSingleIp(),
+                node3.getIp(),
                 getBgpActivePeerConfig(NEXT_DOOR, IMPORT_POLICY_NAME, EXPORT_POLICY_NAME)));
 
     RoutingPolicy a0_Import = makePolicy(configs.get(a0), IMPORT_POLICY_NAME, permitRoute(true));
@@ -1136,13 +1206,13 @@ public class InferTest {
 
   @Test
   public void threeProngedNetworkTest() {
-    Node A0 = new Node("100.0.1.11", "entryA");
-    Node B0 = new Node("100.0.1.22", "entryB");
-    Node C0 = new Node("100.0.1.33", "entryC");
-    Node NODE1 = new Node("100.0.1.44", "node_1");
-    Node NODE2 = new Node("101.0.1.11", "node_2");
-    Node NODE3 = new Node("101.0.1.22", "node_3");
-    Node NODE4 = new Node("101.0.1.33", "node_4");
+    NodeRecord A0_R = new NodeRecord("100.0.1.11", "entryA");
+    NodeRecord B0_R = new NodeRecord("100.0.1.22", "entryB");
+    NodeRecord C0_R = new NodeRecord("100.0.1.33", "entryC");
+    NodeRecord NODE1_R = new NodeRecord("100.0.1.44", "node_1");
+    NodeRecord NODE2_R = new NodeRecord("101.0.1.11", "node_2");
+    NodeRecord NODE3_R = new NodeRecord("101.0.1.22", "node_3");
+    NodeRecord NODE4_R = new NodeRecord("101.0.1.33", "node_4");
 
     Invariant.ClauseBuilder avoidBoth =
         Invariant.clauseBuilder()
@@ -1151,20 +1221,29 @@ public class InferTest {
                     List.of(RegexConstraint.parse("!1:10"), RegexConstraint.parse("!1:30"))));
 
     TestConfigConstructionUtils.Network net_0 =
-        threeProngedNetwork(A0, B0, C0, NODE1, NODE2, NODE3, NODE4, 0);
+        threeProngedNetwork(A0_R, B0_R, C0_R, NODE1_R, NODE2_R, NODE3_R, NODE4_R, 0);
     Invariant property_0 =
-        Invariant.builder().addClause(avoidBoth).build(net_0.tbdd(), net_0.imports().get(NODE4));
+        Invariant.builder().addClause(avoidBoth).build(net_0.tbdd(), net_0.imports().get(NODE4_R));
     NetworkInfo info_0 = net_0.getInfo();
+
+    Node NODE4 = NODE4_R.instantiate(info_0);
+
     Infer verifier_0 = info_0.toInfer();
     verifier_0.addProperty(NODE4, property_0);
     Infer.Result result_0 = verifier_0.run();
     assertTrue(result_0.verified);
 
     TestConfigConstructionUtils.Network net_1 =
-        threeProngedNetwork(A0, B0, C0, NODE1, NODE2, NODE3, NODE4, 1);
+        threeProngedNetwork(A0_R, B0_R, C0_R, NODE1_R, NODE2_R, NODE3_R, NODE4_R, 1);
     Invariant property_1 =
-        Invariant.builder().addClause(avoidBoth).build(net_1.tbdd(), net_1.imports().get(NODE4));
+        Invariant.builder().addClause(avoidBoth).build(net_1.tbdd(), net_1.imports().get(NODE4_R));
     NetworkInfo info_1 = net_1.getInfo();
+
+    Node A0 = A0_R.instantiate(info_1);
+    Node B0 = B0_R.instantiate(info_1);
+    Node C0 = C0_R.instantiate(info_1);
+    NODE4 = NODE4_R.instantiate(info_1);
+
     info_1.anyRouteAllowedAt(A0).anyRouteAllowedAt(B0).anyRouteAllowedAt(C0);
     Infer verifier_1 = info_1.toInfer();
     verifier_1.addProperty(NODE4, property_1);
@@ -1174,10 +1253,16 @@ public class InferTest {
     assertTrue(result_1.counter.isPresent());
 
     TestConfigConstructionUtils.Network net_2 =
-        threeProngedNetwork(A0, B0, C0, NODE1, NODE2, NODE3, NODE4, 2);
+        threeProngedNetwork(A0_R, B0_R, C0_R, NODE1_R, NODE2_R, NODE3_R, NODE4_R, 2);
     Invariant property_2 =
-        Invariant.builder().addClause(avoidBoth).build(net_2.tbdd(), net_2.imports().get(NODE4));
+        Invariant.builder().addClause(avoidBoth).build(net_2.tbdd(), net_2.imports().get(NODE4_R));
     NetworkInfo info_2 = net_2.getInfo();
+
+    A0 = A0_R.instantiate(info_2);
+    B0 = B0_R.instantiate(info_2);
+    C0 = C0_R.instantiate(info_2);
+    NODE4 = NODE4_R.instantiate(info_2);
+
     info_2.anyRouteAllowedAt(A0).anyRouteAllowedAt(B0).anyRouteAllowedAt(C0);
     Infer verifier_2 = info_2.toInfer();
     verifier_2.addProperty(NODE4, property_2);
@@ -1188,17 +1273,17 @@ public class InferTest {
   }
 
   private TestConfigConstructionUtils.Network twoPathNetwork(
-      Node NODE_1A,
-      Node NODE_1B,
-      Node NODE_2A,
-      Node NODE_2B,
-      Node NODE_3,
-      Node NODE_4,
+      NodeRecord NODE_1A,
+      NodeRecord NODE_1B,
+      NodeRecord NODE_2A,
+      NodeRecord NODE_2B,
+      NodeRecord NODE_3,
+      NodeRecord NODE_4,
       int faulty) {
     // Initialize constants
-    Map<Node, Configuration> configs = new HashMap<>();
-    Map<Node, RoutingPolicy> imports = new HashMap<>();
-    Map<Node, RoutingPolicy> exports = new HashMap<>();
+    Map<NodeRecord, Configuration> configs = new HashMap<>();
+    Map<NodeRecord, RoutingPolicy> imports = new HashMap<>();
+    Map<NodeRecord, RoutingPolicy> exports = new HashMap<>();
 
     String plain_comm_1 = "100:1";
     String plain_comm_2 = "100:2";
@@ -1238,55 +1323,55 @@ public class InferTest {
     }
 
     // Create BGP processes
-    Map<Node, BgpProcess> processes =
+    Map<NodeRecord, BgpProcess> processes =
         getBgpProcesses(configs, NODE_1A, NODE_1B, NODE_2A, NODE_2B, NODE_3, NODE_4);
 
     processes
         .get(NODE_1A)
         .setNeighbors(
             ImmutableSortedMap.of(
-                NODE_2A.getSingleIp(),
+                NODE_2A.getIp(),
                 getBgpActivePeerConfig(NEXT_DOOR, IMPORT_POLICY_NAME, EXPORT_POLICY_NAME)));
     processes
         .get(NODE_2A)
         .setNeighbors(
             ImmutableSortedMap.of(
-                NODE_1A.getSingleIp(),
+                NODE_1A.getIp(),
                     getBgpActivePeerConfig(NEXT_DOOR, IMPORT_POLICY_NAME, EXPORT_POLICY_NAME),
-                NODE_3.getSingleIp(),
+                NODE_3.getIp(),
                     getBgpActivePeerConfig(NEXT_DOOR, IMPORT_POLICY_NAME, EXPORT_POLICY_NAME)));
 
     processes
         .get(NODE_1B)
         .setNeighbors(
             ImmutableSortedMap.of(
-                NODE_2B.getSingleIp(),
+                NODE_2B.getIp(),
                 getBgpActivePeerConfig(NEXT_DOOR, IMPORT_POLICY_NAME, EXPORT_POLICY_NAME)));
     processes
         .get(NODE_2B)
         .setNeighbors(
             ImmutableSortedMap.of(
-                NODE_1B.getSingleIp(),
+                NODE_1B.getIp(),
                     getBgpActivePeerConfig(NEXT_DOOR, IMPORT_POLICY_NAME, EXPORT_POLICY_NAME),
-                NODE_3.getSingleIp(),
+                NODE_3.getIp(),
                     getBgpActivePeerConfig(NEXT_DOOR, IMPORT_POLICY_NAME, EXPORT_POLICY_NAME)));
 
     processes
         .get(NODE_3)
         .setNeighbors(
             ImmutableSortedMap.of(
-                NODE_4.getSingleIp(),
+                NODE_4.getIp(),
                     getBgpActivePeerConfig(NEXT_DOOR, IMPORT_POLICY_NAME, EXPORT_POLICY_NAME),
-                NODE_2A.getSingleIp(),
+                NODE_2A.getIp(),
                     getBgpActivePeerConfig(NEXT_DOOR, IMPORT_POLICY_NAME, EXPORT_POLICY_NAME),
-                NODE_2B.getSingleIp(),
+                NODE_2B.getIp(),
                     getBgpActivePeerConfig(NEXT_DOOR, IMPORT_POLICY_NAME, EXPORT_POLICY_NAME)));
 
     processes
         .get(NODE_4)
         .setNeighbors(
             ImmutableSortedMap.of(
-                NODE_3.getSingleIp(),
+                NODE_3.getIp(),
                 getBgpActivePeerConfig(NEXT_DOOR, IMPORT_POLICY_NAME, EXPORT_POLICY_NAME)));
 
     // Create policies
@@ -1387,16 +1472,21 @@ public class InferTest {
     String prefix = "25.13.0.0/16";
     PrefixSpace PREFIX = new PrefixSpace(PrefixRange.fromPrefix(Prefix.parse(prefix)));
 
-    Node NODE_1A = new Node("10.0.1.1", "node_1_a");
-    Node NODE_1B = new Node("10.0.1.2", "node_1_b");
-    Node NODE_2A = new Node("10.0.2.1", "node_2_a");
-    Node NODE_2B = new Node("10.0.2.2", "node_2_b");
-    Node NODE_3 = new Node("10.0.3.0", "node_3_");
-    Node NODE_4 = new Node("10.0.4.0", "node_4_");
+    NodeRecord NODE_1A_R = new NodeRecord("10.0.1.1", "node_1_a");
+    NodeRecord NODE_1B_R = new NodeRecord("10.0.1.2", "node_1_b");
+    NodeRecord NODE_2A_R = new NodeRecord("10.0.2.1", "node_2_a");
+    NodeRecord NODE_2B_R = new NodeRecord("10.0.2.2", "node_2_b");
+    NodeRecord NODE_3_R = new NodeRecord("10.0.3.0", "node_3_");
+    NodeRecord NODE_4_R = new NodeRecord("10.0.4.0", "node_4_");
 
     TestConfigConstructionUtils.Network net =
-        twoPathNetwork(NODE_1A, NODE_1B, NODE_2A, NODE_2B, NODE_3, NODE_4, 0);
+        twoPathNetwork(NODE_1A_R, NODE_1B_R, NODE_2A_R, NODE_2B_R, NODE_3_R, NODE_4_R, 0);
     NetworkInfo info = net.getInfo();
+
+    Node NODE_1A = NODE_1A_R.instantiate(info);
+    Node NODE_1B = NODE_1B_R.instantiate(info);
+    Node NODE_4 = NODE_4_R.instantiate(info);
+
     info.anyRouteAllowedAt(NODE_1A).anyRouteAllowedAt(NODE_1B);
     Infer verifier = info.toInfer();
     Invariant property =
@@ -1404,7 +1494,7 @@ public class InferTest {
             net.tbdd(),
             Invariant.clauseBuilder()
                 .avoidPrefix(PREFIX)
-                .build(net.tbdd(), net.imports().get(NODE_4)));
+                .build(net.tbdd(), net.imports().get(NODE_4_R)));
     verifier.addProperty(NODE_4, property);
     Infer.Result result = verifier.run();
     assertTrue(result.verified);
@@ -1412,8 +1502,13 @@ public class InferTest {
     assertTrue(result.counter.isEmpty());
 
     TestConfigConstructionUtils.Network net_1 =
-        twoPathNetwork(NODE_1A, NODE_1B, NODE_2A, NODE_2B, NODE_3, NODE_4, 1);
+        twoPathNetwork(NODE_1A_R, NODE_1B_R, NODE_2A_R, NODE_2B_R, NODE_3_R, NODE_4_R, 1);
     NetworkInfo info_1 = net_1.getInfo();
+
+    NODE_1A = NODE_1A_R.instantiate(info_1);
+    NODE_1B = NODE_1B_R.instantiate(info_1);
+    NODE_4 = NODE_4_R.instantiate(info_1);
+
     info_1.anyRouteAllowedAt(NODE_1A).anyRouteAllowedAt(NODE_1B);
     Infer verifier_1 = info_1.toInfer();
     Invariant property_1 =
@@ -1421,7 +1516,7 @@ public class InferTest {
             net_1.tbdd(),
             Invariant.clauseBuilder()
                 .avoidPrefix(PREFIX)
-                .build(net_1.tbdd(), net_1.imports().get(NODE_4)));
+                .build(net_1.tbdd(), net_1.imports().get(NODE_4_R)));
     verifier_1.addProperty(NODE_4, property_1);
     Infer.Result result_1 = verifier_1.run();
     assertFalse(result_1.verified);
@@ -1429,8 +1524,13 @@ public class InferTest {
     assertTrue(result_1.counter.isEmpty());
 
     TestConfigConstructionUtils.Network net_2 =
-        twoPathNetwork(NODE_1A, NODE_1B, NODE_2A, NODE_2B, NODE_3, NODE_4, 2);
+        twoPathNetwork(NODE_1A_R, NODE_1B_R, NODE_2A_R, NODE_2B_R, NODE_3_R, NODE_4_R, 2);
     NetworkInfo info_2 = net_2.getInfo();
+
+    NODE_1A = NODE_1A_R.instantiate(info_2);
+    NODE_1B = NODE_1B_R.instantiate(info_2);
+    NODE_4 = NODE_4_R.instantiate(info_2);
+
     info_2.anyRouteAllowedAt(NODE_1A).anyRouteAllowedAt(NODE_1B);
     Infer verifier_2 = info_2.toInfer();
     Invariant property_2 =
@@ -1438,7 +1538,7 @@ public class InferTest {
             net_2.tbdd(),
             Invariant.clauseBuilder()
                 .avoidPrefix(PREFIX)
-                .build(net_2.tbdd(), net_2.imports().get(NODE_4)));
+                .build(net_2.tbdd(), net_2.imports().get(NODE_4_R)));
     verifier_2.addProperty(NODE_4, property_2);
     Infer.Result result_2 = verifier_2.run();
     assertTrue(result_2.verified);
@@ -1447,10 +1547,10 @@ public class InferTest {
   }
 
   private TestConfigConstructionUtils.Network simpleNetwork(
-      Ip entry, Ip exit, Node NODE_A, Node NODE_B, Node NODE_C, int faulty) {
-    Map<Node, Configuration> configs = new HashMap<>();
-    Map<Node, RoutingPolicy> imports = new HashMap<>();
-    Map<Node, RoutingPolicy> exports = new HashMap<>();
+      Ip entry, Ip exit, NodeRecord NODE_A, NodeRecord NODE_B, NodeRecord NODE_C, int faulty) {
+    Map<NodeRecord, Configuration> configs = new HashMap<>();
+    Map<NodeRecord, RoutingPolicy> imports = new HashMap<>();
+    Map<NodeRecord, RoutingPolicy> exports = new HashMap<>();
 
     String plain_comm_1 = "100:1";
     String plain_comm_2 = "100:2";
@@ -1482,7 +1582,7 @@ public class InferTest {
     }
 
     // Create BGP processes
-    Map<Node, BgpProcess> processes = getBgpProcesses(configs, NODE_A, NODE_B, NODE_C);
+    Map<NodeRecord, BgpProcess> processes = getBgpProcesses(configs, NODE_A, NODE_B, NODE_C);
 
     processes
         .get(NODE_A)
@@ -1490,23 +1590,23 @@ public class InferTest {
             ImmutableSortedMap.of(
                 entry,
                 getBgpActivePeerConfig(NEXT_DOOR, IMPORT_POLICY_NAME, EXPORT_POLICY_NAME),
-                NODE_B.getSingleIp(),
+                NODE_B.getIp(),
                 getBgpActivePeerConfig(NEXT_DOOR, IMPORT_POLICY_NAME, EXPORT_POLICY_NAME)));
 
     processes
         .get(NODE_B)
         .setNeighbors(
             ImmutableSortedMap.of(
-                NODE_A.getSingleIp(),
+                NODE_A.getIp(),
                     getBgpActivePeerConfig(NEXT_DOOR, IMPORT_POLICY_NAME, EXPORT_POLICY_NAME),
-                NODE_C.getSingleIp(),
+                NODE_C.getIp(),
                     getBgpActivePeerConfig(NEXT_DOOR, IMPORT_POLICY_NAME, EXPORT_POLICY_NAME)));
 
     processes
         .get(NODE_C)
         .setNeighbors(
             ImmutableSortedMap.of(
-                NODE_B.getSingleIp(),
+                NODE_B.getIp(),
                 getBgpActivePeerConfig(NEXT_DOOR, IMPORT_POLICY_NAME, EXPORT_POLICY_NAME),
                 exit,
                 getBgpActivePeerConfig(NEXT_DOOR, IMPORT_POLICY_NAME, EXPORT_POLICY_NAME)));
@@ -1594,22 +1694,32 @@ public class InferTest {
 
     Ip entry = Ip.parse("10.10.0.0");
     Ip exit = Ip.parse("10.10.10.0");
-    Node NODE_A = new Node("10.10.0.1", "node_A");
-    Node NODE_B = new Node("10.10.0.2", "node_B");
-    Node NODE_C = new Node("10.10.0.3", "node_C");
-    Edge target = new Edge(NODE_C.getSingleIp(), exit);
+    NodeRecord NODE_A_R = new NodeRecord("10.10.0.1", "node_A");
+    NodeRecord NODE_B_R = new NodeRecord("10.10.0.2", "node_B");
+    NodeRecord NODE_C_R = new NodeRecord("10.10.0.3", "node_C");
 
-    TestConfigConstructionUtils.Network net = simpleNetwork(entry, exit, NODE_A, NODE_B, NODE_C, 0);
+    TestConfigConstructionUtils.Network net =
+        simpleNetwork(entry, exit, NODE_A_R, NODE_B_R, NODE_C_R, 0);
     NetworkInfo info = net.getInfo();
-    info.addAssumption(new Edge(exit, NODE_C.getSingleIp()), Invariant.getFalse(net.tbdd()));
+
+    Node NODE_C = NODE_C_R.instantiate(info);
+
+    info.addAssumption(
+        info.checkForEdgeViaIps(exit, NODE_C.getSingleIp()).get(), Invariant.getFalse(net.tbdd()));
     Infer verifier = info.toInfer();
     Invariant property =
         new Invariant(
             net.tbdd(),
             Invariant.clauseBuilder()
                 .avoidPrefix(PREFIX)
-                .build(net.tbdd(), net.imports().get(NODE_C)));
-    verifier.addProperty(target, property);
+                .build(net.tbdd(), net.imports().get(NODE_C_R)));
+    Location.Builder edgeBuilder =
+        new Location.Builder(NODE_C_R.getIp().toString(), exit.toString(), null);
+
+    Optional<Location> target = edgeBuilder.instantiate(info).stream().findFirst();
+    assert target.isPresent();
+
+    verifier.addProperty(target.get(), property);
     Infer.Result result = verifier.run();
 
     assertTrue(result.verified);

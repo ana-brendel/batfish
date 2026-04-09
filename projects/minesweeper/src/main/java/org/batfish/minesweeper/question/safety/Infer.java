@@ -3,9 +3,7 @@ package org.batfish.minesweeper.question.safety;
 import net.sf.javabdd.BDD;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
-import org.batfish.common.BatfishException;
 import org.batfish.datamodel.Bgpv4Route;
-import org.batfish.datamodel.Ip;
 import org.batfish.datamodel.routing_policy.RoutingPolicy;
 import org.batfish.minesweeper.bdd.TransferBDD;
 import org.batfish.minesweeper.question.liveness.Path;
@@ -32,9 +30,9 @@ public class Infer {
   private static final Logger LOGGER = LogManager.getLogger(Infer.class);
   private final TransferBDD tbdd;
 
-  private final Map<Ip, Node> nodes = new HashMap<>();
-  // for better runtime, should switch locations to a neighbors map
-  private final Map<Node, Set<Edge>> edgesByDestination;
+  private final Map<String, Node> nodes;
+  private final Set<Edge> edges;
+
   private final Map<Edge, RoutingPolicy> imports;
   private final Map<Edge, RoutingPolicy> exports;
 
@@ -81,16 +79,14 @@ public class Infer {
   }
 
   public Infer(
-      @Nonnull Path.Context context,
-      @Nonnull Map<Ip, Node> nodes,
-      @Nonnull Map<Node, Set<Edge>> edgesByDestination) {
+      @Nonnull Path.Context context, @Nonnull Map<String, Node> nodes, @Nonnull Set<Edge> edges) {
     this.tbdd = context.tbdd();
-    this.nodes.putAll(nodes);
-    this.edgesByDestination = edgesByDestination;
     this.imports = context.imports();
     this.exports = context.exports();
     this.checkedAssumptions = context.checkedAssumptions();
     this.enforcedAssumptions = context.enforcedAssumptions();
+    this.nodes = nodes;
+    this.edges = edges;
   }
 
   public Map<Location, Invariant> getTargets() {
@@ -111,23 +107,18 @@ public class Infer {
         "Only implementations of Location that should be provided are nodes or edges.");
 
     if (loc instanceof Edge edge) {
-      // we only need to check source because if the source is outside the network we cannot verify
-      // anything
-      if (!nodes.containsKey(edge.getSrc())) {
-        throw new BatfishException(
-            "Infer.addProperty() - Edge's source node is not within network. We cannot verify properties originating from outside our network.");
-      } else {
-        targets.put(loc, inv);
-      }
+      assert edges.contains(edge) || edges.contains(edge.flipEdge())
+          : "Infer.addProperty() - Edge is not within network.";
+      assert edge.hasSrcNode()
+          : "Infer.addProperty() - Cannot verify property on edge with out of network source";
+      targets.put(loc, inv);
     } else {
       Node node = (Node) loc;
-      Optional<Ip> ipWithNode = node.getIps().stream().filter(nodes::containsKey).findFirst();
-      if (ipWithNode.isEmpty()) {
-        throw new BatfishException(
-            "Infer.addProperty() - Node provided not within network. We cannot verify a property on a node that is not within our network.");
-      } else {
-        targets.put(nodes.get(ipWithNode.get()), inv);
-      }
+      assert nodes.containsKey(node.getName())
+          : "Infer.addProperty() - Node provided "
+              + node
+              + " not within network. We cannot verify a property on a node that is not within our network.";
+      targets.put(node, inv);
     }
     return this;
   }
@@ -141,7 +132,7 @@ public class Infer {
       working.add(location);
     }
     for (Location location : enforcedAssumptions.keySet()) {
-      if (location instanceof Edge edge && !nodes.containsKey(edge.getDst())) {
+      if (location instanceof Edge edge && !edge.hasDstNode()) {
         assert !inferred.containsKey(location);
         inferred.putIfAbsent(location, this.enforcedAssumptions.get(location).copy());
         working.add(location);
@@ -157,11 +148,12 @@ public class Infer {
           : "Trying to get existing invariant for unvisited location: " + location;
       Invariant property = inferred.get(location);
       assert !property.isFalse();
-      if (location instanceof Edge edge && nodes.containsKey(edge.getSrc())) {
+      if (location instanceof Edge edge && edge.hasSrcNode()) {
         RoutingPolicy exportPolicy = exports.get(edge);
         Invariant wp =
             exportPolicy == null ? property.copy() : property.weakestPrecondition(exportPolicy);
-        Node src = nodes.get(edge.getSrc());
+        Node src = edge.getSrcNode();
+        assert src != null;
         boolean firstVisit = !inferred.containsKey(src);
         // get inferred if present, otherwise get enforced assumption, otherwise default is true
         Invariant existing =
@@ -178,28 +170,26 @@ public class Infer {
           working.add(src);
         }
       } else if (location instanceof Node node) {
-        for (Location l : edgesByDestination.get(node)) {
-          if (l instanceof Edge edge && edge.isDst(node)) {
-            RoutingPolicy importPolicy = imports.get(edge);
-            Invariant wp =
-                importPolicy == null ? property.copy() : property.weakestPrecondition(importPolicy);
-            boolean firstVisit = !inferred.containsKey(edge);
-            // get inferred if present, otherwise get enforced assumption, otherwise default is true
-            Invariant existing =
-                inferred.getOrDefault(
-                    edge, enforcedAssumptions.getOrDefault(edge, new Invariant(tbdd)));
-            Invariant updated = strongestCommonImplicant(existing, wp);
-            wp.free();
-            inferred.put(edge, updated);
-            // if we inferred false, but the edge is incoming then this isn't necessarily a
-            // counterexample - rather a condition which should be checked if it holds
-            if (updated.isFalse() && !checkedAssumptions.containsKey(edge)) {
-              existing.free();
-              return Optional.of(new CounterExample(edge, property, location));
-            } else if ((firstVisit || !existing.equals(updated)) && !working.contains(edge)) {
-              existing.free();
-              working.add(edge);
-            }
+        for (Edge edge : node.getAllIncomingEdges()) {
+          RoutingPolicy importPolicy = imports.get(edge);
+          Invariant wp =
+              importPolicy == null ? property.copy() : property.weakestPrecondition(importPolicy);
+          boolean firstVisit = !inferred.containsKey(edge);
+          // get inferred if present, otherwise get enforced assumption, otherwise default is true
+          Invariant existing =
+              inferred.getOrDefault(
+                  edge, enforcedAssumptions.getOrDefault(edge, new Invariant(tbdd)));
+          Invariant updated = strongestCommonImplicant(existing, wp);
+          wp.free();
+          inferred.put(edge, updated);
+          // if we inferred false, but the edge is incoming then this isn't necessarily a
+          // counterexample - rather a condition which should be checked if it holds
+          if (updated.isFalse() && !checkedAssumptions.containsKey(edge)) {
+            existing.free();
+            return Optional.of(new CounterExample(edge, property, location));
+          } else if ((firstVisit || !existing.equals(updated)) && !working.contains(edge)) {
+            existing.free();
+            working.add(edge);
           }
         }
       }
@@ -263,7 +253,7 @@ public class Infer {
 
     // Lightyear style check to only run during testing
     assert counter.isPresent()
-            || (new Lightyear(this.nodes, this.imports, this.exports)).check(inferred).isEmpty()
+            || (new Lightyear(this.imports, this.exports)).check(inferred).isEmpty()
         : "Checks that all invariants are sufficient as preconditions to imply the following postcondition";
 
     return new Result(counter.isEmpty() && checks.isEmpty(), inferred, counter, checks);
@@ -284,14 +274,13 @@ public class Infer {
   // properties
   public Refine refiner() {
     return Refine.builder(this.tbdd)
-        .setNodes(this.nodes)
         .setImports(this.imports)
         .setExports(this.exports)
         .setTargets(copyInferred(this.targets))
         .setAssumptions(copyInferred(this.checkedAssumptions))
         .setIncoming(
             inferred.keySet().stream()
-                .filter(x -> x instanceof Edge e && !nodes.containsKey(e.getSrc()))
+                .filter(x -> x instanceof Edge e && !e.hasSrcNode())
                 .collect(Collectors.toSet()))
         .setInferred(copyInferred(this.inferred))
         .build();

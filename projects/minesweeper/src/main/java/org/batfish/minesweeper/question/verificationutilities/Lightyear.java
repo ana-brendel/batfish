@@ -1,6 +1,5 @@
 package org.batfish.minesweeper.question.verificationutilities;
 
-import org.batfish.datamodel.Ip;
 import org.batfish.datamodel.routing_policy.RoutingPolicy;
 
 import java.util.AbstractMap;
@@ -9,13 +8,10 @@ import java.util.Map;
 import java.util.Optional;
 
 public class Lightyear {
-  private final Map<Ip, Node> nodes;
   private final Map<Edge, RoutingPolicy> imports;
   private final Map<Edge, RoutingPolicy> exports;
 
-  public Lightyear(
-      Map<Ip, Node> nodes, Map<Edge, RoutingPolicy> imports, Map<Edge, RoutingPolicy> exports) {
-    this.nodes = nodes;
+  public Lightyear(Map<Edge, RoutingPolicy> imports, Map<Edge, RoutingPolicy> exports) {
     this.imports = imports;
     this.exports = exports;
   }
@@ -33,11 +29,11 @@ public class Lightyear {
     for (Location location : invariants.keySet()) {
       Invariant precondition = invariants.get(location);
       // we only check precondition / postcondition agreement if the postcondition is in the network
-      if (location instanceof Edge edge && nodes.containsKey(edge.getDst())) {
-        assert invariants.containsKey(nodes.get(edge.getDst()));
-        Invariant postcondition = invariants.get(nodes.get(edge.getDst()));
+      if (location instanceof Edge edge && edge.hasDstNode()) {
+        assert invariants.containsKey(edge.getDstNode());
+        Invariant postcondition = invariants.get(edge.getDstNode());
         Map.Entry<Location, Location> evaluated =
-            new AbstractMap.SimpleEntry<>(edge, nodes.get(edge.getDst()));
+            new AbstractMap.SimpleEntry<>(edge, edge.getDstNode());
         checkResults.put(evaluated, completeCheck(precondition, postcondition, imports.get(edge)));
         if (!checkResults.get(evaluated)) {
           return Optional.of(evaluated);

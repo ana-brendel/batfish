@@ -151,7 +151,7 @@ public class PathAnalyzer {
     }
     LOGGER.info("Searching for paths...");
     List<Path.Builder> potentialPaths = this.generatePathBuilders();
-    LOGGER.info("FINISHED, found potential paths");
+    LOGGER.info("FINISHED, found {} potential paths", potentialPaths.size());
 
     LOGGER.info("Heap Used (bytes): {}", usage.getUsed());
     LOGGER.info("Heap Max (bytes): {}", usage.getMax());

@@ -28,6 +28,7 @@ import org.batfish.minesweeper.question.searchroutepolicies.RegexConstraint;
 import org.batfish.question.bgpsessionstatus.BgpSessionAnswererUtils;
 import org.batfish.question.bgpsessionstatus.BgpSessionCompatibilityAnswerer;
 import org.batfish.question.bgpsessionstatus.BgpSessionCompatibilityQuestion;
+import org.batfish.specifier.SpecifierContext;
 
 import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
@@ -675,7 +676,11 @@ public class NetworkInfo {
       @Nonnull Set<RegexConstraint> communityRegexes,
       @Nonnull Set<RegexConstraint> asPathRegexes,
       @Nullable Invariant.Builder defaultIncoming) {
-    Map<String, Configuration> configs = batfish.specifierContext(snapshot).getConfigs();
+    SpecifierContext context = batfish.specifierContext(snapshot);
+    if (context == null) {
+      throw new BatfishException("Cannot get the SpecifierContext from snapshot");
+    }
+    Map<String, Configuration> configs = context.getConfigs();
     BgpSessionCompatibilityAnswerer answerer =
         new BgpSessionCompatibilityAnswerer(new BgpSessionCompatibilityQuestion(), batfish);
     List<Row> sessions = answerer.getSessionRows(snapshot);
@@ -758,6 +763,9 @@ public class NetworkInfo {
       String nodeName = upperCaseNodeName.toLowerCase();
       Configuration config = configs.get(upperCaseNodeName);
       relevantPolicies.put(config, new HashSet<>());
+      if (config.getDefaultVrf() == null || config.getDefaultVrf().getBgpProcess() == null) {
+        continue;
+      }
       BgpProcess bgp = config.getDefaultVrf().getBgpProcess();
       bgp.getActiveNeighbors()
           .forEach(

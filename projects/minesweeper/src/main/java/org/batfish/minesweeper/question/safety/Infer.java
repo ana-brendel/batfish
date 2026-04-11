@@ -46,7 +46,6 @@ public class Infer {
   private final Map<Location, Invariant> inferred = new HashMap<>();
 
   private final Map<RoutingPolicy, List<TransferReturn>> computedPathsCache = new HashMap<>();
-  private final Map<RoutingPolicy, Map<Invariant, Invariant>> wpCache = new HashMap<>();
 
   /// Inference counterexample, used for when we infer false within the network
   public record CounterExample(Location location, Invariant post, Location cause) {}
@@ -150,16 +149,11 @@ public class Infer {
     return checkedAssumptions.containsKey(location) && checkedAssumptions.get(location).isFalse();
   }
 
-  private Invariant cachedWP(Invariant post, RoutingPolicy policy) {
+  private Invariant getWeakestPrecondition(Invariant post, RoutingPolicy policy) {
     if (policy == null) {
       return post.copy();
-    } else if (wpCache.containsKey(policy) && wpCache.get(policy).containsKey(post)) {
-      return wpCache.get(policy).get(post).copy();
     } else {
-      wpCache
-          .computeIfAbsent(policy, k -> new HashMap<>())
-          .put(post, post.weakestPrecondition(policy, true, computedPathsCache));
-      return wpCache.get(policy).get(post).copy();
+      return post.weakestPrecondition(policy, true, computedPathsCache);
     }
   }
 
@@ -180,7 +174,7 @@ public class Infer {
           continue;
         }
         RoutingPolicy exportPolicy = exports.get(edge);
-        Invariant wp = this.cachedWP(property, exportPolicy);
+        Invariant wp = this.getWeakestPrecondition(property, exportPolicy);
         boolean firstVisit = !inferred.containsKey(src);
         // get inferred if present, otherwise get enforced assumption, otherwise default is true
         Invariant existing =
@@ -204,7 +198,7 @@ public class Infer {
             continue;
           }
           RoutingPolicy importPolicy = imports.get(edge);
-          Invariant wp = this.cachedWP(property, importPolicy);
+          Invariant wp = this.getWeakestPrecondition(property, importPolicy);
           boolean firstVisit = !inferred.containsKey(edge);
           // get inferred if present, otherwise get enforced assumption, otherwise default is true
           Invariant existing =

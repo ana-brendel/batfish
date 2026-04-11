@@ -22,7 +22,6 @@ import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
 import java.util.Map;
 import java.util.Objects;
-import java.util.Optional;
 import java.util.Set;
 import java.util.Stack;
 import java.util.stream.Collectors;
@@ -168,6 +167,14 @@ public class Path {
       }
     }
     assert properties.length - 1 == steps.length - 1;
+
+    // checked assumptions should just store the origins that we want to consider
+    if (!context.checkedAssumptions.containsKey(steps[steps.length - 1])) {
+      throw new BatfishException(
+          "Expect there to be some assumption that we can used to get counterexample, but it is not there. Current path: "
+              + builder);
+    }
+
     // the assumptions used here should be the assumptions that we want checked
     BDD currentAssumption = context.checkedAssumptions.get(steps[steps.length - 1]).getBDD();
     currentAssumption.andWith(context.prefixSpaceToBDD(this.prefix));
@@ -299,12 +306,12 @@ public class Path {
       } else {
         Location currentLocation = steps.peek();
         if (step instanceof Edge edge && currentLocation instanceof Node node) {
-          Optional<Edge> lastEdge = Optional.empty();
-          if (steps.size() >= 2 && steps.elementAt(steps.size() - 2).copy() instanceof Edge e) {
-            lastEdge = Optional.of(e);
-          }
+          // Optional<Edge> lastEdge = Optional.empty();
+          // if (steps.size() >= 2 && steps.elementAt(steps.size() - 2).copy() instanceof Edge e) {
+          // lastEdge = Optional.of(e);
+          // }
           return edge.isDst(node) // this edge leads to this node
-              && (lastEdge.isEmpty() || !lastEdge.get().equals(edge)) // not crossing back over edge
+              && !steps.contains(edge.getSrcNode()) // not crossing back over edge
               && !steps.contains(edge); // have no previously crossed this edge
         } else if (step instanceof Node node && currentLocation instanceof Edge edge) {
           // edge came from node and we haven't visited this node yet

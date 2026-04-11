@@ -17,6 +17,10 @@ import java.util.stream.Collectors;
 public abstract class Location implements Comparable<Location> {
   public abstract Location copy();
 
+  public String toUniqueString() {
+    return this.toString();
+  }
+
   /// Builder for location to take in the location independent of the network info
   public static class Builder {
     private final String PROP_SRC = "source";

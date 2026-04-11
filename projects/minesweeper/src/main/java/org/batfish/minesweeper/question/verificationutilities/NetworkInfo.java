@@ -363,7 +363,7 @@ public class NetworkInfo {
   /// String representation of the provided location within context of the network (ie using node
   /// names  when possible in place of ip addresses)
   public String locationStr(Location loc) {
-    return loc.toString();
+    return loc.toUniqueString();
   }
 
   /// Returns the assumptions that should be checked of the network
@@ -605,9 +605,7 @@ public class NetworkInfo {
           nodeNameToEdges.put(
               name,
               node.getAllIncomingEdges().stream()
-                  .map(
-                      e ->
-                          e.getSrcNode() != null ? e.getSrcNode().getName() : e.getSrc().toString())
+                  .map(Edge::toUniqueString)
                   .collect(Collectors.toSet()));
         });
 
@@ -627,7 +625,8 @@ public class NetworkInfo {
         .forEach(
             loc -> {
               if (loc instanceof Edge e) {
-                externals.add(e.getDst().toString());
+                // externals.add(e.getDst().toString());
+                externals.add(e.toUniqueString());
                 externalEdgeCount.addAndGet(1);
               }
             });
@@ -637,8 +636,8 @@ public class NetworkInfo {
             .put(
                 Setup.NODES_COL,
                 "EXTERNAL NEIGHBORS ("
-                    + externals.size()
-                    + " distinct neighbors, "
+                    // + externals.size()
+                    // + " distinct neighbors, "
                     + externalEdgeCount
                     + " distinct edges)")
             .put(Setup.NEIGHBORS_COL, externals.stream().sorted().collect(Collectors.toList()))

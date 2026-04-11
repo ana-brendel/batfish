@@ -60,21 +60,29 @@ public class UpdatedPathAnalyzer extends PathAnalyzer {
 
   @Override
   public Pair<Optional<Path>, List<Path>> run() {
+    Path.Context updateContext =
+        new Path.Context(
+            this.context.tbdd(),
+            this.origins, // This is what is updated so that we check the correct locations
+            this.context.enforcedAssumptions(),
+            this.context.imports(),
+            this.context.exports(),
+            this.context.default_assumption());
     Optional<Path> good =
-        this.find().map(steps -> steps.createPath(this.context, this.prefix, this.paths));
+        this.find().map(steps -> steps.createPath(updateContext, this.prefix, this.paths));
     if (good.isPresent()) {
       return Pair.of(good, List.of());
     } else if (!interferingPaths.isEmpty()) {
       return Pair.of(
           good,
           interferingPaths.stream()
-              .map(steps -> steps.createPath(this.context, this.prefix, this.paths))
+              .map(steps -> steps.createPath(updateContext, this.prefix, this.paths))
               .toList());
     } else {
       return Pair.of(
           good,
           incompletePaths.stream()
-              .map(steps -> steps.createPath(this.context, this.prefix, this.paths))
+              .map(steps -> steps.createPath(updateContext, this.prefix, this.paths))
               .toList());
     }
   }
@@ -161,9 +169,17 @@ public class UpdatedPathAnalyzer extends PathAnalyzer {
       Location step, RoutingPolicy policy, Invariant post, Steps path) {
     if (path.canTakeStep(step)) {
       Invariant wp = policy == null ? post.copy() : post.weakestPrecondition(policy, false);
-      if (wp.isFalse()) {
+      if (wp.isFalse() && !this.origins.containsKey(step)) {
+        // inferred false pre-emptively along the way
         if (incompletePaths.size() < 5) {
           incompletePaths.add(path.addStep(step));
+        }
+        return false;
+      } else if (wp.isFalse()) {
+        // at origin but we inferred false, we don't need to update paths, but this is interfering
+        assert this.origins.containsKey(step);
+        if (interferingPaths.size() < 5) {
+          interferingPaths.add(path.addStep(step));
         }
         return false;
       } else {
@@ -249,14 +265,25 @@ public class UpdatedPathAnalyzer extends PathAnalyzer {
       int i = propertyArr.length - 1;
       while (!togo.isEmpty()) {
         Location step = togo.remove();
+        assert locationArr[i].equals(step) : "Inaccurately reconstructing path";
         // find what the invariant is based on which remaining path matches
+        propertyArr[i] = null;
         for (Map.Entry<Invariant, Steps> condition : paths.get(step).entrySet()) {
           if (condition.getValue().steps.equals(togo)) {
             propertyArr[i] = condition.getKey();
             break;
           }
         }
+        // if there is no condition matching the path, that means that it is a dead end
+        if (propertyArr[i] == null) {
+          propertyArr[i] = Invariant.getFalse(context.tbdd());
+        }
         i -= 1;
+      }
+
+      // sanity check
+      for (int j = 0; j < propertyArr.length - 2; j++) {
+        assert !propertyArr[j].isFalse() || propertyArr[j + 1].isFalse();
       }
 
       return Path.create(locationArr, propertyArr, context, prefix);

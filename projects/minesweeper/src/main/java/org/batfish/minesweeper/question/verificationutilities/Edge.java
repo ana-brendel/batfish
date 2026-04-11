@@ -162,6 +162,13 @@ public class Edge extends Location {
   }
 
   @Override
+  public String toUniqueString() {
+    String srcStr = this.srcNode != null ? " (" + this.srcNode.getName() + ")" : "";
+    String dstStr = this.dstNode != null ? " (" + this.dstNode.getName() + ")" : "";
+    return src + srcStr + " -> " + dst + dstStr;
+  }
+
+  @Override
   public int compareTo(@Nonnull Location location) {
     if (location instanceof Edge edge) {
       if (edge.src.equals(this.src)) {

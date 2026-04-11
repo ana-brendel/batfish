@@ -101,6 +101,10 @@ public class EdgesAnswerer extends Answerer {
     super(question, batfish);
   }
 
+  public static EdgesAnswerer getBgpEdgesAnswerer(IBatfish batfish) {
+    return new EdgesAnswerer(new EdgesQuestion(".*", ".*", EdgeType.BGP, false), batfish);
+  }
+
   @Override
   public AnswerElement answer(NetworkSnapshot snapshot) {
     EdgesQuestion question = (EdgesQuestion) _question;
@@ -132,7 +136,7 @@ public class EdgesAnswerer extends Answerer {
   }
 
   @VisibleForTesting
-  static Collection<Row> generateRows(
+  public static Collection<Row> generateRows(
       Map<String, Configuration> configurations,
       NetworkSnapshot snapshot,
       Topology topology,
@@ -541,7 +545,7 @@ public class EdgesAnswerer extends Answerer {
 
   /** Generate the table metadata based on the type of edge requested */
   @VisibleForTesting
-  static TableMetadata getTableMetadata(EdgeType edgeType) {
+  public static TableMetadata getTableMetadata(EdgeType edgeType) {
     ImmutableList.Builder<ColumnMetadata> columnBuilder = ImmutableList.builder();
     switch (edgeType) {
       case LAYER3:

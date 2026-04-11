@@ -574,7 +574,10 @@ public class Invariant {
    * @param includeDenied true if denied routes should be included
    * @return weakest precondition for this invariant to hold on policy
    */
-  public Invariant weakestPrecondition(@Nonnull RoutingPolicy policy, boolean includeDenied) {
+  public Invariant weakestPrecondition(
+      @Nonnull RoutingPolicy policy,
+      boolean includeDenied,
+      Map<RoutingPolicy, List<TransferReturn>> cache) {
     if (policy.getStatements().isEmpty()) {
       if (policy.getOwner() == null
           || policy.getOwner().getDefaultInboundAction() == LineAction.PERMIT) {
@@ -585,13 +588,20 @@ public class Invariant {
     } else {
       TransferBDD.Context context = TransferBDD.Context.forPolicy(policy);
       List<TransferReturn> paths;
-      try {
-        paths = tbdd.computePaths(policy.getStatements(), context, false);
-      } catch (Exception e) {
-        String name =
-            policy.getOwner() != null ? policy.getOwner().getHostname() : "policy owner null";
-        throw new BatfishException(
-            "Unexpected error analyzing policy " + policy.getName() + " in node " + name, e);
+      if (cache != null && cache.containsKey(policy)) {
+        paths = cache.get(policy);
+      } else {
+        try {
+          paths = tbdd.computePaths(policy.getStatements(), context, false);
+          if (cache != null) {
+            cache.put(policy, paths);
+          }
+        } catch (Exception e) {
+          String name =
+              policy.getOwner() != null ? policy.getOwner().getHostname() : "policy owner null";
+          throw new BatfishException(
+              "Unexpected error analyzing policy " + policy.getName() + " in node " + name, e);
+        }
       }
       BDD acceptedWP =
           TransferBDDUtils.weakestPrecondition(
@@ -600,12 +610,17 @@ public class Invariant {
               tbdd,
               (post, path) -> conditionsForConstraint(tbdd, post, path.getOutputRoute()));
 
-      return new Invariant(
-          tbdd,
+      BDD result =
           includeDenied
               ? acceptedWP.orWith(TransferBDDUtils.deniedRoutes(paths, tbdd))
-              : acceptedWP);
+              : acceptedWP;
+
+      return new Invariant(tbdd, result);
     }
+  }
+
+  public Invariant weakestPrecondition(@Nonnull RoutingPolicy policy, boolean includeDenied) {
+    return this.weakestPrecondition(policy, includeDenied, null);
   }
 
   /**
@@ -750,6 +765,7 @@ public class Invariant {
     BDD strongest =
         TransferBDDUtils.strongestPostcondition(paths, this.getBDD(), tbdd, Function.identity());
     return new Invariant(tbdd, strongest);
+    // strongest.existEq(tbdd.getOriginalRoute().getProtocolHistory().support()));
   }
 
   @Override

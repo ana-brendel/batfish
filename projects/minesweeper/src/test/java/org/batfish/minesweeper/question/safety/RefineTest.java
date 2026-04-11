@@ -4,7 +4,9 @@ import org.junit.Test;
 
 public class RefineTest {
   @Test
-  public void blank() {}
+  public void blank() {
+    // commented out tests because the refinement flag is not used
+  }
 }
   //  private static final NetworkFactory nf = new NetworkFactory();
   //

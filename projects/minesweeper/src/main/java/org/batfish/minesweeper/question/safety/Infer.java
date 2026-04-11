@@ -6,6 +6,7 @@ import org.apache.logging.log4j.Logger;
 import org.batfish.datamodel.Bgpv4Route;
 import org.batfish.datamodel.routing_policy.RoutingPolicy;
 import org.batfish.minesweeper.bdd.TransferBDD;
+import org.batfish.minesweeper.bdd.TransferReturn;
 import org.batfish.minesweeper.question.liveness.Path;
 import org.batfish.minesweeper.question.verificationutilities.Edge;
 import org.batfish.minesweeper.question.verificationutilities.Invariant;
@@ -16,6 +17,7 @@ import org.batfish.minesweeper.question.verificationutilities.Node;
 import javax.annotation.Nonnull;
 import java.util.HashMap;
 import java.util.LinkedList;
+import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Queue;
@@ -40,7 +42,11 @@ public class Infer {
   private final Map<Location, Invariant> checkedAssumptions;
   private final Map<Location, Invariant> enforcedAssumptions;
   private final Queue<Location> working = new LinkedList<>();
+  // private final InferenceLoopQueue working = new InferenceLoopQueue();
   private final Map<Location, Invariant> inferred = new HashMap<>();
+
+  private final Map<RoutingPolicy, List<TransferReturn>> computedPathsCache = new HashMap<>();
+  private final Map<RoutingPolicy, Map<Invariant, Invariant>> wpCache = new HashMap<>();
 
   /// Inference counterexample, used for when we infer false within the network
   public record CounterExample(Location location, Invariant post, Location cause) {}
@@ -140,6 +146,23 @@ public class Infer {
     }
   }
 
+  private boolean checksFalseAssumption(Location location) {
+    return checkedAssumptions.containsKey(location) && checkedAssumptions.get(location).isFalse();
+  }
+
+  private Invariant cachedWP(Invariant post, RoutingPolicy policy) {
+    if (policy == null) {
+      return post.copy();
+    } else if (wpCache.containsKey(policy) && wpCache.get(policy).containsKey(post)) {
+      return wpCache.get(policy).get(post).copy();
+    } else {
+      wpCache
+          .computeIfAbsent(policy, k -> new HashMap<>())
+          .put(post, post.weakestPrecondition(policy, true, computedPathsCache));
+      return wpCache.get(policy).get(post).copy();
+    }
+  }
+
   /// Performs iterative invariant inference using the weakest preconditions
   private Optional<CounterExample> inferenceLoop() {
     while (!working.isEmpty()) {
@@ -149,11 +172,15 @@ public class Infer {
       Invariant property = inferred.get(location);
       assert !property.isFalse();
       if (location instanceof Edge edge && edge.hasSrcNode()) {
-        RoutingPolicy exportPolicy = exports.get(edge);
-        Invariant wp =
-            exportPolicy == null ? property.copy() : property.weakestPrecondition(exportPolicy);
         Node src = edge.getSrcNode();
         assert src != null;
+        if (this.checksFalseAssumption(src)) {
+          // inferred can be false because false implies anything
+          inferred.put(src, Invariant.getFalse(this.tbdd));
+          continue;
+        }
+        RoutingPolicy exportPolicy = exports.get(edge);
+        Invariant wp = this.cachedWP(property, exportPolicy);
         boolean firstVisit = !inferred.containsKey(src);
         // get inferred if present, otherwise get enforced assumption, otherwise default is true
         Invariant existing =
@@ -171,9 +198,13 @@ public class Infer {
         }
       } else if (location instanceof Node node) {
         for (Edge edge : node.getAllIncomingEdges()) {
+          if (this.checksFalseAssumption(edge)) {
+            // inferred can be false because false implies anything
+            inferred.put(edge, Invariant.getFalse(this.tbdd));
+            continue;
+          }
           RoutingPolicy importPolicy = imports.get(edge);
-          Invariant wp =
-              importPolicy == null ? property.copy() : property.weakestPrecondition(importPolicy);
+          Invariant wp = this.cachedWP(property, importPolicy);
           boolean firstVisit = !inferred.containsKey(edge);
           // get inferred if present, otherwise get enforced assumption, otherwise default is true
           Invariant existing =

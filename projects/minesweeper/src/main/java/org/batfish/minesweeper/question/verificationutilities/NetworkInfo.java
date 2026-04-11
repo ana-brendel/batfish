@@ -4,6 +4,7 @@ import com.google.common.annotations.VisibleForTesting;
 import net.sf.javabdd.BDD;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
+import org.batfish.common.Answerer;
 import org.batfish.common.BatfishException;
 import org.batfish.common.NetworkSnapshot;
 import org.batfish.common.plugin.IBatfish;
@@ -23,11 +24,10 @@ import org.batfish.minesweeper.bdd.TransferBDD;
 import org.batfish.minesweeper.question.liveness.InterferenceCheck;
 import org.batfish.minesweeper.question.liveness.Path;
 import org.batfish.minesweeper.question.liveness.PathAnalyzer;
+import org.batfish.minesweeper.question.liveness.UpdatedPathAnalyzer;
 import org.batfish.minesweeper.question.safety.Infer;
 import org.batfish.minesweeper.question.searchroutepolicies.RegexConstraint;
-import org.batfish.question.bgpsessionstatus.BgpSessionAnswererUtils;
-import org.batfish.question.bgpsessionstatus.BgpSessionCompatibilityAnswerer;
-import org.batfish.question.bgpsessionstatus.BgpSessionCompatibilityQuestion;
+import org.batfish.question.edges.EdgesQuestion;
 import org.batfish.specifier.SpecifierContext;
 
 import javax.annotation.Nonnull;
@@ -549,14 +549,6 @@ public class NetworkInfo {
     return new Lightyear(this.imports, this.exports);
   }
 
-  private Map<Node, Set<Edge>> getEdgesByDestination() {
-    Map<Node, Set<Edge>> edgesByDestination = new HashMap<>();
-    for (Node node : this.nodeByName.values()) {
-      edgesByDestination.put(node, node.getAllIncomingEdges());
-    }
-    return edgesByDestination;
-  }
-
   /// Returns an Infer object reflective of the network which can be used for safety property
   /// verification
   public Infer toInfer() {
@@ -585,7 +577,7 @@ public class NetworkInfo {
             this.imports,
             this.exports,
             this.defaultIncoming);
-    return new PathAnalyzer(context, prefix, location, target, this.getEdgesByDestination());
+    return new UpdatedPathAnalyzer(context, prefix, location, target);
   }
 
   /// Returns a PathAnalyzer objective reflective of the network which can be used for interference
@@ -600,7 +592,7 @@ public class NetworkInfo {
             this.imports,
             this.exports,
             this.defaultIncoming);
-    return new InterferenceCheck(context, prefix, location, target, this.getEdgesByDestination());
+    return new InterferenceCheck(context, prefix, location, target);
   }
 
   /// Returns TableAnswerElement which lists all locations within the network (used when no target
@@ -681,28 +673,62 @@ public class NetworkInfo {
       throw new BatfishException("Cannot get the SpecifierContext from snapshot");
     }
     Map<String, Configuration> configs = context.getConfigs();
-    BgpSessionCompatibilityAnswerer answerer =
-        new BgpSessionCompatibilityAnswerer(new BgpSessionCompatibilityQuestion(), batfish);
-    List<Row> sessions = answerer.getSessionRows(snapshot);
+
+    //  BgpSessionCompatibilityAnswerer answerer =
+    //          new BgpSessionCompatibilityAnswerer(new BgpSessionCompatibilityQuestion(), batfish);
+    //  List<Row> sessions = ((TableAnswerElement) answerer.answer(snapshot)).getRowsList();
+
+    batfish.computeDataPlane(snapshot);
+    EdgesQuestion question = new EdgesQuestion(".*", ".*", EdgesQuestion.EdgeType.BGP, false);
+    Answerer answerer = batfish.createAnswerer(question);
+    if (answerer == null) {
+      throw new BatfishException("Null answerer created");
+    }
+    List<Row> sessions = ((TableAnswerElement) answerer.answer(snapshot)).getRowsList();
+
+    // ============================== EdgeAnswerer.answer() ============================== //
+    //    EdgesQuestion question = new EdgesQuestion(".*", ".*", EdgesQuestion.EdgeType.BGP, false);
+    //    Map<String, Configuration> configurations = batfish.loadConfigurations(snapshot);
+    //    Set<String> includeNodes =
+    //        question.getNodeSpecifier().resolve(batfish.specifierContext(snapshot));
+    //    Set<String> includeRemoteNodes =
+    //        question.getRemoteNodeSpecifier().resolve(batfish.specifierContext(snapshot));
+    //
+    //    TopologyProvider topologyProvider = batfish.getTopologyProvider();
+    //    Topology topology =
+    //        question.getInitial()
+    //            ? topologyProvider.getInitialLayer3Topology(snapshot)
+    //            : topologyProvider.getLayer3Topology(snapshot);
+    //    Collection<Row> sessions =
+    //        generateRows(
+    //            configurations,
+    //            snapshot,
+    //            topology,
+    //            batfish.getTopologyProvider(),
+    //            includeNodes,
+    //            includeRemoteNodes,
+    //            question.getEdgeType(),
+    //            question.getInitial());
+    // =================================================================================== //
+
+    String COL_NODE = "Node";
+    String COL_REMOTE_NODE = "Remote_Node";
+    String COL_AS_NUMBER = "AS_Number";
+    String COL_REMOTE_AS_NUMBER = "Remote_AS_Number";
+    String COL_IP = "IP";
+    String COL_REMOTE_IP = "Remote_IP";
 
     for (Row row : sessions) {
-      String vrf = row.getString(BgpSessionAnswererUtils.COL_VRF);
-      if (!vrf.equals("default")) {
-        continue;
-      }
       Ip srcIp =
-          row.getString(BgpSessionAnswererUtils.COL_LOCAL_IP) == null
-              ? null
-              : Ip.tryParse(row.getString(BgpSessionAnswererUtils.COL_LOCAL_IP)).orElse(null);
+          row.getString(COL_IP) == null ? null : Ip.tryParse(row.getString(COL_IP)).orElse(null);
       Ip dstIp =
-          row.get(BgpSessionAnswererUtils.COL_REMOTE_IP).get("value") == null
+          row.get(COL_REMOTE_IP).get("value") == null
               ? null
-              : Ip.tryParse(row.get(BgpSessionAnswererUtils.COL_REMOTE_IP).get("value").asText())
-                  .orElse(null);
+              : Ip.tryParse(row.get(COL_REMOTE_IP).get("value").asText()).orElse(null);
 
       String srcNodeName =
-          row.get(BgpSessionAnswererUtils.COL_NODE).get("name") != null
-              ? row.get(BgpSessionAnswererUtils.COL_NODE).get("name").textValue().toLowerCase()
+          row.get(COL_NODE).get("name") != null
+              ? row.get(COL_NODE).get("name").textValue().toLowerCase()
               : null;
 
       if (srcIp == null && srcNodeName != null && configs.containsKey(srcNodeName)) {
@@ -710,11 +736,8 @@ public class NetworkInfo {
       }
 
       String dstNodeName =
-          row.get(BgpSessionAnswererUtils.COL_REMOTE_NODE).get("name") != null
-              ? row.get(BgpSessionAnswererUtils.COL_REMOTE_NODE)
-                  .get("name")
-                  .textValue()
-                  .toLowerCase()
+          row.get(COL_REMOTE_NODE).get("name") != null
+              ? row.get(COL_REMOTE_NODE).get("name").textValue().toLowerCase()
               : null;
 
       if (dstIp == null && dstNodeName != null && configs.containsKey(dstNodeName)) {
@@ -739,9 +762,7 @@ public class NetworkInfo {
       NamedIp dstKey = new NamedIp(dstIp, dstNodeName);
 
       boolean eBGP =
-          !Objects.equals(
-              row.getString(BgpSessionAnswererUtils.COL_LOCAL_AS),
-              row.getString(BgpSessionAnswererUtils.COL_REMOTE_AS));
+          !Objects.equals(row.getString(COL_AS_NUMBER), row.getString(COL_REMOTE_AS_NUMBER));
 
       if (edges.containsKey(srcKey) && edges.get(srcKey).containsKey(dstKey)) {
         throw new BatfishException("Expected to have a unique connection");
@@ -761,6 +782,11 @@ public class NetworkInfo {
 
     for (String upperCaseNodeName : configs.keySet()) {
       String nodeName = upperCaseNodeName.toLowerCase();
+
+      if (!nodeByName.containsKey(nodeName)) {
+        nodeByName.put(nodeName, new Node(nodeName));
+      }
+
       Configuration config = configs.get(upperCaseNodeName);
       relevantPolicies.put(config, new HashSet<>());
       if (config.getDefaultVrf() == null || config.getDefaultVrf().getBgpProcess() == null) {
@@ -830,5 +856,9 @@ public class NetworkInfo {
                 }
               });
     }
+
+    int edgesCount =
+        nodeByName.values().stream().mapToInt(n -> n.getAllIncomingEdges().size()).sum();
+    LOGGER.info("Nodes in Network: {}, Edges in Network: {}", nodeByName.size(), edgesCount);
   }
 }

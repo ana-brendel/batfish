@@ -20,7 +20,6 @@ import java.util.LinkedList;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Queue;
-import java.util.Set;
 
 import static org.batfish.minesweeper.question.verificationutilities.NetworkInfo.getRouteExample;
 
@@ -32,9 +31,6 @@ public class InterferenceCheck {
   private final Location location;
   private final Invariant target;
 
-  //  private final Map<Ip, Node> nodes;
-  private final Map<Node, Set<Edge>> edgesByDestination;
-
   private final Queue<Location> working = new LinkedList<>();
   private final Map<Location, Invariant> inferred = new HashMap<>();
 
@@ -42,13 +38,11 @@ public class InterferenceCheck {
       @Nonnull Path.Context context,
       @Nonnull PrefixSpace prefix,
       @Nonnull Location location,
-      @Nonnull Invariant target,
-      @Nonnull Map<Node, Set<Edge>> edgesByDestination) {
+      @Nonnull Invariant target) {
     this.context = context;
     this.prefix = prefix;
     this.location = location;
     this.target = target;
-    this.edgesByDestination = edgesByDestination;
   }
 
   /// Iteratively infer the "bad invariants" which allow for a "bad route" to reach the liveness
@@ -110,7 +104,7 @@ public class InterferenceCheck {
         existing.free(); // can be freed because the updated invariant has replaced
         wp.free();
       } else if (location instanceof Node node) {
-        for (Edge edge : edgesByDestination.get(node)) {
+        for (Edge edge : node.getAllIncomingEdges()) {
           RoutingPolicy importPolicy = context.imports().get(edge);
           Invariant wp =
               importPolicy == null

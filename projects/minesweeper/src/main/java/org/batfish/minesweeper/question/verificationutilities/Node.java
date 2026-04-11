@@ -162,7 +162,8 @@ public class Node extends Location {
     if (this.getClass() == obj.getClass()) {
       Node node = (Node) obj;
       // equality for ips compares the longs
-      return node.neighbors.keySet().equals(this.neighbors.keySet())
+      return node.name.equals(this.name)
+          && node.neighbors.keySet().equals(this.neighbors.keySet())
           && node.neighbors.keySet().stream()
               .allMatch(
                   neighbor ->

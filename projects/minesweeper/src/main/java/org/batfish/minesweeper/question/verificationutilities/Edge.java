@@ -134,7 +134,12 @@ public class Edge extends Location {
   public boolean equals(Object obj) {
     if (this.getClass() == obj.getClass()) {
       Edge edge = (Edge) obj;
-      return edge.src.equals(this.src) && edge.dst.equals(this.dst);
+      return edge.src.equals(this.src)
+          && edge.dst.equals(this.dst)
+          && (edge.getSrcNode() == null ? "" : edge.getSrcNode().getName())
+              .equals(srcNode == null ? "" : srcNode.getName())
+          && (edge.getDstNode() == null ? "" : edge.getDstNode().getName())
+              .equals(dstNode == null ? "" : dstNode.getName());
     } else {
       return false;
     }
@@ -142,7 +147,11 @@ public class Edge extends Location {
 
   @Override
   public int hashCode() {
-    return Objects.hash(src, dst);
+    return Objects.hash(
+        src,
+        dst,
+        srcNode == null ? "" : srcNode.getName(),
+        dstNode == null ? "" : dstNode.getName());
   }
 
   @Override

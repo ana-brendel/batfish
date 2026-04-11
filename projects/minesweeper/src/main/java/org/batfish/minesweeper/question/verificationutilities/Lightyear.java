@@ -17,11 +17,13 @@ public class Lightyear {
   }
 
   private boolean completeCheck(Invariant pre, Invariant post, RoutingPolicy policy) {
-    Invariant negatedPost = post.negate();
-    Invariant weakestConditionForNegation =
-        policy == null ? negatedPost.copy() : negatedPost.weakestPrecondition(policy, false);
-    // we want the precondition to imply the condition need for the post to hold
-    return !pre.implies(weakestConditionForNegation);
+    Invariant wp = post.weakestPrecondition(policy);
+    return pre.implies(wp);
+    //    Invariant negatedPost = post.negate();
+    //    Invariant weakestConditionForNegation =
+    //        policy == null ? negatedPost.copy() : negatedPost.weakestPrecondition(policy, false);
+    //    // we want the precondition to imply the condition need for the post to hold
+    //    return !pre.implies(weakestConditionForNegation);
   }
 
   public Optional<Map.Entry<Location, Location>> check(Map<Location, Invariant> invariants) {

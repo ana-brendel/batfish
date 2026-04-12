@@ -125,7 +125,8 @@ public class UpdatedPathAnalyzer extends PathAnalyzer {
                       .getBDDCopy()
                       .existEq(
                           this.context.tbdd().getOriginalRoute().getProtocolHistory().support()));
-          if (removeProtocolHistory.impliedBy(this.origins.get(loc))) {
+          if (removeProtocolHistory.impliedBy(this.origins.get(loc))
+              && !this.origins.get(loc).isFalse()) {
             return Optional.of(
                 this.paths.get(loc).get(pathCondition).addStepEq(Pair.of(loc, pathCondition)));
           } else {

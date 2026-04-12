@@ -40,7 +40,6 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
-import java.util.concurrent.atomic.AtomicInteger;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
@@ -598,49 +597,44 @@ public class NetworkInfo {
   /// property is provided)
   public TableAnswerElement getAnswerElement() {
     TableAnswerElement tae = new TableAnswerElement(metadata_locations());
-    Map<String, Set<String>> nodeNameToEdges = new HashMap<>();
+    Map<String, List<Map<Ip, Set<String>>>> nodeNameToEdges = new HashMap<>();
     nodeByName.forEach(
         (name, node) -> {
-          nodeNameToEdges.put(
-              name,
-              node.getAllIncomingEdges().stream()
-                  .map(Edge::toUniqueString)
-                  .collect(Collectors.toSet()));
+          List<Map<Ip, Set<String>>> connections =
+              nodeNameToEdges.computeIfAbsent(name, k -> List.of(new HashMap<>(), new HashMap<>()));
+          node.getAllIncomingEdges()
+              .forEach(
+                  incoming -> {
+                    int typ = (incoming.isEBGP() ? 1 : 0);
+                    connections
+                        .get(typ)
+                        .computeIfAbsent(incoming.getDst(), k -> new HashSet<>())
+                        .add(
+                            incoming.getSrcNode() == null
+                                ? incoming.getSrc().toString()
+                                : incoming.getSrcNode().getName() + " (" + incoming.getSrc() + ")");
+                  });
         });
 
     nodeNameToEdges.keySet().stream()
         .sorted()
         .forEach(
-            node ->
-                tae.addRow(
-                    Row.builder()
-                        .put(Setup.NODES_COL, node)
-                        .put(Setup.NEIGHBORS_COL, nodeNameToEdges.get(node))
-                        .build()));
-
-    Set<String> externals = new HashSet<>();
-    AtomicInteger externalEdgeCount = new AtomicInteger();
-    this.allEdgesLeavingNetwork()
-        .forEach(
-            loc -> {
-              if (loc instanceof Edge e) {
-                // externals.add(e.getDst().toString());
-                externals.add(e.toUniqueString());
-                externalEdgeCount.addAndGet(1);
+            node -> {
+              for (int i = 0; i <= 1; i++) {
+                Map<Ip, Set<String>> neighbors = nodeNameToEdges.get(node).get(i);
+                String connectionType = i == 0 ? "internal" : "external";
+                neighbors.forEach(
+                    (dst_ip, n) -> {
+                      tae.addRow(
+                          Row.builder()
+                              .put(Setup.NODES_COL, node)
+                              .put(Setup.CONNECTION_TYPE_COL, connectionType)
+                              .put(Setup.DESTINATION_COL, dst_ip)
+                              .put(Setup.NEIGHBORS_COL, n)
+                              .build());
+                    });
               }
             });
-
-    tae.addRow(
-        Row.builder()
-            .put(
-                Setup.NODES_COL,
-                "EXTERNAL NEIGHBORS ("
-                    // + externals.size()
-                    // + " distinct neighbors, "
-                    + externalEdgeCount
-                    + " distinct edges)")
-            .put(Setup.NEIGHBORS_COL, externals.stream().sorted().collect(Collectors.toList()))
-            .build());
 
     return tae;
   }
@@ -671,10 +665,6 @@ public class NetworkInfo {
       throw new BatfishException("Cannot get the SpecifierContext from snapshot");
     }
     Map<String, Configuration> configs = context.getConfigs();
-
-    //  BgpSessionCompatibilityAnswerer answerer =
-    //          new BgpSessionCompatibilityAnswerer(new BgpSessionCompatibilityQuestion(), batfish);
-    //  List<Row> sessions = ((TableAnswerElement) answerer.answer(snapshot)).getRowsList();
 
     batfish.computeDataPlane(snapshot);
     EdgesQuestion question = new EdgesQuestion(".*", ".*", EdgesQuestion.EdgeType.BGP, false);

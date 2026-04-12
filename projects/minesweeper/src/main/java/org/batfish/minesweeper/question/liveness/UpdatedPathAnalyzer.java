@@ -41,11 +41,13 @@ public class UpdatedPathAnalyzer extends PathAnalyzer {
     this.context = context;
     this.prefix = prefix;
     this.location = location;
+    Invariant goodPathCondition =
+        new Invariant(context.tbdd(), target.getBDDCopy().and(context.prefixSpaceToBDD(prefix)));
     context
         .checkedAssumptions()
         .keySet()
         .forEach(l -> origins.put(l, initializeOriginAssumptions(l)));
-    paths.computeIfAbsent(location, k -> new HashMap<>()).put(target, new Steps());
+    paths.computeIfAbsent(location, k -> new HashMap<>()).put(goodPathCondition, new Steps());
   }
 
   @Override
@@ -68,21 +70,20 @@ public class UpdatedPathAnalyzer extends PathAnalyzer {
             this.context.imports(),
             this.context.exports(),
             this.context.default_assumption());
-    Optional<Path> good =
-        this.find().map(steps -> steps.createPath(updateContext, this.prefix, this.paths));
+    Optional<Path> good = this.find().map(steps -> steps.createPath(updateContext, this.prefix));
     if (good.isPresent()) {
       return Pair.of(good, List.of());
     } else if (!interferingPaths.isEmpty()) {
       return Pair.of(
           good,
           interferingPaths.stream()
-              .map(steps -> steps.createPath(updateContext, this.prefix, this.paths))
+              .map(steps -> steps.createPath(updateContext, this.prefix))
               .toList());
     } else {
       return Pair.of(
           good,
           incompletePaths.stream()
-              .map(steps -> steps.createPath(updateContext, this.prefix, this.paths))
+              .map(steps -> steps.createPath(updateContext, this.prefix))
               .toList());
     }
   }
@@ -108,7 +109,7 @@ public class UpdatedPathAnalyzer extends PathAnalyzer {
     while (!working.isEmpty()) {
       Location loc = working.remove();
       if (this.origins.containsKey(loc)) {
-        Set<Invariant> toRemove = new HashSet<>();
+        Set<Pair<Location, Invariant>> toRemove = new HashSet<>();
         for (Invariant pathCondition : this.paths.get(loc).keySet()) {
           // if the invariant inferred is implied by the assumption, we found good path
           // TODO figure out the protocol history - Do we care if it is subset of BGP protocols?
@@ -120,18 +121,19 @@ public class UpdatedPathAnalyzer extends PathAnalyzer {
                       .existEq(
                           this.context.tbdd().getOriginalRoute().getProtocolHistory().support()));
           if (removeProtocolHistory.impliedBy(this.origins.get(loc))) {
-            return Optional.of(this.paths.get(loc).get(pathCondition).addStepEq(loc));
+            return Optional.of(
+                this.paths.get(loc).get(pathCondition).addStepEq(Pair.of(loc, pathCondition)));
           } else {
             // if this invariant is not implied by the assumption, we can remove
-            toRemove.add(pathCondition);
+            toRemove.add(Pair.of(loc, pathCondition));
           }
         }
         toRemove.forEach(
             inv -> {
               if (interferingPaths.size() < 5) {
-                interferingPaths.add(this.paths.get(loc).get(inv).addStep(loc));
+                interferingPaths.add(this.paths.get(loc).get(inv.getRight()).addStep(inv));
               }
-              this.paths.get(loc).remove(inv);
+              this.paths.get(loc).remove(inv.getRight());
             });
       } else {
         // we are not at an origin, so we keep looking
@@ -148,7 +150,8 @@ public class UpdatedPathAnalyzer extends PathAnalyzer {
           boolean addToWorkingQueue = false;
           RoutingPolicy policy = nextSteps.get(nextStep);
           for (Invariant pathCondition : this.paths.get(loc).keySet()) {
-            Steps newPath = this.paths.get(loc).get(pathCondition).addStep(loc);
+            Steps newPath =
+                this.paths.get(loc).get(pathCondition).addStep(Pair.of(loc, pathCondition));
             if (this.updatePathStores(nextStep, policy, pathCondition, newPath)) {
               addToWorkingQueue = true;
             }
@@ -169,17 +172,18 @@ public class UpdatedPathAnalyzer extends PathAnalyzer {
       Location step, RoutingPolicy policy, Invariant post, Steps path) {
     if (path.canTakeStep(step)) {
       Invariant wp = policy == null ? post.copy() : post.weakestPrecondition(policy, false);
-      if (wp.isFalse() && !this.origins.containsKey(step)) {
+      if (this.context.enforcedAssumptions().containsKey(step)) {
+        BDD enforced = this.context.enforcedAssumptions().get(step).getBDDCopy();
+        BDD wpBDD = wp.getBDD();
+        wp = new Invariant(this.context.tbdd(), enforced.andEq(wpBDD));
+        wpBDD.free();
+      }
+      if (wp.isFalse()) {
         // inferred false pre-emptively along the way
-        if (incompletePaths.size() < 5) {
-          incompletePaths.add(path.addStep(step));
-        }
-        return false;
-      } else if (wp.isFalse()) {
-        // at origin but we inferred false, we don't need to update paths, but this is interfering
-        assert this.origins.containsKey(step);
-        if (interferingPaths.size() < 5) {
-          interferingPaths.add(path.addStep(step));
+        if (this.origins.containsKey(step) && incompletePaths.size() < 10) {
+          incompletePaths.add(path.addStep(Pair.of(step, wp)));
+        } else if (incompletePaths.size() < 5) {
+          incompletePaths.add(path.addStep(Pair.of(step, wp)));
         }
         return false;
       } else {
@@ -203,21 +207,21 @@ public class UpdatedPathAnalyzer extends PathAnalyzer {
   }
 
   private static class Steps {
-    private final LinkedList<Location> steps = new LinkedList<>();
+    private final LinkedList<Pair<Location, Invariant>> steps = new LinkedList<>();
 
     private Steps() {}
 
-    private Steps(LinkedList<Location> steps) {
+    private Steps(LinkedList<Pair<Location, Invariant>> steps) {
       this.steps.addAll(steps);
     }
 
-    private Steps addStepEq(Location next) {
+    private Steps addStepEq(Pair<Location, Invariant> next) {
       // assumes step is valid
       steps.addFirst(next);
       return this;
     }
 
-    private Steps addStep(Location next) {
+    private Steps addStep(Pair<Location, Invariant> next) {
       Steps ret = new Steps(this.steps);
       return ret.addStepEq(next);
     }
@@ -227,20 +231,22 @@ public class UpdatedPathAnalyzer extends PathAnalyzer {
       if (steps.isEmpty()) {
         return true;
       } else {
-        Location currentLocation = steps.peek();
+        Location currentLocation = steps.peek().getKey();
         if (step instanceof Edge edge && currentLocation instanceof Node node) {
           Optional<Edge> lastEdge = Optional.empty();
-          if (steps.size() >= 2 && steps.get(1).copy() instanceof Edge e) {
+          if (steps.size() >= 2 && steps.get(1).getKey().copy() instanceof Edge e) {
             // steps = [this edge] + currentLocation, edge, ....
             lastEdge = Optional.of(e);
           }
           return edge.isDst(node) // this edge leads to this node
               && (lastEdge.isEmpty() || !lastEdge.get().equals(edge)) // not crossing back over edge
-              && !steps.contains(edge) // have not previously crossed this edge (check node next)
-              && (edge.getSrcNode() == null || !steps.contains(edge.getSrcNode()));
+              && steps.stream() // have not previously crossed this edge (check node next)
+                  .noneMatch(p -> edge.equals(p.getKey()))
+              && (edge.getSrcNode() == null
+                  || steps.stream().noneMatch(p -> p.getKey().equals(edge.getSrcNode())));
         } else if (step instanceof Node node && currentLocation instanceof Edge edge) {
           // edge came from node and we haven't visited this node yet
-          return edge.isSrc(node) && !steps.contains(node);
+          return edge.isSrc(node) && steps.stream().noneMatch(p -> node.equals(p.getKey()));
         } else {
           // otherwise we have node -> node or edge -> edge which cannot work
           return false;
@@ -248,45 +254,22 @@ public class UpdatedPathAnalyzer extends PathAnalyzer {
       }
     }
 
-    public Path createPath(
-        Path.Context context, PrefixSpace prefix, Map<Location, Map<Invariant, Steps>> paths) {
+    public Path createPath(Path.Context context, PrefixSpace prefix) {
       Location[] locationArr = new Location[steps.size()];
+      Invariant[] propertyArr = new Invariant[steps.size()];
       AtomicInteger index = new AtomicInteger(locationArr.length - 1);
       steps
           .iterator()
           .forEachRemaining(
               step -> {
-                locationArr[index.get()] = step;
+                locationArr[index.get()] = step.getKey();
+                propertyArr[index.get()] = step.getValue();
                 index.addAndGet(-1);
               });
 
-      Invariant[] propertyArr = new Invariant[steps.size()];
-      LinkedList<Location> togo = new LinkedList<>(steps);
-      int i = propertyArr.length - 1;
-      while (!togo.isEmpty()) {
-        Location step = togo.remove();
-        assert locationArr[i].equals(step) : "Inaccurately reconstructing path";
-        // find what the invariant is based on which remaining path matches
-        propertyArr[i] = null;
-        for (Map.Entry<Invariant, Steps> condition : paths.get(step).entrySet()) {
-          if (condition.getValue().steps.equals(togo)) {
-            propertyArr[i] = condition.getKey();
-            break;
-          }
-        }
-        // if there is no condition matching the path, that means that it is a dead end
-        if (propertyArr[i] == null) {
-          propertyArr[i] = Invariant.getFalse(context.tbdd());
-        }
-        i -= 1;
-      }
-
-      // sanity check
-      for (int j = 0; j < propertyArr.length - 2; j++) {
-        assert !propertyArr[j].isFalse() || propertyArr[j + 1].isFalse();
-      }
-
-      return Path.create(locationArr, propertyArr, context, prefix);
+      Path result = Path.create(locationArr, propertyArr, context, prefix);
+      assert result.sanity(); // sanity check for testing
+      return result;
     }
   }
 }

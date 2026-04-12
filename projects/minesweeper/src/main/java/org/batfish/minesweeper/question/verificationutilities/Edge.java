@@ -163,9 +163,9 @@ public class Edge extends Location {
 
   @Override
   public String toUniqueString() {
-    String srcStr = this.srcNode != null ? " (" + this.srcNode.getName() + ")" : "";
+    String srcStr = this.srcNode != null ? "(" + this.srcNode.getName() + ") " : "";
     String dstStr = this.dstNode != null ? " (" + this.dstNode.getName() + ")" : "";
-    return src + srcStr + " -> " + dst + dstStr;
+    return srcStr + src + " -> " + dst + dstStr;
   }
 
   @Override

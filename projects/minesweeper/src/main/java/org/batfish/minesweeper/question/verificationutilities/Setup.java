@@ -167,8 +167,10 @@ public class Setup {
   public static final String SOURCE_OF_INTERFERENCE = "Potential Interference from ";
 
   // columns for just displaying the locations
-  public static final String NODES_COL = "Nodes_in_Network";
-  public static final String NEIGHBORS_COL = "Neighbors_to_Node";
+  public static final String NODES_COL = "Nodes";
+  public static final String CONNECTION_TYPE_COL = "Connection_Type";
+  public static final String DESTINATION_COL = "Local_Ip";
+  public static final String NEIGHBORS_COL = "Remote_Ips";
 
   /// TableMetadata for safety property which displays target properties and assumptions and any
   /// counterexamples
@@ -196,6 +198,8 @@ public class Setup {
     List<ColumnMetadata> columnMetadata =
         ImmutableList.of(
             new ColumnMetadata(NODES_COL, STRING, "InDev", true, false),
+            new ColumnMetadata(CONNECTION_TYPE_COL, STRING, "InDev", true, false),
+            new ColumnMetadata(DESTINATION_COL, STRING, "InDev", true, false),
             new ColumnMetadata(NEIGHBORS_COL, STRING, "InDev", true, false));
     return new TableMetadata(columnMetadata, "Invariant Inference and Verification Results");
   }

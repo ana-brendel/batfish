@@ -239,6 +239,34 @@ public class Path {
     return false;
   }
 
+  private boolean failsLocalCheck(Invariant pre, Invariant post, @Nullable RoutingPolicy policy) {
+    if (policy == null) {
+      return !pre.implies(post);
+    } else {
+      Invariant wp = post.weakestPrecondition(policy, false);
+      boolean check = pre.implies(wp);
+      wp.free();
+      return !check;
+    }
+  }
+
+  public boolean sanity() {
+    for (int i = 1; i < steps.length; i++) {
+      Invariant post = properties[i - 1];
+      Invariant pre = properties[i];
+      if (steps[i - 1] instanceof Edge outgoing && steps[i] instanceof Node) {
+        if (failsLocalCheck(pre, post, this.context.exports.get(outgoing))) {
+          return false;
+        }
+      } else if (steps[i - 1] instanceof Node && steps[i] instanceof Edge incoming) {
+        if (failsLocalCheck(pre, post, this.context.imports.get(incoming))) {
+          return false;
+        }
+      }
+    }
+    return true;
+  }
+
   /// A Path.Builder represents a path which should be connected but has not had any liveness
   /// inference performed. This could be provided by user if we want the user to provide the path.
   @VisibleForTesting

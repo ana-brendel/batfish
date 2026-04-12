@@ -156,7 +156,7 @@ public class LivenessAnswerer extends Answerer {
             .instantiate(info)
             .forEach(
                 loc -> {
-                  if (loc instanceof Edge edge) {
+                  if (loc instanceof Edge edge && !edge.hasSrcNode()) {
                     origins.add(edge);
                   } else {
                     throw new BatfishException(

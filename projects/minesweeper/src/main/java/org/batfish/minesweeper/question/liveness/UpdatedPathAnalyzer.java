@@ -129,7 +129,7 @@ public class UpdatedPathAnalyzer extends PathAnalyzer {
         toRemove.forEach(
             inv -> {
               if (interferingPaths.size() < 5) {
-                interferingPaths.add(this.paths.get(loc).get(inv));
+                interferingPaths.add(this.paths.get(loc).get(inv).addStep(loc));
               }
               this.paths.get(loc).remove(inv);
             });

@@ -213,7 +213,6 @@ public class NetworkInfo {
           .values()
           .forEach(
               edge -> {
-                // if (isIncomingEdge(edge) || !edge.hasSrcNode()) {
                 if (!edge.hasSrcNode()) {
                   checkedAssumptions.put(edge, this.defaultIncoming);
                 }
@@ -718,12 +717,8 @@ public class NetworkInfo {
     String COL_REMOTE_IP = "Remote_IP";
 
     for (Row row : sessions) {
-      Ip srcIp =
-          row.getString(COL_IP) == null ? null : Ip.tryParse(row.getString(COL_IP)).orElse(null);
-      Ip dstIp =
-          row.get(COL_REMOTE_IP).get("value") == null
-              ? null
-              : Ip.tryParse(row.get(COL_REMOTE_IP).get("value").asText()).orElse(null);
+      Ip srcIp = row.getIp(COL_IP);
+      Ip dstIp = row.getIp(COL_REMOTE_IP);
 
       String srcNodeName =
           row.get(COL_NODE).get("name") != null

@@ -143,7 +143,7 @@ public record SafetyResult(
                 String counterexample_str =
                     checks.containsKey(loc)
                         ? nonDefaultRoute(checks.get(loc))
-                        : (refinement.refined.get(loc).isFalse() && !refinementOccurred
+                        : (refinement.refined.get(loc).isFalse() && !assumption_str.equals("false")
                             ? "any route is counterexample"
                             : "");
 

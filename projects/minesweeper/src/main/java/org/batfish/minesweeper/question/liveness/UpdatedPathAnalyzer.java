@@ -4,6 +4,7 @@ import net.sf.javabdd.BDD;
 import org.apache.commons.lang3.tuple.Pair;
 import org.batfish.datamodel.PrefixSpace;
 import org.batfish.datamodel.routing_policy.RoutingPolicy;
+import org.batfish.minesweeper.bdd.TransferReturn;
 import org.batfish.minesweeper.question.verificationutilities.Edge;
 import org.batfish.minesweeper.question.verificationutilities.Invariant;
 import org.batfish.minesweeper.question.verificationutilities.Location;
@@ -32,15 +33,19 @@ public class UpdatedPathAnalyzer extends PathAnalyzer {
   private final Set<Steps> interferingPaths = new HashSet<>();
   private final Set<Steps> incompletePaths = new HashSet<>();
 
+  private final Map<RoutingPolicy, List<TransferReturn>> computedPathsCache;
+
   public UpdatedPathAnalyzer(
       @Nonnull Path.Context context,
       @Nonnull PrefixSpace prefix,
       @Nonnull Location location,
-      @Nonnull Invariant target) {
+      @Nonnull Invariant target,
+      @Nonnull Map<RoutingPolicy, List<TransferReturn>> computedPathsCache) {
     super(context, prefix, location, target);
     this.context = context;
     this.prefix = prefix;
     this.location = location;
+    this.computedPathsCache = computedPathsCache;
     Invariant goodPathCondition =
         new Invariant(context.tbdd(), target.getBDDCopy().and(context.prefixSpaceToBDD(prefix)));
     context
@@ -171,7 +176,10 @@ public class UpdatedPathAnalyzer extends PathAnalyzer {
   private boolean updatePathStores(
       Location step, RoutingPolicy policy, Invariant post, Steps path) {
     if (path.canTakeStep(step)) {
-      Invariant wp = policy == null ? post.copy() : post.weakestPrecondition(policy, false);
+      Invariant wp =
+          policy == null
+              ? post.copy()
+              : post.weakestPrecondition(policy, false, this.computedPathsCache);
       if (this.context.enforcedAssumptions().containsKey(step)) {
         BDD enforced = this.context.enforcedAssumptions().get(step).getBDDCopy();
         BDD wpBDD = wp.getBDD();

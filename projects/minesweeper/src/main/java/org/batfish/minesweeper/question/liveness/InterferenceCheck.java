@@ -9,6 +9,7 @@ import org.batfish.datamodel.Bgpv4Route;
 import org.batfish.datamodel.PrefixSpace;
 import org.batfish.datamodel.routing_policy.RoutingPolicy;
 import org.batfish.minesweeper.bdd.TransferBDDUtils;
+import org.batfish.minesweeper.bdd.TransferReturn;
 import org.batfish.minesweeper.question.verificationutilities.Edge;
 import org.batfish.minesweeper.question.verificationutilities.Invariant;
 import org.batfish.minesweeper.question.verificationutilities.Location;
@@ -17,6 +18,7 @@ import org.batfish.minesweeper.question.verificationutilities.Node;
 import javax.annotation.Nonnull;
 import java.util.HashMap;
 import java.util.LinkedList;
+import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Queue;
@@ -33,16 +35,24 @@ public class InterferenceCheck {
 
   private final Queue<Location> working = new LinkedList<>();
   private final Map<Location, Invariant> inferred = new HashMap<>();
+  private final Map<RoutingPolicy, List<TransferReturn>> computedPathsCache;
 
   public InterferenceCheck(
       @Nonnull Path.Context context,
       @Nonnull PrefixSpace prefix,
       @Nonnull Location location,
-      @Nonnull Invariant target) {
+      @Nonnull Invariant target,
+      @Nonnull Map<RoutingPolicy, List<TransferReturn>> computedPathsCache) {
     this.context = context;
     this.prefix = prefix;
     this.location = location;
     this.target = target;
+    this.computedPathsCache = computedPathsCache;
+  }
+
+  private boolean checksFalseAssumption(Location location) {
+    return context.checkedAssumptions().containsKey(location)
+        && context.checkedAssumptions().get(location).isFalse();
   }
 
   /// Iteratively infer the "bad invariants" which allow for a "bad route" to reach the liveness
@@ -56,6 +66,13 @@ public class InterferenceCheck {
       Location location = working.remove();
       Invariant property = inferred.get(location);
       if (location instanceof Edge edge && edge.hasSrcNode()) {
+        Node src = edge.getSrcNode();
+        assert src != null;
+        if (this.checksFalseAssumption(src)) {
+          // inferred can be false because false implies anything
+          inferred.put(src, Invariant.getFalse(this.context.tbdd()));
+          continue;
+        }
         assert edge.getSrcNode() != null;
         if (edge.isEBGP()) {
           // Symbolically undo the effect of prepending the source node's ASN to the AS-path
@@ -76,8 +93,7 @@ public class InterferenceCheck {
         Invariant wp =
             exportPolicy == null
                 ? property.copy()
-                : property.weakestPrecondition(exportPolicy, false);
-        Node src = edge.getSrcNode();
+                : property.weakestPrecondition(exportPolicy, false, this.computedPathsCache);
         // if there is no inferred assumption, use the negation of the enforced assumption if
         // present, otherwise default is false
         Invariant existing =
@@ -105,11 +121,16 @@ public class InterferenceCheck {
         wp.free();
       } else if (location instanceof Node node) {
         for (Edge edge : node.getAllIncomingEdges()) {
+          if (this.checksFalseAssumption(edge)) {
+            // inferred can be false because false implies anything
+            inferred.put(edge, Invariant.getFalse(this.context.tbdd()));
+            continue;
+          }
           RoutingPolicy importPolicy = context.imports().get(edge);
           Invariant wp =
               importPolicy == null
                   ? property.copy()
-                  : property.weakestPrecondition(importPolicy, false);
+                  : property.weakestPrecondition(importPolicy, false, this.computedPathsCache);
           // if there is no inferred assumption, use the negation of the enforced assumption if
           // present, otherwise default is false
           Invariant existing =

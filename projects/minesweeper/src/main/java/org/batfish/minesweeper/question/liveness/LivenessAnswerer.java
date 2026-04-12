@@ -9,6 +9,8 @@ import org.batfish.common.NetworkSnapshot;
 import org.batfish.common.plugin.IBatfish;
 import org.batfish.datamodel.PrefixSpace;
 import org.batfish.datamodel.answers.AnswerElement;
+import org.batfish.datamodel.routing_policy.RoutingPolicy;
+import org.batfish.minesweeper.bdd.TransferReturn;
 import org.batfish.minesweeper.question.searchroutepolicies.RegexConstraint;
 import org.batfish.minesweeper.question.verificationutilities.Edge;
 import org.batfish.minesweeper.question.verificationutilities.Invariant;
@@ -109,9 +111,11 @@ public class LivenessAnswerer extends Answerer {
       Location location,
       Invariant target,
       Set<Edge> ingress) {
+    Map<RoutingPolicy, List<TransferReturn>> computedPathsCache = new HashMap<>();
     LOGGER.info("Beginning to run liveness property analysis...");
-    PathAnalyzer analyzer = info.toPathAnalyzer(prefix, location, target);
-    InterferenceCheck interferenceCheck = info.toInterferenceCheck(prefix, location, target);
+    PathAnalyzer analyzer = info.toPathAnalyzer(prefix, location, target, computedPathsCache);
+    InterferenceCheck interferenceCheck =
+        info.toInterferenceCheck(prefix, location, target, computedPathsCache);
 
     LOGGER.info("LOOKING FOR GOOD PATH");
     Pair<Optional<Path>, List<Path>> paths =

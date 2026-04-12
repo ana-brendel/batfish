@@ -21,6 +21,7 @@ import org.batfish.datamodel.table.TableAnswerElement;
 import org.batfish.minesweeper.ConfigAtomicPredicates;
 import org.batfish.minesweeper.bdd.ModelGeneration;
 import org.batfish.minesweeper.bdd.TransferBDD;
+import org.batfish.minesweeper.bdd.TransferReturn;
 import org.batfish.minesweeper.question.liveness.InterferenceCheck;
 import org.batfish.minesweeper.question.liveness.Path;
 import org.batfish.minesweeper.question.liveness.PathAnalyzer;
@@ -566,7 +567,11 @@ public class NetworkInfo {
 
   /// Returns a PathAnalyzer objective reflective of the network which can be used for verification
   /// of the provided liveness property (pertaining to the provided prefix space)
-  public PathAnalyzer toPathAnalyzer(PrefixSpace prefix, Location location, Invariant target) {
+  public PathAnalyzer toPathAnalyzer(
+      PrefixSpace prefix,
+      Location location,
+      Invariant target,
+      Map<RoutingPolicy, List<TransferReturn>> computedPathsCache) {
     Path.Context context =
         new Path.Context(
             this.tbdd,
@@ -575,13 +580,16 @@ public class NetworkInfo {
             this.imports,
             this.exports,
             this.defaultIncoming);
-    return new UpdatedPathAnalyzer(context, prefix, location, target);
+    return new UpdatedPathAnalyzer(context, prefix, location, target, computedPathsCache);
   }
 
   /// Returns a PathAnalyzer objective reflective of the network which can be used for interference
   /// of the provided liveness property (pertaining to the provided prefix space)
   public InterferenceCheck toInterferenceCheck(
-      PrefixSpace prefix, Location location, Invariant target) {
+      PrefixSpace prefix,
+      Location location,
+      Invariant target,
+      Map<RoutingPolicy, List<TransferReturn>> computedPathsCache) {
     Path.Context context =
         new Path.Context(
             this.tbdd,
@@ -590,7 +598,7 @@ public class NetworkInfo {
             this.imports,
             this.exports,
             this.defaultIncoming);
-    return new InterferenceCheck(context, prefix, location, target);
+    return new InterferenceCheck(context, prefix, location, target, computedPathsCache);
   }
 
   /// Returns TableAnswerElement which lists all locations within the network (used when no target

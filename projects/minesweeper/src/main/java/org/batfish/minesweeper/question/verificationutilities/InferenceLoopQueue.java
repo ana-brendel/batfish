@@ -1,5 +1,7 @@
 package org.batfish.minesweeper.question.verificationutilities;
 
+import org.batfish.common.BatfishException;
+
 import javax.annotation.Nonnull;
 import java.util.HashMap;
 import java.util.LinkedList;
@@ -8,6 +10,7 @@ import java.util.Map;
 
 public class InferenceLoopQueue {
   private final LinkedList<Location> queue = new LinkedList<>();
+  private final LinkedList<Location> priority = new LinkedList<>();
   private final Map<Location, Boolean> inQueue = new HashMap<>();
   private final Map<Location, List<Location>> predecessors = new HashMap<>();
 
@@ -43,33 +46,35 @@ public class InferenceLoopQueue {
   /// potentially affect the inferred invariant at the head of the queue, then we remove that more
   /// preferred element (leaving the head of the queue the same).
   public Location remove() {
-    Location peek = queue.peek();
-    if (this.contains(peek)) {
-      Location next = null;
-      for (Location higherPriority : predecessors.getOrDefault(peek, List.of())) {
-        if (this.contains(higherPriority)) {
-          if (next == null) {
-            next = higherPriority;
-          } else {
-            queue.addFirst(higherPriority);
-          }
-        }
-      }
-      if (next != null) {
-        return this.setInQueueFalse(next);
+    assert !this.isEmpty();
+    if (!priority.isEmpty()) {
+      Location peek = priority.peek();
+      if (this.contains(peek)) {
+        return this.setInQueueFalse(priority.remove());
       } else {
-        return this.setInQueueFalse(queue.remove());
+        throw new BatfishException(
+            "Adding to priority queue should only happen if location is in queue.");
       }
     } else {
-      // head of queue was pre-emptively removed
-      queue.remove();
+      Location peek = queue.peek();
+      if (this.contains(peek)) {
+        for (Location higherPriority : predecessors.getOrDefault(peek, List.of())) {
+          if (this.contains(higherPriority)) {
+            priority.add(higherPriority);
+          }
+        }
+        priority.addLast(peek);
+      } else {
+        // head of queue was pre-emptively removed
+        queue.remove();
+      }
       return this.remove();
     }
   }
 
   /// Returns if the queue is empty
   public boolean isEmpty() {
-    return queue.isEmpty();
+    return inQueue.values().stream().allMatch(b -> b == false);
   }
 
   /// Checks if this element is in the queue

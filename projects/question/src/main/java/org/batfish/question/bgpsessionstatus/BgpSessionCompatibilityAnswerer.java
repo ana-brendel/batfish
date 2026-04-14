@@ -124,14 +124,6 @@ public class BgpSessionCompatibilityAnswerer extends Answerer {
     return answer;
   }
 
-  public List<Row> getSessionRows(NetworkSnapshot snapshot) {
-    BgpSessionCompatibilityQuestion question = (BgpSessionCompatibilityQuestion) _question;
-    TableAnswerElement answer =
-        new TableAnswerElement(BgpSessionCompatibilityAnswerer.createMetadata(question));
-    answer.postProcessAnswer(question, getRows(snapshot, question));
-    return answer.getRowsList();
-  }
-
   /**
    * Return the answer for {@link BgpSessionCompatibilityQuestion} -- a set of BGP sessions and
    * their compatibility.

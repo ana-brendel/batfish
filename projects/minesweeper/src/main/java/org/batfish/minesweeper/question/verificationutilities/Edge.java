@@ -6,6 +6,7 @@ import org.batfish.datamodel.Ip;
 import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
 import java.util.Objects;
+import java.util.Set;
 
 public class Edge extends Location {
   private final @Nonnull Ip src;
@@ -128,6 +129,11 @@ public class Edge extends Location {
   @Override
   public Edge copy() {
     return new Edge(Ip.create(src.asLong()), Ip.create(dst.asLong()), eBGP, srcNode, dstNode);
+  }
+
+  @Override
+  public Set<Location> predecessors() {
+    return this.srcNode == null ? Set.of() : Set.of(this.srcNode);
   }
 
   @Override

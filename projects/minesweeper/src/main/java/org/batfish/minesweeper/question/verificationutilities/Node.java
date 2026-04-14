@@ -158,6 +158,11 @@ public class Node extends Location {
   }
 
   @Override
+  public Set<Location> predecessors() {
+    return this.getAllIncomingEdges().stream().map(e -> (Location) e).collect(Collectors.toSet());
+  }
+
+  @Override
   public boolean equals(Object obj) {
     if (this.getClass() == obj.getClass()) {
       Node node = (Node) obj;

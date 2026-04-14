@@ -583,6 +583,10 @@ public class NetworkInfo {
     return new UpdatedPathAnalyzer(context, prefix, location, target, computedPathsCache);
   }
 
+  public Inference toInference() {
+    return new Inference(tbdd, imports, exports, checkedAssumptions, enforcedAssumptions);
+  }
+
   /// Returns a PathAnalyzer objective reflective of the network which can be used for interference
   /// of the provided liveness property (pertaining to the provided prefix space)
   public InterferenceCheck toInterferenceCheck(

@@ -17,6 +17,8 @@ import java.util.stream.Collectors;
 public abstract class Location implements Comparable<Location> {
   public abstract Location copy();
 
+  public abstract Set<Location> predecessors();
+
   public String toUniqueString() {
     return this.toString();
   }

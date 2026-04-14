@@ -7,27 +7,34 @@ import org.batfish.common.Answerer;
 import org.batfish.common.BatfishException;
 import org.batfish.common.NetworkSnapshot;
 import org.batfish.common.plugin.IBatfish;
+import org.batfish.datamodel.Bgpv4Route;
 import org.batfish.datamodel.PrefixSpace;
 import org.batfish.datamodel.answers.AnswerElement;
 import org.batfish.datamodel.routing_policy.RoutingPolicy;
+import org.batfish.datamodel.table.Row;
+import org.batfish.datamodel.table.TableAnswerElement;
 import org.batfish.minesweeper.bdd.TransferReturn;
 import org.batfish.minesweeper.question.searchroutepolicies.RegexConstraint;
 import org.batfish.minesweeper.question.verificationutilities.Edge;
+import org.batfish.minesweeper.question.verificationutilities.Inference;
 import org.batfish.minesweeper.question.verificationutilities.Invariant;
 import org.batfish.minesweeper.question.verificationutilities.Location;
 import org.batfish.minesweeper.question.verificationutilities.NetworkInfo;
 import org.batfish.minesweeper.question.verificationutilities.Node;
+import org.batfish.minesweeper.question.verificationutilities.Setup;
 
 import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 
 import static org.batfish.minesweeper.question.verificationutilities.Setup.buildLocationInvariant;
+import static org.batfish.minesweeper.question.verificationutilities.Setup.metadata_liveness;
 
 public class LivenessAnswerer extends Answerer {
   private static final Logger LOGGER = LogManager.getLogger(LivenessAnswerer.class);
@@ -153,9 +160,9 @@ public class LivenessAnswerer extends Answerer {
       return info.getAnswerElement();
     } else {
       Map.Entry<Location, Invariant> target = buildLocationInvariant(info, true, _target);
-      LivenessResult result;
+      // LivenessResult result;
+      Set<Edge> origins = new HashSet<>();
       if (_ingress != null) {
-        Set<Edge> origins = new HashSet<>();
         _ingress
             .instantiate(info)
             .forEach(
@@ -167,12 +174,93 @@ public class LivenessAnswerer extends Answerer {
                         "Only considers traffic coming in on an edge (not originating at a node).");
                   }
                 });
-        result = run(info, _prefix, target.getKey(), target.getValue(), origins);
-      } else {
-        result = run(info, _prefix, target.getKey(), target.getValue());
+        // result = run(info, _prefix, target.getKey(), target.getValue(), origins);
       }
-      LOGGER.info("Analysis done!");
-      return result.getAnswerElement(info);
+      // else {
+      // result = run(info, _prefix, target.getKey(), target.getValue());
+      // }
+      // LOGGER.info("Analysis done!");
+      // return result.getAnswerElement(info);
+      return updatedRun(info, _prefix, target.getKey(), target.getValue(), origins);
     }
+  }
+
+  public static TableAnswerElement updatedRun(
+      NetworkInfo info,
+      PrefixSpace prefix,
+      Location location,
+      Invariant target,
+      Set<Edge> ingress) {
+    Inference infer = info.toInference();
+    if (!ingress.isEmpty()) {
+      infer.restrictCheckedAssumptions(ingress);
+    }
+    infer.addPrefixToAssumptions(prefix);
+    Invariant goodPathCondition =
+        new Invariant(info.tbdd, target.getBDDCopy().and(infer.prefixSpaceToBDD(prefix)));
+    Pair<Location, Map<Location, Bgpv4Route>> reachable =
+        infer.run(Map.of(location, goodPathCondition), Inference.Check.EXISTS, true);
+    assert reachable.getKey() == null && reachable.getValue() != null;
+    Map<Location, Bgpv4Route> routes = reachable.getValue();
+    TableAnswerElement tae = new TableAnswerElement(metadata_liveness());
+
+    if (routes.isEmpty()) {
+      tae.addRow(
+          Row.builder()
+              .put(Setup.RESULT_LABEL_COL, Setup.OVERALL_RESULT)
+              .put(Setup.RESULT_VALUE_COL, "False (No Good Route Found)")
+              .build());
+    } else {
+      LinkedList<Row> rows = new LinkedList<>();
+      // include starting points of potential good paths (only add 5 path origins)
+      int count = 0;
+      for (Location origin : routes.keySet()) {
+        if (count < 5) {
+          count += 1;
+          rows.add(
+              Row.builder()
+                  .put(Setup.RESULT_LABEL_COL, Setup.GOOD_PATH_LABEL)
+                  .put(
+                      Setup.RESULT_VALUE_COL,
+                      "[" + info.locationStr(origin) + "] " + routes.get(origin))
+                  .build());
+        }
+      }
+      // check for interference
+      Invariant interferenceCondition =
+          new Invariant(info.tbdd, target.negate().getBDD().and(infer.prefixSpaceToBDD(prefix)));
+      Pair<Location, Map<Location, Bgpv4Route>> interferenceOccurs =
+          infer.run(Map.of(location, interferenceCondition), Inference.Check.NONE_EXIST, true);
+      assert interferenceOccurs.getKey() == null && interferenceOccurs.getValue() != null;
+      if (interferenceOccurs.getValue().isEmpty()) {
+        tae.addRow(
+            Row.builder()
+                .put(Setup.RESULT_LABEL_COL, Setup.OVERALL_RESULT)
+                .put(Setup.RESULT_VALUE_COL, "True")
+                .build());
+        rows.forEach(tae::addRow);
+      } else {
+        tae.addRow(
+            Row.builder()
+                .put(Setup.RESULT_LABEL_COL, Setup.OVERALL_RESULT)
+                .put(Setup.RESULT_VALUE_COL, "False")
+                .build());
+        count = 0;
+        for (Location origin : interferenceOccurs.getValue().keySet()) {
+          if (count < 5) {
+            count += 1;
+            rows.add(
+                Row.builder()
+                    .put(
+                        Setup.RESULT_LABEL_COL,
+                        Setup.SOURCE_OF_INTERFERENCE + info.locationStr(origin))
+                    .put(Setup.RESULT_VALUE_COL, interferenceOccurs.getValue().get(origin))
+                    .build());
+          }
+        }
+        rows.forEach(tae::addRow);
+      }
+    }
+    return tae;
   }
 }

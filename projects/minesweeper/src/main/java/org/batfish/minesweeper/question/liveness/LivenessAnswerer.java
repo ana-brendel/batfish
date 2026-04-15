@@ -32,6 +32,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
+import java.util.stream.Collectors;
 
 import static org.batfish.minesweeper.question.verificationutilities.Setup.buildLocationInvariant;
 import static org.batfish.minesweeper.question.verificationutilities.Setup.metadata_liveness;
@@ -193,7 +194,7 @@ public class LivenessAnswerer extends Answerer {
       Set<Edge> ingress) {
     Inference infer = info.toInference();
     if (!ingress.isEmpty()) {
-      infer.restrictCheckedAssumptions(ingress);
+      infer.setOrigins(ingress.stream().map(e -> (Location) e).collect(Collectors.toSet()));
     }
     infer.addPrefixToAssumptions(prefix);
     Invariant goodPathCondition =

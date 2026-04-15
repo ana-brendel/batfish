@@ -36,6 +36,8 @@ public class Inference {
   private final Queue<Location> working = new LinkedList<>();
   private final Map<Location, Invariant> inferred = new HashMap<>();
 
+  private final Set<Location> originsForExistence = new HashSet<>();
+
   private final Map<RoutingPolicy, List<TransferReturn>> computedPathsCache = new HashMap<>();
 
   public enum Check {
@@ -55,19 +57,12 @@ public class Inference {
     this.exports = exports;
     this.checkedAssumptions = checkedAssumptions;
     this.enforcedAssumptions = enforcedAssumptions;
+    this.originsForExistence.addAll(checkedAssumptions.keySet());
   }
 
-  public void restrictCheckedAssumptions(Set<Edge> origins) {
-    Set<Location> remove = new HashSet<>();
-    checkedAssumptions
-        .keySet()
-        .forEach(
-            location -> {
-              if (location instanceof Edge && !origins.contains(location)) {
-                remove.add(location);
-              }
-            });
-    remove.forEach(checkedAssumptions::remove);
+  public void setOrigins(Set<Location> origins) {
+    this.originsForExistence.clear();
+    this.originsForExistence.addAll(origins);
   }
 
   private boolean checksFalseAssumption(Location location) {
@@ -193,7 +188,7 @@ public class Inference {
 
   private Map<Location, Bgpv4Route> existentialAssumptionCheck(boolean earlyReturn) {
     Map<Location, Bgpv4Route> checks = new HashMap<>();
-    for (Location assumption_location : checkedAssumptions.keySet()) {
+    for (Location assumption_location : originsForExistence) {
       if (inferred.containsKey(assumption_location)) {
         Invariant inferredWithOutProtocolHistory =
             new Invariant(

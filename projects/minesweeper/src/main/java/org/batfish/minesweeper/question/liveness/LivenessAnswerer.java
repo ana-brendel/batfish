@@ -255,7 +255,9 @@ public class LivenessAnswerer extends Answerer {
                     .put(
                         Setup.RESULT_LABEL_COL,
                         Setup.SOURCE_OF_INTERFERENCE + info.locationStr(origin))
-                    .put(Setup.RESULT_VALUE_COL, interferenceOccurs.getValue().get(origin))
+                    .put(
+                        Setup.RESULT_VALUE_COL,
+                        interferenceOccurs.getValue().get(origin).toString())
                     .build());
           }
         }

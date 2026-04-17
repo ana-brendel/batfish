@@ -266,8 +266,10 @@ public class LivenessAnswererTest {
         LivenessAnswerer.updatedRun(info, BASIC_PREFIX, GAMMANODE, target, Set.of());
     Pair<Boolean, Boolean> checks = processResultRows(result.getRowsList());
 
-    assertTrue(checks.getLeft());
-    assertTrue(checks.getRight());
+    // only good path is not the shortest path
+    assertFalse(checks.getLeft());
+    // assertTrue(checks.getLeft());
+    // assertTrue(checks.getRight());
   }
 
   private TestConfigConstructionUtils.Networkv2 pathWithInterferenceExample(

@@ -197,21 +197,45 @@ public class LivenessAnswerer extends Answerer {
       infer.setOrigins(ingress.stream().map(e -> (Location) e).collect(Collectors.toSet()));
     }
     infer.addPrefixToAssumptions(prefix);
-    Invariant goodPathCondition =
-        new Invariant(info.tbdd, target.getBDDCopy().and(infer.prefixSpaceToBDD(prefix)));
-    Pair<Location, Map<Location, Bgpv4Route>> reachable =
-        infer.run(Map.of(location, goodPathCondition), Inference.Check.EXISTS, true);
-    assert reachable.getKey() == null && reachable.getValue() != null;
-    Map<Location, Bgpv4Route> routes = reachable.getValue();
+
+    // Finding if good path exists through inference loop -- commented out, unsound
+    //    Invariant goodPathCondition =
+    //        new Invariant(info.tbdd, target.getBDDCopy().and(infer.prefixSpaceToBDD(prefix)));
+    //    Pair<Location, Map<Location, Bgpv4Route>> reachable =
+    //        infer.run(Map.of(location, goodPathCondition), Inference.Check.EXISTS, true);
+    //    assert reachable.getKey() == null && reachable.getValue() != null;
+    //    Map<Location, Bgpv4Route> routes = reachable.getValue();
+
+    LOGGER.info("Searching for a good path (via checking shortest path from ingresses)...");
+    Map<RoutingPolicy, List<TransferReturn>> computedPathsCache = new HashMap<>();
+    PathExploration exploration =
+        info.toPathExploration(prefix, location, target, ingress, computedPathsCache);
+    Pair<Path, Set<Path>> paths = exploration.run();
+    Map<Location, String> routes = new HashMap<>();
+    if (paths.getKey() != null) {
+      routes.put(paths.getKey().getStartingPoint(), paths.getKey().display(info));
+    }
+
     TableAnswerElement tae = new TableAnswerElement(metadata_liveness());
 
     if (routes.isEmpty()) {
+      LOGGER.info("No path found to satisfy the property.");
       tae.addRow(
           Row.builder()
               .put(Setup.RESULT_LABEL_COL, Setup.OVERALL_RESULT)
               .put(Setup.RESULT_VALUE_COL, "False (No Good Route Found)")
               .build());
+      paths
+          .getRight()
+          .forEach(
+              p ->
+                  tae.addRow(
+                      Row.builder()
+                          .put(Setup.RESULT_LABEL_COL, Setup.BAD_PATH_LABEL)
+                          .put(Setup.RESULT_VALUE_COL, p.displayStartCondition())
+                          .build()));
     } else {
+      LOGGER.info("FOUND good path");
       LinkedList<Row> rows = new LinkedList<>();
       // include starting points of potential good paths (only add 5 path origins)
       int count = 0;
@@ -227,12 +251,14 @@ public class LivenessAnswerer extends Answerer {
                   .build());
         }
       }
+      LOGGER.info("Checking for interference...");
       // check for interference
       Invariant interferenceCondition =
           new Invariant(info.tbdd, target.negate().getBDD().and(infer.prefixSpaceToBDD(prefix)));
       Pair<Location, Map<Location, Bgpv4Route>> interferenceOccurs =
           infer.run(Map.of(location, interferenceCondition), Inference.Check.NONE_EXIST, true);
       assert interferenceOccurs.getKey() == null && interferenceOccurs.getValue() != null;
+      LOGGER.info("Interference check COMPLETE");
       if (interferenceOccurs.getValue().isEmpty()) {
         tae.addRow(
             Row.builder()

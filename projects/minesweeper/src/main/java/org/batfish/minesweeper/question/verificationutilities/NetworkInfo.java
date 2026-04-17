@@ -25,6 +25,7 @@ import org.batfish.minesweeper.bdd.TransferReturn;
 import org.batfish.minesweeper.question.liveness.InterferenceCheck;
 import org.batfish.minesweeper.question.liveness.Path;
 import org.batfish.minesweeper.question.liveness.PathAnalyzer;
+import org.batfish.minesweeper.question.liveness.PathExploration;
 import org.batfish.minesweeper.question.liveness.UpdatedPathAnalyzer;
 import org.batfish.minesweeper.question.safety.Infer;
 import org.batfish.minesweeper.question.searchroutepolicies.RegexConstraint;
@@ -581,6 +582,23 @@ public class NetworkInfo {
             this.exports,
             this.defaultIncoming);
     return new UpdatedPathAnalyzer(context, prefix, location, target, computedPathsCache);
+  }
+
+  public PathExploration toPathExploration(
+      PrefixSpace prefix,
+      Location location,
+      Invariant target,
+      Set<Edge> ingress,
+      Map<RoutingPolicy, List<TransferReturn>> computedPathsCache) {
+    Path.Context context =
+        new Path.Context(
+            this.tbdd,
+            this.checkedAssumptions,
+            this.enforcedAssumptions,
+            this.imports,
+            this.exports,
+            this.defaultIncoming);
+    return new PathExploration(context, prefix, location, target, ingress, computedPathsCache);
   }
 
   public Inference toInference() {

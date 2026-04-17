@@ -20,6 +20,7 @@ import org.batfish.minesweeper.question.verificationutilities.Setup;
 
 import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
+import java.util.HashSet;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
@@ -134,6 +135,81 @@ public class Path {
     boolean result = !initial.isFalse() && properties[properties.length - 1].impliedBy(initial);
     initialAssumption.free();
     return result;
+  }
+
+  public boolean isGoodPathModified() {
+    BDD initialAssumption =
+        context
+            .prefixSpaceToBDD(prefix)
+            .andWith(
+                context
+                    .checkedAssumptions()
+                    .getOrDefault(steps[steps.length - 1], context.default_assumption())
+                    .getBDDCopy());
+    Invariant initial =
+        new Invariant(
+            context.tbdd,
+            initialAssumption.andWith(
+                context.tbdd.getOriginalRoute().wellFormednessConstraints(true)));
+    Invariant inferredWithOutProtocolHistory =
+        new Invariant(
+            context.tbdd,
+            properties[properties.length - 1]
+                .getBDDCopy()
+                .existEq(context.tbdd.getOriginalRoute().getProtocolHistory().support()));
+    boolean result = !initial.isFalse() && inferredWithOutProtocolHistory.impliedBy(initial);
+    initialAssumption.free();
+    return result;
+  }
+
+  private String relevantAttributes() {
+    BDDRoute route = context.tbdd.getOriginalRoute();
+    BDD incoming = properties[properties.length - 1].getBDDCopy();
+    BDD support = incoming.support();
+    Set<String> attr = new HashSet<>();
+    if (support.testsVars(route.getPrefix().support())) {
+      attr.add("Prefix");
+    }
+    if (support.testsVars(route.getPrefixLength().support())) {
+      attr.add("Prefix Length");
+    }
+    if (support.testsVars(route.getAsPathRegexAtomicPredicates().support())) {
+      attr.add("AS Path");
+    }
+    if (support.testsVars(context.tbdd.getFactory().andAll(route.getCommunityAtomicPredicates()))) {
+      attr.add("Communities");
+    }
+    if (support.testsVars(route.getAsPathLength().support())) {
+      attr.add("AS Path Length");
+    }
+    if (support.testsVars(route.getNextHop().support())) {
+      attr.add("Next Hop");
+    }
+    if (support.testsVars(route.getLocalPref().support())) {
+      attr.add("Local Pref");
+    }
+    if (support.testsVars(route.getMed().support())) {
+      attr.add("MED");
+    }
+    if (support.testsVars(route.getWeight().support())) {
+      attr.add("Weight");
+    }
+    if (support.testsVars(route.getProtocolHistory().support())) {
+      attr.add("Protocol History");
+    }
+    return "Relevant Attributes: " + String.join(", ", attr);
+  }
+
+  public String displayStartCondition() {
+    Location start = steps[steps.length - 1];
+    Invariant cond = properties[properties.length - 1];
+    String str = cond.toString();
+    String attr = relevantAttributes();
+    if (str.startsWith("LIMIT")) {
+      return "[" + start.toUniqueString() + "] " + attr;
+    } else {
+      return "[" + start.toUniqueString() + "] " + str + " (" + attr + ")";
+    }
   }
 
   // TODO improve
@@ -265,6 +341,10 @@ public class Path {
       }
     }
     return true;
+  }
+
+  public Location getStartingPoint() {
+    return steps[steps.length - 1];
   }
 
   /// A Path.Builder represents a path which should be connected but has not had any liveness

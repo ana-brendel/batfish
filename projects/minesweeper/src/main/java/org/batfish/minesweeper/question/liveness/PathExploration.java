@@ -98,7 +98,7 @@ public class PathExploration {
         throw new BatfishException("Path is poorly constructed.");
       }
       if (policy == null || post.isFalse()) {
-        properties[i] = post;
+        properties[i] = post.copy();
       } else {
         properties[i] = post.weakestPrecondition(policy, false, computedPathsCache);
       }
@@ -129,14 +129,13 @@ public class PathExploration {
         Invariant[] properties = getPathConstraints(steps);
         Path path = Path.create(steps, properties, context, prefix);
         if (path.isGoodPathModified()) {
-          // badPaths.forEach(Path::freeBDDs);
+          badPaths.forEach(Path::freeBDDs);
           return Pair.of(path, Set.of());
         } else if (badPaths.size() < 5) {
           badPaths.add(path);
+        } else {
+          path.freeBDDs();
         }
-        // else {
-        //  path.freeBDDs();
-        // }
       } else if (current instanceof Edge edge && edge.getSrcNode() != null) {
         Node last = edge.getDstNode();
         Pair<Edge, Integer> lastShortest = shortest.get(last);

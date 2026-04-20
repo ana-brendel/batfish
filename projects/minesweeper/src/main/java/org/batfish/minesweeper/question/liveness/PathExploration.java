@@ -133,9 +133,10 @@ public class PathExploration {
           return Pair.of(path, Set.of());
         } else if (badPaths.size() < 5) {
           badPaths.add(path);
-        } else {
-          path.freeBDDs();
         }
+        // else {
+        //  path.freeBDDs();
+        // }
       } else if (current instanceof Edge edge && edge.getSrcNode() != null) {
         Node last = edge.getDstNode();
         Pair<Edge, Integer> lastShortest = shortest.get(last);

@@ -23,6 +23,7 @@ public final class SafetyQuestion extends Question {
   private static final String PROP_DEFAULT_ASSUMPTION = "default_assumption";
   private static final String PROP_SHOW_ALL = "show_all";
   private static final String PROP_REFINE = "refine";
+  private static final String PROP_EXACT_COMM = "exact_communities";
 
   //  private final @Nonnull Map<Location.Builder, Invariant.Builder> _targets = new HashMap<>();
   private final Location.Builders _location;
@@ -32,9 +33,10 @@ public final class SafetyQuestion extends Question {
   private final Invariant.Builder _default_assumption;
   private final boolean _show_all;
   private final boolean _refine;
+  private final boolean _exact_communities;
 
   public SafetyQuestion() {
-    this(null, null, null, null, null, false, false);
+    this(null, null, null, null, null, false, false, false);
   }
 
   public SafetyQuestion(
@@ -44,7 +46,8 @@ public final class SafetyQuestion extends Question {
       @Nullable Invariant.Builders assumptions,
       @Nullable Invariant.Builder default_assumption,
       boolean show_all,
-      boolean refine) {
+      boolean refine,
+      boolean exact_communities) {
     checkArgument(
         location == null
             ? target == null
@@ -67,6 +70,7 @@ public final class SafetyQuestion extends Question {
     _default_assumption = default_assumption;
     _show_all = show_all;
     _refine = refine;
+    _exact_communities = exact_communities;
   }
 
   @JsonCreator
@@ -77,7 +81,8 @@ public final class SafetyQuestion extends Question {
       @JsonProperty(PROP_ASSUMPTIONS) @Nullable Invariant.Builders assumptions,
       @JsonProperty(PROP_DEFAULT_ASSUMPTION) @Nullable Invariant.Builder default_assumption,
       @JsonProperty(PROP_SHOW_ALL) @Nullable Boolean show_all,
-      @JsonProperty(PROP_REFINE) @Nullable Boolean refine) {
+      @JsonProperty(PROP_REFINE) @Nullable Boolean refine,
+      @JsonProperty(PROP_EXACT_COMM) @Nullable Boolean exact_communities) {
     // default for show_all and refine is false (to run faster in default case)
     return new SafetyQuestion(
         target,
@@ -86,7 +91,8 @@ public final class SafetyQuestion extends Question {
         assumptions,
         default_assumption,
         show_all != null && show_all,
-        refine != null && refine);
+        refine != null && refine,
+        exact_communities != null && exact_communities);
   }
 
   @Nonnull
@@ -105,6 +111,10 @@ public final class SafetyQuestion extends Question {
 
   public boolean get_refine() {
     return _refine;
+  }
+
+  public boolean get_exact_communities() {
+    return _exact_communities;
   }
 
   @Nonnull

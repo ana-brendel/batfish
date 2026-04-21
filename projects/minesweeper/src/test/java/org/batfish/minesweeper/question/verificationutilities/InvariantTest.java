@@ -50,12 +50,14 @@ import org.junit.Test;
 
 import java.io.IOException;
 import java.util.AbstractMap;
+import java.util.Arrays;
 import java.util.Collection;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
 import static org.batfish.datamodel.LineAction.PERMIT;
@@ -327,6 +329,67 @@ public class InvariantTest {
     Invariant eitherInv =
         Invariant.builder().addClause(match).addClause(avoid).build(tbdd, policyUsed);
     assertEquals(eitherInv.getBDDCopy(), match_100_2.id().or(match_100_1.id().not()));
+  }
+
+  @Test
+  public void exactCommunitiesBDDTest() {
+    RoutingPolicy policyUsed = exports.get(BETANODE);
+
+    RegexConstraint comm_100_2 = RegexConstraint.parse("100:2");
+    RegexConstraint not_comm_100_1 = RegexConstraint.parse("!100:1");
+    Invariant.ClauseBuilder match =
+        Invariant.createClause(null, null, new RegexConstraints(List.of(comm_100_2)), null, null);
+    Invariant.ClauseBuilder avoid =
+        Invariant.createClause(
+            null, null, new RegexConstraints(List.of(not_comm_100_1)), null, null);
+    Invariant.ClauseBuilder both =
+        Invariant.createClause(
+            null, null, new RegexConstraints(List.of(comm_100_2, not_comm_100_1)), null, null);
+
+    Set<BDD> v_100_1_s =
+        configAPs
+            .getStandardCommunityAtomicPredicates()
+            .getRegexAtomicPredicates()
+            .get(CommunityVar.from(not_comm_100_1.getRegex()))
+            .stream()
+            .map(i -> tbdd.getOriginalRoute().getCommunityAtomicPredicates()[i])
+            .collect(Collectors.toSet());
+
+    Set<BDD> v_100_2_s =
+        configAPs
+            .getStandardCommunityAtomicPredicates()
+            .getRegexAtomicPredicates()
+            .get(CommunityVar.from(comm_100_2.getRegex()))
+            .stream()
+            .map(i -> tbdd.getOriginalRoute().getCommunityAtomicPredicates()[i])
+            .collect(Collectors.toSet());
+
+    assert v_100_1_s.size() == 1 && v_100_2_s.size() == 1;
+
+    BDD v_100_1 = v_100_1_s.stream().findFirst().get();
+    BDD v_100_2 = v_100_2_s.stream().findFirst().get();
+
+    Set<BDD> anys =
+        Arrays.stream(tbdd.getOriginalRoute().getCommunityAtomicPredicates())
+            .collect(Collectors.toSet());
+    anys.remove(v_100_1);
+    anys.remove(v_100_2);
+    assert anys.size() == 1;
+    BDD other_comm = anys.stream().findFirst().get();
+
+    Invariant matchInv = new Invariant(tbdd, match.build(tbdd, policyUsed, true));
+    assertEquals(matchInv.getBDDCopy(), v_100_2.andWith(v_100_1.not()).andWith(other_comm.not()));
+
+    Invariant avoidInv = new Invariant(tbdd, avoid.build(tbdd, policyUsed, true));
+    assertEquals(
+        avoidInv.getBDDCopy(), v_100_2.not().andWith(v_100_1.not()).andWith(other_comm.not()));
+
+    Invariant bothInv = new Invariant(tbdd, both.build(tbdd, policyUsed, true));
+    assertEquals(bothInv.getBDDCopy(), v_100_2.andWith(v_100_1.not()).andWith(other_comm.not()));
+
+    Invariant eitherInv =
+        Invariant.builder().addClause(match).addClause(avoid).build(tbdd, policyUsed, true);
+    assertEquals(eitherInv.getBDDCopy(), (v_100_2.orWith(v_100_1.not())).andWith(other_comm.not()));
   }
 
   @Test

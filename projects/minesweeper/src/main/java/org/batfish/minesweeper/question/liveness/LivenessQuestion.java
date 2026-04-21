@@ -28,6 +28,7 @@ public final class LivenessQuestion extends Question {
   private static final String PROP_ASSUMPTIONS = "assumptions";
   private static final String PROP_DEFAULT_ASSUMPTION = "default_assumption";
   private static final String PROP_INGRESS = "ingress";
+  private static final String PROP_EXACT_COMM = "exact_community";
 
   private final @Nonnull PrefixSpace _prefix;
   private final @Nonnull Map<Location.Builder, Invariant.Builder> _target = new HashMap<>();
@@ -35,9 +36,10 @@ public final class LivenessQuestion extends Question {
   private final Invariant.Builders _assumptions;
   private final Invariant.Builder _default_assumption;
   private final Location.Builders _ingress;
+  private final boolean _exact_community;
 
   public LivenessQuestion() {
-    this(DEFAULT_PREFIX, null, null, null, null, null, null);
+    this(DEFAULT_PREFIX, null, null, null, null, null, null, false);
   }
 
   private LivenessQuestion(
@@ -47,7 +49,8 @@ public final class LivenessQuestion extends Question {
       @Nullable Location.Builders assumptions_locations,
       @Nullable Invariant.Builders assumptions,
       @Nullable Invariant.Builder default_assumption,
-      @Nullable Location.Builders ingress) {
+      @Nullable Location.Builders ingress,
+      boolean exact_community) {
     if (target != null && location != null) {
       _target.put(location, target);
     }
@@ -56,6 +59,7 @@ public final class LivenessQuestion extends Question {
     _assumptions = assumptions;
     _default_assumption = default_assumption;
     _ingress = ingress;
+    _exact_community = exact_community;
   }
 
   @JsonCreator
@@ -66,9 +70,17 @@ public final class LivenessQuestion extends Question {
       @JsonProperty(PROP_ASSUMPTION_LOCATIONS) @Nullable Location.Builders assumption_locations,
       @JsonProperty(PROP_ASSUMPTIONS) @Nullable Invariant.Builders assumptions,
       @JsonProperty(PROP_DEFAULT_ASSUMPTION) Invariant.Builder default_assumption,
-      @JsonProperty(PROP_INGRESS) Location.Builders ingress) {
+      @JsonProperty(PROP_INGRESS) Location.Builders ingress,
+      @JsonProperty(PROP_EXACT_COMM) @Nullable Boolean exact_community) {
     return new LivenessQuestion(
-        prefix, target, location, assumption_locations, assumptions, default_assumption, ingress);
+        prefix,
+        target,
+        location,
+        assumption_locations,
+        assumptions,
+        default_assumption,
+        ingress,
+        exact_community != null && exact_community);
   }
 
   @Nonnull
@@ -102,6 +114,10 @@ public final class LivenessQuestion extends Question {
   @Nullable
   public Location.Builders get_ingress() {
     return _ingress;
+  }
+
+  public boolean get_exact_communities() {
+    return _exact_community;
   }
 
   @JsonIgnore

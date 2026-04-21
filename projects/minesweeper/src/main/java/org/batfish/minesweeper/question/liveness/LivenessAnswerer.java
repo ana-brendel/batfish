@@ -47,6 +47,7 @@ public class LivenessAnswerer extends Answerer {
   private final @Nonnull Set<RegexConstraint> _asPathRegexes = new HashSet<>();
   private final @Nullable Invariant.Builder _default_assumption;
   private final @Nullable Location.Builders _ingress;
+  private final boolean _exact_communities;
 
   public LivenessAnswerer(LivenessQuestion question, IBatfish batfish) {
     super(question, batfish);
@@ -54,6 +55,7 @@ public class LivenessAnswerer extends Answerer {
     _target = question.get_target();
     _default_assumption = question.get_default_assumption();
     _ingress = question.get_ingress();
+    _exact_communities = question.get_exact_communities();
 
     // this is added because the assumptions are taken as two lists with corresponding inputs
     List<Invariant.Builder> invAssumptions =
@@ -151,7 +153,13 @@ public class LivenessAnswerer extends Answerer {
 
     LOGGER.info("Gathering relevant information from snapshot...");
     NetworkInfo info =
-        new NetworkInfo(_batfish, snapshot, _communityRegexes, _asPathRegexes, _default_assumption);
+        new NetworkInfo(
+            _batfish,
+            snapshot,
+            _communityRegexes,
+            _asPathRegexes,
+            _default_assumption,
+            _exact_communities);
     LOGGER.info("Constructed Verification.NetworkInfo object");
 
     _assumptions.forEach(info::addAssumption);

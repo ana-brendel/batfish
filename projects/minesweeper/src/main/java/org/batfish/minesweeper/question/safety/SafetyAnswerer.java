@@ -31,12 +31,14 @@ public final class SafetyAnswerer extends Answerer {
   private final @Nonnull Set<RegexConstraint> _asPathRegexes = new HashSet<>();
   private final boolean _showAll;
   private final boolean _refine;
+  private final boolean _exact_communities;
 
   public SafetyAnswerer(SafetyQuestion question, IBatfish batfish) {
     super(question, batfish);
     _showAll = question.get_show_all();
     _refine = question.get_refine();
     _default_assumption = question.get_default_assumption().orElse(null);
+    _exact_communities = question.get_exact_communities();
 
     // we take target property and corresponding locations as two lists with
     // corresponding inputs
@@ -146,7 +148,13 @@ public final class SafetyAnswerer extends Answerer {
 
     LOGGER.info("Gathering relevant information from snapshot...");
     NetworkInfo info =
-        new NetworkInfo(_batfish, snapshot, _communityRegexes, _asPathRegexes, _default_assumption);
+        new NetworkInfo(
+            _batfish,
+            snapshot,
+            _communityRegexes,
+            _asPathRegexes,
+            _default_assumption,
+            _exact_communities);
     LOGGER.info("Constructed Verification.NetworkInfo object");
 
     LOGGER.info("Adding any provided assumptions to the NetworkInfo object");

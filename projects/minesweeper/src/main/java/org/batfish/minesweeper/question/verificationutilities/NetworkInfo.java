@@ -56,6 +56,7 @@ public class NetworkInfo {
 
   public final TransferBDD tbdd;
   public final Invariant defaultIncoming;
+  private final boolean exact_communities;
 
   public record NamedIp(Ip ip, String node) {
     @Override
@@ -207,6 +208,7 @@ public class NetworkInfo {
       @Nonnull Invariant defaultIncoming) {
     this.tbdd = tbdd;
     this.defaultIncoming = defaultIncoming;
+    this.exact_communities = false;
     processOnlyConfigs(configs);
     // default assumption of True for incoming edges
     for (Map<NamedIp, Edge> edgesBank : edges.values()) {
@@ -438,7 +440,7 @@ public class NetworkInfo {
     } else {
       policy = this.getPolicy((Edge) location, getImportPolicy);
     }
-    return inv.build(this.tbdd, policy);
+    return inv.build(this.tbdd, policy, this.exact_communities);
   }
 
   /// Used to add an assumption which indicates any traffic is possible at provided location
@@ -689,7 +691,8 @@ public class NetworkInfo {
       @Nonnull NetworkSnapshot snapshot,
       @Nonnull Set<RegexConstraint> communityRegexes,
       @Nonnull Set<RegexConstraint> asPathRegexes,
-      @Nullable Invariant.Builder defaultIncoming) {
+      @Nullable Invariant.Builder defaultIncoming,
+      boolean exact_communities) {
     SpecifierContext context = batfish.specifierContext(snapshot);
     if (context == null) {
       throw new BatfishException("Cannot get the SpecifierContext from snapshot");
@@ -857,8 +860,11 @@ public class NetworkInfo {
         getConfigAtomicPredicates(communityRegexes, asPathRegexes, relevantPolicies);
 
     this.tbdd = new TransferBDD(configAtomicPredicates);
+    this.exact_communities = exact_communities;
     this.defaultIncoming =
-        defaultIncoming == null ? new Invariant(this.tbdd) : defaultIncoming.build(this.tbdd, null);
+        defaultIncoming == null
+            ? new Invariant(this.tbdd)
+            : defaultIncoming.build(this.tbdd, null, exact_communities);
 
     // default assumption for incoming edges in the checkedAssumptions
     for (Node node : nodeByName.values()) {

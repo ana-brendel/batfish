@@ -8,6 +8,7 @@
   "default_assumption": "${default_assumption}",
   "show_all": "${show_all}",
   "refine": "${refine}",
+  "exact_communities": "${exact_communities}",
   "instance": {
     "description": "...",
     "instanceName": "safety",
@@ -19,7 +20,8 @@
       "assumptions",
       "default_assumption",
       "show_all",
-      "refine"
+      "refine",
+      "exact_communities"
     ],
     "tags": [
       "routing"
@@ -66,6 +68,12 @@
         "type": "boolean",
         "optional": true,
         "displayName": "Perform refinement"
+      },
+      "exact_communities": {
+        "description": "Flag indicating if communities provided should be treated as exact",
+        "type": "boolean",
+        "optional": true,
+        "displayName": "Implicitly negate communities not mentioned"
       }
     }
   }

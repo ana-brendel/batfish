@@ -130,7 +130,8 @@ public class Invariant {
       return clauses;
     }
 
-    public Invariant build(@Nonnull TransferBDD tbdd, @Nullable RoutingPolicy policy) {
+    public Invariant build(
+        @Nonnull TransferBDD tbdd, @Nullable RoutingPolicy policy, boolean exactCommunities) {
       if (clauses.isEmpty()) {
         return new Invariant(tbdd);
       } else {
@@ -141,9 +142,15 @@ public class Invariant {
                     .map(ClauseBuilder::createDesiredStringRepresentation)
                     .collect(Collectors.toSet()));
         Collection<BDD> BDDs =
-            clauses.stream().map(clause -> clause.build(tbdd, policy)).collect(Collectors.toSet());
+            clauses.stream()
+                .map(clause -> clause.build(tbdd, policy, exactCommunities))
+                .collect(Collectors.toSet());
         return new Invariant(tbdd, tbdd.getFactory().orAll(BDDs), string);
       }
+    }
+
+    public Invariant build(@Nonnull TransferBDD tbdd, @Nullable RoutingPolicy policy) {
+      return this.build(tbdd, policy, false);
     }
 
     @JsonCreator
@@ -235,6 +242,31 @@ public class Invariant {
     public ClauseBuilder setAsPathLength(@Nullable Integer length) {
       _asPathLength = length;
       return this;
+    }
+
+    private static Set<BDD> allOtherCommunitiesNegated(
+        @Nonnull RegexConstraints regex, @Nonnull TransferBDD tbdd, @Nonnull BDDRoute route) {
+      Set<String> communities =
+          regex.getRegexConstraints().stream()
+              .map(RegexConstraint::getRegex)
+              .collect(Collectors.toSet());
+      Map<String, Set<Integer>> stringKeys = new HashMap<>();
+      tbdd.getConfigAtomicPredicates()
+          .getStandardCommunityAtomicPredicates()
+          .getRegexAtomicPredicates()
+          .forEach((key, value) -> stringKeys.put(key.getRegex(), value));
+      Set<Integer> cvi =
+          stringKeys.values().stream().flatMap(Collection::stream).collect(Collectors.toSet());
+      stringKeys.forEach(
+          (rgx, v) -> {
+            // need to make sure it isn't the regex matching on all
+            if (communities.contains(rgx)) {
+              cvi.removeAll(v);
+            }
+          });
+      return cvi.stream()
+          .map(i -> route.getCommunityAtomicPredicates()[i])
+          .collect(ImmutableSet.toImmutableSet());
     }
 
     private static BDD communityBDD(
@@ -331,7 +363,8 @@ public class Invariant {
     }
 
     @Nonnull
-    public BDD build(@Nonnull TransferBDD tbdd, @Nullable RoutingPolicy policy) {
+    public BDD build(
+        @Nonnull TransferBDD tbdd, @Nullable RoutingPolicy policy, boolean exactCommunities) {
       BDDRoute base = new BDDRoute(tbdd.getFactory(), tbdd.getConfigAtomicPredicates());
       Optional<TransferBDD.Context> context =
           policy == null ? Optional.empty() : Optional.of(TransferBDD.Context.forPolicy(policy));
@@ -345,6 +378,12 @@ public class Invariant {
       if (_communities != null && !_communities.isEmpty()) {
         clauseBDD.andWith(communitiesToBDD(_communities, tbdd, base, context));
       }
+      if (exactCommunities) {
+        Set<BDD> toNegate =
+            allOtherCommunitiesNegated(
+                firstNonNull(_communities, new RegexConstraints()), tbdd, base);
+        toNegate.forEach(bdd -> clauseBDD.andWith(bdd.not()));
+      }
       if (_asPath != null && !_asPath.isEmpty()) {
         clauseBDD.andWith(asPathToBDD(_asPath, tbdd.getConfigAtomicPredicates(), base));
       }
@@ -352,6 +391,10 @@ public class Invariant {
         clauseBDD.andWith(tbdd.getOriginalRoute().getAsPathLength().value(_asPathLength));
       }
       return clauseBDD;
+    }
+
+    public BDD build(@Nonnull TransferBDD tbdd, @Nullable RoutingPolicy policy) {
+      return this.build(tbdd, policy, false);
     }
 
     public String createDesiredStringRepresentation() {

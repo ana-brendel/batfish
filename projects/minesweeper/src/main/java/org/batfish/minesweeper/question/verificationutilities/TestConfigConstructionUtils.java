@@ -82,7 +82,7 @@ public class TestConfigConstructionUtils {
           configInput(),
           Invariant.builder()
               .addClause(Invariant.clauseBuilder().matchPrefix(prefix))
-              .build(tbdd, null));
+              .build(tbdd, null, false));
     }
   }
 

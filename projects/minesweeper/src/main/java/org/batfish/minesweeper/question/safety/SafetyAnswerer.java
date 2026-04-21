@@ -111,7 +111,8 @@ public final class SafetyAnswerer extends Answerer {
     // Set up and run the invariant inference
     Infer inference = info.toInfer();
     targets.forEach(
-        (loc, builder) -> inference.addProperty(loc, info.buildInvariant(loc, builder, true)));
+        (loc, builder) ->
+            inference.addProperty(loc, info.buildInvariant(loc, builder, true, false)));
 
     LOGGER.info("Beginning inference...");
     Infer.Result result = inference.run();

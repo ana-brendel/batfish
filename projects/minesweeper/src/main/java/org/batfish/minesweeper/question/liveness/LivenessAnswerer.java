@@ -34,7 +34,7 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.stream.Collectors;
 
-import static org.batfish.minesweeper.question.verificationutilities.Setup.buildLocationInvariant;
+import static org.batfish.minesweeper.question.verificationutilities.Setup.buildTargetLocationInvariant;
 import static org.batfish.minesweeper.question.verificationutilities.Setup.metadata_liveness;
 
 public class LivenessAnswerer extends Answerer {
@@ -168,7 +168,7 @@ public class LivenessAnswerer extends Answerer {
       // if no target or prefix is provided, send back locations
       return info.getAnswerElement();
     } else {
-      Map.Entry<Location, Invariant> target = buildLocationInvariant(info, true, _target);
+      Map.Entry<Location, Invariant> target = buildTargetLocationInvariant(info, true, _target);
       // LivenessResult result;
       Set<Edge> origins = new HashSet<>();
       if (_ingress != null) {

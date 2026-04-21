@@ -28,7 +28,7 @@ public final class LivenessQuestion extends Question {
   private static final String PROP_ASSUMPTIONS = "assumptions";
   private static final String PROP_DEFAULT_ASSUMPTION = "default_assumption";
   private static final String PROP_INGRESS = "ingress";
-  private static final String PROP_EXACT_COMM = "exact_community";
+  private static final String PROP_EXACT_COMM = "exact_communities";
 
   private final @Nonnull PrefixSpace _prefix;
   private final @Nonnull Map<Location.Builder, Invariant.Builder> _target = new HashMap<>();
@@ -36,7 +36,7 @@ public final class LivenessQuestion extends Question {
   private final Invariant.Builders _assumptions;
   private final Invariant.Builder _default_assumption;
   private final Location.Builders _ingress;
-  private final boolean _exact_community;
+  private final boolean _exact_communities;
 
   public LivenessQuestion() {
     this(DEFAULT_PREFIX, null, null, null, null, null, null, false);
@@ -50,7 +50,7 @@ public final class LivenessQuestion extends Question {
       @Nullable Invariant.Builders assumptions,
       @Nullable Invariant.Builder default_assumption,
       @Nullable Location.Builders ingress,
-      boolean exact_community) {
+      boolean exact_communities) {
     if (target != null && location != null) {
       _target.put(location, target);
     }
@@ -59,7 +59,7 @@ public final class LivenessQuestion extends Question {
     _assumptions = assumptions;
     _default_assumption = default_assumption;
     _ingress = ingress;
-    _exact_community = exact_community;
+    _exact_communities = exact_communities;
   }
 
   @JsonCreator
@@ -117,7 +117,7 @@ public final class LivenessQuestion extends Question {
   }
 
   public boolean get_exact_communities() {
-    return _exact_community;
+    return _exact_communities;
   }
 
   @JsonIgnore

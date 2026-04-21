@@ -426,7 +426,8 @@ public class NetworkInfo {
   }
 
   ///  Builds the provided invariant in the context of this network
-  public Invariant buildInvariant(Location location, Invariant.Builder inv, boolean wpQuery) {
+  public Invariant buildInvariant(
+      Location location, Invariant.Builder inv, boolean wpQuery, boolean exact) {
     RoutingPolicy policy = null;
     assert location instanceof Edge || location instanceof Node;
     boolean getImportPolicy = (location instanceof Edge) != wpQuery;
@@ -440,7 +441,7 @@ public class NetworkInfo {
     } else {
       policy = this.getPolicy((Edge) location, getImportPolicy);
     }
-    return inv.build(this.tbdd, policy, this.exact_communities);
+    return inv.build(this.tbdd, policy, exact);
   }
 
   /// Used to add an assumption which indicates any traffic is possible at provided location
@@ -542,7 +543,9 @@ public class NetworkInfo {
     Set<Location> locations = locationBuilder.instantiate(this);
     assert !locations.isEmpty();
     locations.forEach(
-        location -> this.addAssumption(location, this.buildInvariant(location, assumption, true)));
+        location ->
+            this.addAssumption(
+                location, this.buildInvariant(location, assumption, true, this.exact_communities)));
     return locations;
   }
 

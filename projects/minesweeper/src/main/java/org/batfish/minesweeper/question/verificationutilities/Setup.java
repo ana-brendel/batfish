@@ -89,12 +89,12 @@ public class Setup {
 
   /// This function takes the provided invariants and builds them in the context of the current
   /// network and tbdd
-  public static Map.Entry<Location, Invariant> buildLocationInvariant(
+  public static Map.Entry<Location, Invariant> buildTargetLocationInvariant(
       NetworkInfo info, boolean wpQuery, Map.Entry<Location.Builder, Invariant.Builder> entry) {
     Set<Location> locations = entry.getKey().instantiate(info);
     assert locations.size() == 1;
     Location location = locations.stream().findFirst().get();
-    Invariant invariant = info.buildInvariant(location, entry.getValue(), wpQuery);
+    Invariant invariant = info.buildInvariant(location, entry.getValue(), wpQuery, false);
     return Pair.of(location, invariant);
   }
 

@@ -83,14 +83,16 @@ def runSafetyVerificationQuestion(bf,show_all:bool,query:SafetyQuery):
                 target=query.targetProperty(),
                 location=query.targetLocation(),
                 show_all=show_all,
-                refine=query.refines()).answer()
+                refine=query.refines(),
+                exact_communities=query.getExactCommunities()).answer()
         else:
             result = bf.q.safety(
                 target=query.targetProperty(),
                 location=query.targetLocation(),
                 default_assumption = defaultAssumption,
                 show_all=show_all,
-                refine=query.refines()).answer()
+                refine=query.refines(),
+                exact_communities=query.getExactCommunities()).answer()
     elif defaultAssumption == "":
         result = bf.q.safety(
             target=query.targetProperty(),
@@ -98,7 +100,8 @@ def runSafetyVerificationQuestion(bf,show_all:bool,query:SafetyQuery):
             assumption_locations=assumptionLocations,
             assumptions=query.assumptionProperties(),
             show_all=show_all,
-            refine=query.refines()).answer()
+            refine=query.refines(),
+            exact_communities=query.getExactCommunities()).answer()
     else:
         result = bf.q.safety(
             target=query.targetProperty(),
@@ -107,7 +110,8 @@ def runSafetyVerificationQuestion(bf,show_all:bool,query:SafetyQuery):
             assumptions=query.assumptionProperties(),
             default_assumption = defaultAssumption,
             show_all=show_all,
-            refine=query.refines()).answer()
+            refine=query.refines(),
+            exact_communities=query.getExactCommunities()).answer()
     return result.frame()
 
 # This function is what includes the call to the pybatfish liveness property verification question
@@ -126,43 +130,15 @@ def runLivenessVerificationQuestion(bf,query:LivenessQuery):
                 result = bf.q.liveness(
                     prefix=query.getPrefix(),
                     target=query.targetProperty(),
-                    location=query.targetLocation()).answer()
-            else:
-                result = bf.q.liveness(
-                    prefix=query.getPrefix(),
-                    target=query.targetProperty(),
                     location=query.targetLocation(),
-                    default_assumption = defaultAssumption).answer()
-        elif defaultAssumption == None:
-            result = bf.q.liveness(
-                prefix=query.getPrefix(),
-                target=query.targetProperty(),
-                location=query.targetLocation(),
-                assumption_locations=assumptionLocations,
-                assumptions=query.assumptionProperties()).answer()
-        else:
-            result = bf.q.liveness(
-                prefix=query.getPrefix(),
-                target=query.targetProperty(),
-                location=query.targetLocation(),
-                assumption_locations=assumptionLocations,
-                assumptions=query.assumptionProperties(),
-                default_assumption = defaultAssumption).answer()
-    else: 
-        if assumptionLocations == None:
-            if defaultAssumption == None:
-                result = bf.q.liveness(
-                    prefix=query.getPrefix(),
-                    target=query.targetProperty(),
-                    location=query.targetLocation(),
-                    ingress=ingressEdge).answer()
+                    exact_communities=query.getExactCommunities()).answer()
             else:
                 result = bf.q.liveness(
                     prefix=query.getPrefix(),
                     target=query.targetProperty(),
                     location=query.targetLocation(),
                     default_assumption = defaultAssumption,
-                    ingress=ingressEdge).answer()
+                    exact_communities=query.getExactCommunities()).answer()
         elif defaultAssumption == None:
             result = bf.q.liveness(
                 prefix=query.getPrefix(),
@@ -170,7 +146,7 @@ def runLivenessVerificationQuestion(bf,query:LivenessQuery):
                 location=query.targetLocation(),
                 assumption_locations=assumptionLocations,
                 assumptions=query.assumptionProperties(),
-                ingress=ingressEdge).answer()
+                exact_communities=query.getExactCommunities()).answer()
         else:
             result = bf.q.liveness(
                 prefix=query.getPrefix(),
@@ -179,7 +155,43 @@ def runLivenessVerificationQuestion(bf,query:LivenessQuery):
                 assumption_locations=assumptionLocations,
                 assumptions=query.assumptionProperties(),
                 default_assumption = defaultAssumption,
-                ingress=ingressEdge).answer()
+                exact_communities=query.getExactCommunities()).answer()
+    else: 
+        if assumptionLocations == None:
+            if defaultAssumption == None:
+                result = bf.q.liveness(
+                    prefix=query.getPrefix(),
+                    target=query.targetProperty(),
+                    location=query.targetLocation(),
+                    ingress=ingressEdge,
+                    exact_communities=query.getExactCommunities()).answer()
+            else:
+                result = bf.q.liveness(
+                    prefix=query.getPrefix(),
+                    target=query.targetProperty(),
+                    location=query.targetLocation(),
+                    default_assumption = defaultAssumption,
+                    ingress=ingressEdge,
+                    exact_communities=query.getExactCommunities()).answer()
+        elif defaultAssumption == None:
+            result = bf.q.liveness(
+                prefix=query.getPrefix(),
+                target=query.targetProperty(),
+                location=query.targetLocation(),
+                assumption_locations=assumptionLocations,
+                assumptions=query.assumptionProperties(),
+                ingress=ingressEdge,
+                exact_communities=query.getExactCommunities()).answer()
+        else:
+            result = bf.q.liveness(
+                prefix=query.getPrefix(),
+                target=query.targetProperty(),
+                location=query.targetLocation(),
+                assumption_locations=assumptionLocations,
+                assumptions=query.assumptionProperties(),
+                default_assumption = defaultAssumption,
+                ingress=ingressEdge,
+                exact_communities=query.getExactCommunities()).answer()
     return result.frame()
 
 def runAndDisplay(networkName:str,snapshotName:str,snapshotPath:str,query,show_all=False):
@@ -199,7 +211,9 @@ def runAndGet(networkName:str,snapshotName:str,snapshotPath:str,query,show_all=F
     '''Runs and displays the result of running the VerificationQuery `query` on the snapshot located at `snapshotPath`. The optional `show_all`
     flag is passed to the query with a default value of False.'''
     bf = create(networkName,snapshotName,snapshotPath)
-    if type(query) == LivenessQuery:
+    if query == None:
+        return bf.q.safety().answer().frame()
+    elif type(query) == LivenessQuery:
         return runLivenessVerificationQuestion(bf,query)
     elif type(query) == SafetyQuery:
         return runSafetyVerificationQuestion(bf,show_all,query)

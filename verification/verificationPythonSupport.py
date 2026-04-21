@@ -38,12 +38,13 @@ class LocationPropertyPair:
             return "".join(map(lambda c: c.format(),self.property))
 
 class LivenessQuery:
-    def __init__(self, prefix:str, target:LocationPropertyPair,assumptions:list[LocationPropertyPair]=[],default:Property=None,ingress:list[str]=[]):
+    def __init__(self, prefix:str, target:LocationPropertyPair,assumptions:list[LocationPropertyPair]=[],default:Property=None,ingress:list[str]=[],exact_communities:bool=False):
         self.prefix = prefix
         self.target = target
         self.assumptions = assumptions
         self.default = default
         self.ingress = ingress
+        self.exact_communities = exact_communities
     
     def getPrefix(self):
         return self.prefix
@@ -53,6 +54,9 @@ class LivenessQuery:
     
     def defaultAssumption(self):
         return None if self.default == None else self.default.formatProperty()
+    
+    def getExactCommunities(self):
+        return self.exact_communities
     
     def targetProperty(self):
         return self.target.formatProperty()
@@ -67,11 +71,12 @@ class LivenessQuery:
         return None if self.assumptions == None or self.assumptions == [] else ",".join(map(lambda a: a.formatProperty(),self.assumptions))
     
 class SafetyQuery:
-    def __init__(self, target:LocationPropertyPair,assumptions:list[LocationPropertyPair]=[],default:Property=Property([]),refine:bool=False):
+    def __init__(self, target:LocationPropertyPair,assumptions:list[LocationPropertyPair]=[],default:Property=Property([]),refine:bool=False,exact_communities:bool=False):
         self.target = target
         self.assumptions = assumptions
         self.default = default
         self.refine = refine
+        self.exact_communities = exact_communities
 
     def refines(self):
         return self.refine
@@ -90,6 +95,9 @@ class SafetyQuery:
     
     def assumptionProperties(self):
         return ",".join(map(lambda a: a.formatProperty(),self.assumptions))
+    
+    def getExactCommunities(self):
+        return self.exact_communities
     
 # The functions below are some syntactic sugar to use for queries - in the future should probably directly include in API
 

@@ -263,8 +263,9 @@ public class LivenessAnswerer extends Answerer {
       LOGGER.info("Checking for interference...");
 
       assert paths.getKey() != null;
-      Infer inference = info.toInfer();
+      Map<Location, Bgpv4Route> cex = new HashMap<>();
       for (Map.Entry<Location, Invariant> entry : paths.getKey().getConstraints().entrySet()) {
+        Infer inference = info.toInfer();
         Invariant removeProtocolHistory =
             new Invariant(
                 info.tbdd,
@@ -273,9 +274,10 @@ public class LivenessAnswerer extends Answerer {
                     .getBDDCopy()
                     .existEq(info.tbdd.getOriginalRoute().getProtocolHistory().support()));
         inference.addProperty(entry.getKey(), removeProtocolHistory);
+        Infer.Result result = inference.run();
+        cex.putAll(result.checks);
       }
-      Infer.Result result = inference.run();
-      Pair<Location, Map<Location, Bgpv4Route>> interferenceOccurs = Pair.of(null, result.checks);
+      Pair<Location, Map<Location, Bgpv4Route>> interferenceOccurs = Pair.of(null, cex);
 
       // check for interference
       //      Invariant interferenceCondition =

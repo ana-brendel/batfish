@@ -17,8 +17,12 @@ public class Lightyear {
   }
 
   private boolean completeCheck(Invariant pre, Invariant post, RoutingPolicy policy) {
-    Invariant wp = post.weakestPrecondition(policy);
-    return pre.implies(wp);
+    if (policy == null) {
+      return pre.implies(post);
+    } else {
+      Invariant wp = post.weakestPrecondition(policy);
+      return pre.implies(wp);
+    }
     //    Invariant negatedPost = post.negate();
     //    Invariant weakestConditionForNegation =
     //        policy == null ? negatedPost.copy() : negatedPost.weakestPrecondition(policy, false);

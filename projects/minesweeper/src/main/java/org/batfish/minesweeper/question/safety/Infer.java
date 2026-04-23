@@ -171,50 +171,53 @@ public class Infer {
         if (this.checksFalseAssumption(src)) {
           // inferred can be false because false implies anything
           inferred.put(src, Invariant.getFalse(this.tbdd));
-          continue;
-        }
-        RoutingPolicy exportPolicy = exports.get(edge);
-        Invariant wp = this.getWeakestPrecondition(property, exportPolicy);
-        boolean firstVisit = !inferred.containsKey(src);
-        // get inferred if present, otherwise get enforced assumption, otherwise default is true
-        Invariant existing =
-            inferred.getOrDefault(src, enforcedAssumptions.getOrDefault(src, new Invariant(tbdd)));
-        Invariant updated = strongestCommonImplicant(existing, wp);
-        wp.free();
-        inferred.put(src, updated);
-        // a node will never be a checked assumption
-        if (updated.isFalse()) {
-          existing.free();
-          return Optional.of(new CounterExample(src, property, location));
-        } else if ((firstVisit || !existing.equals(updated)) && !working.contains(src)) {
-          existing.free();
-          working.add(src);
+        } else {
+          RoutingPolicy exportPolicy = exports.get(edge);
+          Invariant wp = this.getWeakestPrecondition(property, exportPolicy);
+          boolean firstVisit = !inferred.containsKey(src);
+          // get inferred if present, otherwise get enforced assumption, otherwise default is true
+          Invariant existing =
+              inferred.getOrDefault(
+                  src, enforcedAssumptions.getOrDefault(src, new Invariant(tbdd)));
+          Invariant updated = strongestCommonImplicant(existing, wp);
+          wp.free();
+          inferred.put(src, updated);
+          // a node will never be a checked assumption
+          if (updated.isFalse()) {
+            existing.free();
+            return Optional.of(new CounterExample(src, property, location));
+          } else if ((firstVisit || !existing.equals(updated)) && !working.contains(src)) {
+            existing.free();
+            working.add(src);
+          }
         }
       } else if (location instanceof Node node) {
         for (Edge edge : node.getAllIncomingEdges()) {
           if (this.checksFalseAssumption(edge)) {
             // inferred can be false because false implies anything
             inferred.put(edge, Invariant.getFalse(this.tbdd));
-            continue;
-          }
-          RoutingPolicy importPolicy = imports.get(edge);
-          Invariant wp = this.getWeakestPrecondition(property, importPolicy);
-          boolean firstVisit = !inferred.containsKey(edge);
-          // get inferred if present, otherwise get enforced assumption, otherwise default is true
-          Invariant existing =
-              inferred.getOrDefault(
-                  edge, enforcedAssumptions.getOrDefault(edge, new Invariant(tbdd)));
-          Invariant updated = strongestCommonImplicant(existing, wp);
-          wp.free();
-          inferred.put(edge, updated);
-          // if we inferred false, but the edge is incoming then this isn't necessarily a
-          // counterexample - rather a condition which should be checked if it holds
-          if (updated.isFalse() && !checkedAssumptions.containsKey(edge)) {
-            existing.free();
-            return Optional.of(new CounterExample(edge, property, location));
-          } else if ((firstVisit || !existing.equals(updated)) && !working.contains(edge)) {
-            existing.free();
-            working.add(edge);
+          } else {
+            RoutingPolicy importPolicy = imports.get(edge);
+            Invariant wp = this.getWeakestPrecondition(property, importPolicy);
+            boolean firstVisit = !inferred.containsKey(edge);
+            // get inferred if present, otherwise get enforced assumption, otherwise default is true
+            Invariant existing =
+                inferred.getOrDefault(
+                    edge, enforcedAssumptions.getOrDefault(edge, new Invariant(tbdd)));
+            Invariant updated = strongestCommonImplicant(existing, wp);
+            wp.free();
+            inferred.put(edge, updated);
+            // if we inferred false, but the edge is incoming then this isn't necessarily a
+            // counterexample - rather a condition which should be checked if it holds
+            if (updated.isFalse() && !checkedAssumptions.containsKey(edge)) {
+              existing.free();
+              return Optional.of(new CounterExample(edge, property, location));
+            } else if (updated.isFalse() && checkedAssumptions.containsKey(edge)) {
+              existing.free();
+            } else if ((firstVisit || !existing.equals(updated)) && !working.contains(edge)) {
+              existing.free();
+              working.add(edge);
+            }
           }
         }
       }

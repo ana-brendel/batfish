@@ -14,6 +14,7 @@ import org.batfish.datamodel.routing_policy.RoutingPolicy;
 import org.batfish.datamodel.table.Row;
 import org.batfish.datamodel.table.TableAnswerElement;
 import org.batfish.minesweeper.bdd.TransferReturn;
+import org.batfish.minesweeper.question.safety.Infer;
 import org.batfish.minesweeper.question.searchroutepolicies.RegexConstraint;
 import org.batfish.minesweeper.question.verificationutilities.Edge;
 import org.batfish.minesweeper.question.verificationutilities.Inference;
@@ -260,11 +261,30 @@ public class LivenessAnswerer extends Answerer {
         }
       }
       LOGGER.info("Checking for interference...");
+
+      assert paths.getKey() != null;
+      Infer inference = info.toInfer();
+      for (Map.Entry<Location, Invariant> entry : paths.getKey().getConstraints().entrySet()) {
+        Invariant removeProtocolHistory =
+            new Invariant(
+                info.tbdd,
+                entry
+                    .getValue()
+                    .getBDDCopy()
+                    .existEq(info.tbdd.getOriginalRoute().getProtocolHistory().support()));
+        inference.addProperty(entry.getKey(), removeProtocolHistory);
+      }
+      Infer.Result result = inference.run();
+      Pair<Location, Map<Location, Bgpv4Route>> interferenceOccurs = Pair.of(null, result.checks);
+
       // check for interference
-      Invariant interferenceCondition =
-          new Invariant(info.tbdd, target.negate().getBDD().and(infer.prefixSpaceToBDD(prefix)));
-      Pair<Location, Map<Location, Bgpv4Route>> interferenceOccurs =
-          infer.run(Map.of(location, interferenceCondition), Inference.Check.NONE_EXIST, true);
+      //      Invariant interferenceCondition =
+      //          new Invariant(info.tbdd,
+      // target.negate().getBDD().and(infer.prefixSpaceToBDD(prefix)));
+      //      Pair<Location, Map<Location, Bgpv4Route>> interferenceOccurs =
+      //          infer.run(Map.of(location, interferenceCondition), Inference.Check.NONE_EXIST,
+      // true);
+
       assert interferenceOccurs.getKey() == null && interferenceOccurs.getValue() != null;
       LOGGER.info("Interference check COMPLETE");
       if (interferenceOccurs.getValue().isEmpty()) {

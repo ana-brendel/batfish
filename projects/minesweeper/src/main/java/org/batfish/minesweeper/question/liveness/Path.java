@@ -20,6 +20,7 @@ import org.batfish.minesweeper.question.verificationutilities.Setup;
 
 import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Map;
 import java.util.Objects;
@@ -63,6 +64,14 @@ public class Path {
       @Nonnull Context context,
       @Nonnull PrefixSpace prefix) {
     return new Path(steps, properties, context, prefix);
+  }
+
+  public Map<Location, Invariant> getConstraints() {
+    Map<Location, Invariant> constraints = new HashMap<>();
+    for (int i = 0; i < this.steps.length - 1; i++) {
+      constraints.put(this.steps[i], this.properties[i]);
+    }
+    return constraints;
   }
 
   /// Network context needed

@@ -118,29 +118,13 @@ public final class SafetyAnswerer extends Answerer {
     Infer.Result result = inference.run();
     LOGGER.info("Finished inferring weakest conditions needed for property to hold.");
 
-    // Run the refinement of invariants, if the initial inference supports the safety condition
-    //    Refine.Result refined;
-    //    boolean refinementOccurred = true;
-
-    //    if (result.counter.isPresent() || !refine || !result.verified) {
-    //      // should only refine if verification succeeds and flag is set to refine
-    //      LOGGER.info("No invariant refinement.");
-    //      refinementOccurred = false;
-    //      refined = inference.refiner().noRefinement();
-    //    } else {
-    //      LOGGER.info("Beginning invariant refinement...");
-    //      refined = inference.refiner().refine();
-    //      LOGGER.info("Finished refining invariants.");
-    //    }
-
-    LOGGER.info("Fixed to no refinement.");
-    boolean refinementOccurred = false;
-    Refine.Result refined = inference.refiner().noRefinement();
-
-    assert result.verified == refined.verified : "Refine should NOT change verification outcome.";
-
     return new SafetyResult(
-        info, refinementOccurred, result.checks, inference.getTargets(), refined, result.counter);
+        info,
+        false,
+        result.checks,
+        inference.getTargets(),
+        inference.getInferred(),
+        result.counter);
   }
 
   @Override

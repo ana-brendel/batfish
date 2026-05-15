@@ -24,9 +24,7 @@ import org.batfish.minesweeper.bdd.TransferBDD;
 import org.batfish.minesweeper.bdd.TransferReturn;
 import org.batfish.minesweeper.question.liveness.InterferenceCheck;
 import org.batfish.minesweeper.question.liveness.Path;
-import org.batfish.minesweeper.question.liveness.PathAnalyzer;
 import org.batfish.minesweeper.question.liveness.PathExploration;
-import org.batfish.minesweeper.question.liveness.UpdatedPathAnalyzer;
 import org.batfish.minesweeper.question.safety.Infer;
 import org.batfish.minesweeper.question.searchroutepolicies.RegexConstraint;
 import org.batfish.question.edges.EdgesQuestion;
@@ -571,24 +569,6 @@ public class NetworkInfo {
         this.edges.values().stream().flatMap(m -> m.values().stream()).collect(Collectors.toSet()));
   }
 
-  /// Returns a PathAnalyzer objective reflective of the network which can be used for verification
-  /// of the provided liveness property (pertaining to the provided prefix space)
-  public PathAnalyzer toPathAnalyzer(
-      PrefixSpace prefix,
-      Location location,
-      Invariant target,
-      Map<RoutingPolicy, List<TransferReturn>> computedPathsCache) {
-    Path.Context context =
-        new Path.Context(
-            this.tbdd,
-            this.checkedAssumptions,
-            this.enforcedAssumptions,
-            this.imports,
-            this.exports,
-            this.defaultIncoming);
-    return new UpdatedPathAnalyzer(context, prefix, location, target, computedPathsCache);
-  }
-
   public PathExploration toPathExploration(
       PrefixSpace prefix,
       Location location,
@@ -604,10 +584,6 @@ public class NetworkInfo {
             this.exports,
             this.defaultIncoming);
     return new PathExploration(context, prefix, location, target, ingress, computedPathsCache);
-  }
-
-  public Inference toInference() {
-    return new Inference(tbdd, imports, exports, checkedAssumptions, enforcedAssumptions);
   }
 
   /// Returns a PathAnalyzer objective reflective of the network which can be used for interference

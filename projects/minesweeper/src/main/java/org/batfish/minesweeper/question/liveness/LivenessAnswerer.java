@@ -1,5 +1,6 @@
 package org.batfish.minesweeper.question.liveness;
 
+import net.sf.javabdd.BDD;
 import org.apache.commons.lang3.tuple.Pair;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -7,7 +8,6 @@ import org.batfish.common.Answerer;
 import org.batfish.common.BatfishException;
 import org.batfish.common.NetworkSnapshot;
 import org.batfish.common.plugin.IBatfish;
-import org.batfish.datamodel.Bgpv4Route;
 import org.batfish.datamodel.PrefixSpace;
 import org.batfish.datamodel.answers.AnswerElement;
 import org.batfish.datamodel.routing_policy.RoutingPolicy;
@@ -17,7 +17,6 @@ import org.batfish.minesweeper.bdd.TransferReturn;
 import org.batfish.minesweeper.question.safety.Infer;
 import org.batfish.minesweeper.question.searchroutepolicies.RegexConstraint;
 import org.batfish.minesweeper.question.verificationutilities.Edge;
-import org.batfish.minesweeper.question.verificationutilities.Inference;
 import org.batfish.minesweeper.question.verificationutilities.Invariant;
 import org.batfish.minesweeper.question.verificationutilities.Location;
 import org.batfish.minesweeper.question.verificationutilities.NetworkInfo;
@@ -31,9 +30,7 @@ import java.util.HashSet;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
-import java.util.Optional;
 import java.util.Set;
-import java.util.stream.Collectors;
 
 import static org.batfish.minesweeper.question.verificationutilities.Setup.buildTargetLocationInvariant;
 import static org.batfish.minesweeper.question.verificationutilities.Setup.metadata_liveness;
@@ -105,49 +102,6 @@ public class LivenessAnswerer extends Answerer {
     }
   }
 
-  /**
-   * Completes liveness verification of the target property for the provided prefix at the given
-   * location, based on the network described by the info object provided.
-   *
-   * @param info network information
-   * @param prefix prefix considered for liveness property
-   * @param location location liveness property should hold
-   * @param target target liveness property to verify
-   * @param ingress option to specify the origin of traffic
-   * @return LivenessAnswerer.Result object storing corresponding verification result
-   */
-  public static LivenessResult run(
-      NetworkInfo info,
-      PrefixSpace prefix,
-      Location location,
-      Invariant target,
-      Set<Edge> ingress) {
-    Map<RoutingPolicy, List<TransferReturn>> computedPathsCache = new HashMap<>();
-    LOGGER.info("Beginning to run liveness property analysis...");
-    PathAnalyzer analyzer = info.toPathAnalyzer(prefix, location, target, computedPathsCache);
-    InterferenceCheck interferenceCheck =
-        info.toInterferenceCheck(prefix, location, target, computedPathsCache);
-
-    LOGGER.info("LOOKING FOR GOOD PATH");
-    Pair<Optional<Path>, List<Path>> paths =
-        ingress == null ? analyzer.run() : analyzer.run(ingress);
-
-    if (paths.getLeft().isEmpty()) {
-      return new LivenessResult(Optional.empty(), paths.getRight(), Optional.empty());
-    } else {
-      LOGGER.info("CHECKING INTERFERENCE");
-      // compute the reachable set of routes along the good path, at each node on that path
-      Path goodPath = paths.getLeft().get();
-      Map<Node, Invariant> reachableGood = goodPath.reachableRoutes();
-      return new LivenessResult(paths.getLeft(), List.of(), interferenceCheck.run(reachableGood));
-    }
-  }
-
-  public static LivenessResult run(
-      NetworkInfo info, PrefixSpace prefix, Location location, Invariant target) {
-    return run(info, prefix, location, target, null);
-  }
-
   @Override
   public AnswerElement answer(NetworkSnapshot snapshot) {
     LOGGER.info("Within the answerer for liveness verification.");
@@ -170,51 +124,31 @@ public class LivenessAnswerer extends Answerer {
       return info.getAnswerElement();
     } else {
       Map.Entry<Location, Invariant> target = buildTargetLocationInvariant(info, true, _target);
-      // LivenessResult result;
       Set<Edge> origins = new HashSet<>();
       if (_ingress != null) {
         _ingress
             .instantiate(info)
             .forEach(
                 loc -> {
-                  if (loc instanceof Edge edge && !edge.hasSrcNode()) {
+                  // removed the originate outside network requirement (!edge.hasSrcNode())
+                  if (loc instanceof Edge edge) {
                     origins.add(edge);
                   } else {
                     throw new BatfishException(
                         "Only considers traffic coming in on an edge (not originating at a node).");
                   }
                 });
-        // result = run(info, _prefix, target.getKey(), target.getValue(), origins);
       }
-      // else {
-      // result = run(info, _prefix, target.getKey(), target.getValue());
-      // }
-      // LOGGER.info("Analysis done!");
-      // return result.getAnswerElement(info);
-      return updatedRun(info, _prefix, target.getKey(), target.getValue(), origins);
+      return run(info, _prefix, target.getKey(), target.getValue(), origins);
     }
   }
 
-  public static TableAnswerElement updatedRun(
+  public static TableAnswerElement run(
       NetworkInfo info,
       PrefixSpace prefix,
       Location location,
       Invariant target,
       Set<Edge> ingress) {
-    Inference infer = info.toInference();
-    if (!ingress.isEmpty()) {
-      infer.setOrigins(ingress.stream().map(e -> (Location) e).collect(Collectors.toSet()));
-    }
-    infer.addPrefixToAssumptions(prefix);
-
-    // Finding if good path exists through inference loop -- commented out, unsound
-    //    Invariant goodPathCondition =
-    //        new Invariant(info.tbdd, target.getBDDCopy().and(infer.prefixSpaceToBDD(prefix)));
-    //    Pair<Location, Map<Location, Bgpv4Route>> reachable =
-    //        infer.run(Map.of(location, goodPathCondition), Inference.Check.EXISTS, true);
-    //    assert reachable.getKey() == null && reachable.getValue() != null;
-    //    Map<Location, Bgpv4Route> routes = reachable.getValue();
-
     LOGGER.info("Searching for a good path (via checking shortest path from ingresses)...");
     Map<RoutingPolicy, List<TransferReturn>> computedPathsCache = new HashMap<>();
     PathExploration exploration =
@@ -262,30 +196,57 @@ public class LivenessAnswerer extends Answerer {
       }
       LOGGER.info("Checking for interference...");
 
+      // Right now, this checks all the constraints hold at the same time to limit queries,
       assert paths.getKey() != null;
-      Map<Location, Bgpv4Route> cex = new HashMap<>();
-      for (Map.Entry<Location, Invariant> entry : paths.getKey().getConstraints().entrySet()) {
-        Infer inference = info.toInfer();
-        Invariant removeProtocolHistory =
-            new Invariant(
-                info.tbdd,
-                entry
-                    .getValue()
-                    .getBDDCopy()
-                    .existEq(info.tbdd.getOriginalRoute().getProtocolHistory().support()));
-        inference.addProperty(entry.getKey(), removeProtocolHistory);
-        Infer.Result result = inference.run();
-        cex.putAll(result.checks);
-      }
-      Pair<Location, Map<Location, Bgpv4Route>> interferenceOccurs = Pair.of(null, cex);
 
-      // check for interference
-      //      Invariant interferenceCondition =
-      //          new Invariant(info.tbdd,
-      // target.negate().getBDD().and(infer.prefixSpaceToBDD(prefix)));
-      //      Pair<Location, Map<Location, Bgpv4Route>> interferenceOccurs =
-      //          infer.run(Map.of(location, interferenceCondition), Inference.Check.NONE_EXIST,
-      // true);
+      Path weakenedPathConstraints = paths.getKey();
+      Infer inference = info.toInfer();
+
+      /// IN PROGRESS: commented out code attempts to weaken the reachability constraints
+      // Pair<Path, Map<Location, BDD>> temp =
+      //    exploration.weakenConstraints(paths.getKey().getLocations());
+      // Path weakenedPathConstraints = temp.getLeft();
+      // Map<Location, BDD> auxiliaryRequirements = temp.getRight();
+
+      // enforce that all reachability conditions hold (no interference)
+      for (Map.Entry<Location, Invariant> entry :
+          weakenedPathConstraints.getConstraints().entrySet()) {
+        if (entry.getKey() instanceof Node) {
+          BDD bdd = entry.getValue().getBDDCopy();
+          // if (auxiliaryRequirements.containsKey(entry.getKey())) {
+          //  bdd.orWith(bdd);
+          // }
+          Invariant removeProtocolHistory =
+              new Invariant(
+                  info.tbdd,
+                  bdd.existEq(info.tbdd.getOriginalRoute().getProtocolHistory().support()));
+          inference.addProperty(entry.getKey(), removeProtocolHistory);
+        }
+      }
+
+      /* for (Map.Entry<Location, BDD> entry : auxiliaryRequirements.entrySet()) {
+        if (entry.getKey() instanceof Node) {
+          Invariant removeProtocolHistory =
+              new Invariant(
+                  info.tbdd,
+                  entry
+                      .getValue()
+                      .existEq(info.tbdd.getOriginalRoute().getProtocolHistory().support()));
+          if (!inference.getTargets().containsKey(entry.getKey())) {
+            inference.addProperty(entry.getKey(), removeProtocolHistory);
+          }
+        }
+      } */
+
+      // added true flag to push false through in case there denied traffic that is actually ok
+      // because it is denied -- so the inference shouldn't be halted if false is inferred
+      Infer.Result result = inference.run(true);
+      Map<Location, String> cex = new HashMap<>();
+      result.checks.forEach((l, r) -> cex.put(l, r.toString()));
+      result.counter.ifPresent(
+          counterExample ->
+              cex.put(counterExample.location(), "Inferred False (Dead End for Traffic)"));
+      Pair<Location, Map<Location, String>> interferenceOccurs = Pair.of(null, cex);
 
       assert interferenceOccurs.getKey() == null && interferenceOccurs.getValue() != null;
       LOGGER.info("Interference check COMPLETE");
@@ -311,9 +272,7 @@ public class LivenessAnswerer extends Answerer {
                     .put(
                         Setup.RESULT_LABEL_COL,
                         Setup.SOURCE_OF_INTERFERENCE + info.locationStr(origin))
-                    .put(
-                        Setup.RESULT_VALUE_COL,
-                        interferenceOccurs.getValue().get(origin).toString())
+                    .put(Setup.RESULT_VALUE_COL, interferenceOccurs.getValue().get(origin))
                     .build());
           }
         }

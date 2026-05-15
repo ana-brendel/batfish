@@ -24,7 +24,7 @@ public record SafetyResult(
     boolean refinementOccurred,
     Map<Location, Bgpv4Route> checks,
     Map<Location, Invariant> targets,
-    Refine.Result refinement,
+    Map<Location, Invariant> results,
     Optional<Infer.CounterExample> inferenceCounter) {
 
   private void addGroupsToTAE(
@@ -87,7 +87,6 @@ public record SafetyResult(
 
   /// Gather the answer element needed for a question return
   public TableAnswerElement getAnswerElementAll(String violations) {
-    Map<Location, Invariant> results = refinement.refined;
     Map<BDD, String> cache = new HashMap<>();
     TableAnswerElement tae = new TableAnswerElement(metadata_safety());
 
@@ -143,7 +142,7 @@ public record SafetyResult(
                 String counterexample_str =
                     checks.containsKey(loc)
                         ? nonDefaultRoute(checks.get(loc))
-                        : (refinement.refined.get(loc).isFalse() && !assumption_str.equals("false")
+                        : (results.get(loc).isFalse() && !assumption_str.equals("false")
                             ? "any route is counterexample"
                             : "");
 
@@ -196,12 +195,11 @@ public record SafetyResult(
           tae,
           info.locationStr(target.getKey()),
           target.getValue(),
-          refinement.refined.get(target.getKey()),
+          results.get(target.getKey()),
           cache);
     } else {
       // right now this means we provided all outgoing as target
-      addTargetToTAE(
-          tae, "ALL-OUTGOING", target.getValue(), refinement.refined.get(target.getKey()), cache);
+      addTargetToTAE(tae, "ALL-OUTGOING", target.getValue(), results.get(target.getKey()), cache);
     }
 
     // if there is an inference counterexamples, return those
@@ -223,14 +221,12 @@ public record SafetyResult(
           .forEach(
               (loc, assumption) -> {
                 String assumption_str = assumption.toString(refinementOccurred, cache);
-                assert refinement.refined.containsKey(loc);
-                String inferred_str = refinement.refined.get(loc).toString(true, cache);
+                assert results.containsKey(loc);
+                String inferred_str = results.get(loc).toString(true, cache);
                 String counterexample_str =
                     checks.containsKey(loc)
                         ? nonDefaultRoute(checks.get(loc))
-                        : (refinement.refined.get(loc).isFalse()
-                            ? "any route is counterexample"
-                            : "");
+                        : (results.get(loc).isFalse() ? "any route is counterexample" : "");
 
                 // add the specific result to the map
                 groupings

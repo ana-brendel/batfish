@@ -22,7 +22,6 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.Queue;
 import java.util.Set;
-import java.util.stream.Collectors;
 
 import static com.google.common.base.Preconditions.checkArgument;
 import static org.batfish.minesweeper.question.verificationutilities.Invariant.strongestCommonImplicant;
@@ -292,24 +291,8 @@ public class Infer {
     return this.run(false);
   }
 
-  /// Returns a Refiner object which is used to refine invariants in order to tease out key
-  // properties
-  public Refine refiner() {
-    return Refine.builder(this.tbdd)
-        .setImports(this.imports)
-        .setExports(this.exports)
-        .setTargets(copyInferred(this.targets))
-        .setAssumptions(copyInferred(this.checkedAssumptions))
-        .setIncoming(
-            inferred.keySet().stream()
-                .filter(x -> x instanceof Edge e && !e.hasSrcNode())
-                .collect(Collectors.toSet()))
-        .setInferred(copyInferred(this.inferred))
-        .build();
-  }
-
-  /// Deep copies invariants inferred
-  public static Map<Location, Invariant> copyInferred(Map<Location, Invariant> base) {
-    return new HashMap<>(base);
+  /// Get the inferred invariants -- not a copy
+  public Map<Location, Invariant> getInferred() {
+    return this.inferred;
   }
 }

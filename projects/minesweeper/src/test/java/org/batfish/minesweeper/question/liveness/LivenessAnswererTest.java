@@ -29,6 +29,7 @@ import org.batfish.minesweeper.ConfigAtomicPredicates;
 import org.batfish.minesweeper.bdd.TransferBDD;
 import org.batfish.minesweeper.question.searchroutepolicies.RegexConstraint;
 import org.batfish.minesweeper.question.searchroutepolicies.RegexConstraints;
+import org.batfish.minesweeper.question.verificationutilities.Edge;
 import org.batfish.minesweeper.question.verificationutilities.Invariant;
 import org.batfish.minesweeper.question.verificationutilities.Location;
 import org.batfish.minesweeper.question.verificationutilities.NetworkInfo;
@@ -233,7 +234,7 @@ public class LivenessAnswererTest {
             Invariant.clauseBuilder().setCommunities(comm).build(net.tbdd(), net.template()));
 
     TableAnswerElement result =
-        LivenessAnswerer.updatedRun(info, BASIC_PREFIX, GAMMANODE, target, Set.of());
+        LivenessAnswerer.run(info, BASIC_PREFIX, GAMMANODE, target, Set.of());
     Pair<Boolean, Boolean> checks = processResultRows(result.getRowsList());
 
     assertTrue(checks.getLeft());
@@ -263,7 +264,7 @@ public class LivenessAnswererTest {
             Invariant.clauseBuilder().setCommunities(comm).build(net.tbdd(), net.template()));
 
     TableAnswerElement result =
-        LivenessAnswerer.updatedRun(info, BASIC_PREFIX, GAMMANODE, target, Set.of());
+        LivenessAnswerer.run(info, BASIC_PREFIX, GAMMANODE, target, Set.of());
     Pair<Boolean, Boolean> checks = processResultRows(result.getRowsList());
 
     // only good path is not the shortest path
@@ -411,7 +412,7 @@ public class LivenessAnswererTest {
             Invariant.clauseBuilder().setCommunities(comm).build(net.tbdd(), net.template()));
 
     TableAnswerElement result =
-        LivenessAnswerer.updatedRun(info, TARGET_PREFIX, GAMMANODE, target, Set.of());
+        LivenessAnswerer.run(info, TARGET_PREFIX, GAMMANODE, target, Set.of());
     Pair<Boolean, Boolean> checks = processResultRows(result.getRowsList());
 
     assertTrue(checks.getLeft());
@@ -855,7 +856,7 @@ public class LivenessAnswererTest {
             Invariant.clauseBuilder().setCommunities(comm).build(net.tbdd(), net.template()));
 
     TableAnswerElement result =
-        LivenessAnswerer.updatedRun(info, TARGET_PREFIX, GAMMANODE, target, Set.of());
+        LivenessAnswerer.run(info, TARGET_PREFIX, GAMMANODE, target, Set.of());
     Pair<Boolean, Boolean> checks = processResultRows(result.getRowsList());
 
     assertTrue(checks.getLeft());
@@ -889,7 +890,7 @@ public class LivenessAnswererTest {
             Invariant.clauseBuilder().setCommunities(comm).build(net.tbdd(), net.template()));
 
     TableAnswerElement result =
-        LivenessAnswerer.updatedRun(info, TARGET_PREFIX, GAMMANODE, target, Set.of());
+        LivenessAnswerer.run(info, TARGET_PREFIX, GAMMANODE, target, Set.of());
     Pair<Boolean, Boolean> checks = processResultRows(result.getRowsList());
 
     assertTrue(checks.getLeft());
@@ -932,7 +933,7 @@ public class LivenessAnswererTest {
             Invariant.clauseBuilder().setCommunities(comm).build(net.tbdd(), net.template()));
 
     TableAnswerElement result =
-        LivenessAnswerer.updatedRun(info, TARGET_PREFIX, GAMMANODE, target, Set.of());
+        LivenessAnswerer.run(info, TARGET_PREFIX, GAMMANODE, target, Set.of());
     Pair<Boolean, Boolean> checks = processResultRows(result.getRowsList());
 
     assertTrue(checks.getLeft());
@@ -940,4 +941,834 @@ public class LivenessAnswererTest {
     // the interfering path has a lower local preference
     // assertFalse(checks.getRight());
   }
+
+  private TestConfigConstructionUtils.Networkv2 weakerPathConstraints(
+      NodeRecord ALPHANODE,
+      NodeRecord BETANODE,
+      NodeRecord GAMMANODE,
+      NodeRecord DELTANODE,
+      NodeRecord EPSILONNODE,
+      Ip alphaIncoming,
+      Ip deltaIncoming,
+      int variation) {
+    assert 0 <= variation && variation <= 2;
+    Map<NodeRecord, Configuration> configs = new HashMap<>();
+
+    String community = "1:1";
+    String regex_community = "^" + community + "$";
+
+    String EXTERNAL = "externalNeighbor";
+    String INTERNAL = "internalNeighbor";
+
+    String tagOnExport = "tagCommunityOnExport";
+    String denyCommunity = "denyCommunity";
+    String denyEverything = "denyAllTraffic";
+    String removesAllCommunities = "clearCommunities";
+
+    String importDefault = "defaultImportPolicy";
+    String exportDefault = "defaultExportPolicy";
+
+    // Set up the configs and add what features they know about
+    setUpConfigs(configs, ALPHANODE, BETANODE, GAMMANODE, DELTANODE, EPSILONNODE);
+
+    // include the communities on the necessary nodes
+    includeCommunities(configs.get(BETANODE), regex_community);
+    includeCommunities(configs.get(DELTANODE), regex_community);
+
+    // Create the BGP processes
+    Map<NodeRecord, BgpProcess> processes =
+        getBgpProcesses(configs, ALPHANODE, BETANODE, GAMMANODE, DELTANODE, EPSILONNODE);
+
+    processes
+        .get(ALPHANODE)
+        .setNeighbors(
+            ImmutableSortedMap.of(
+                alphaIncoming,
+                getBgpActivePeerConfig(EXTERNAL, importDefault, exportDefault),
+                BETANODE.getIp(),
+                getBgpActivePeerConfig(INTERNAL, importDefault, removesAllCommunities),
+                DELTANODE.getIp(),
+                getBgpActivePeerConfig(INTERNAL, importDefault, exportDefault)));
+    processes
+        .get(BETANODE)
+        .setNeighbors(
+            ImmutableSortedMap.of(
+                ALPHANODE.getIp(),
+                getBgpActivePeerConfig(INTERNAL, importDefault, exportDefault),
+                DELTANODE.getIp(),
+                getBgpActivePeerConfig(INTERNAL, importDefault, exportDefault),
+                GAMMANODE.getIp(),
+                getBgpActivePeerConfig(
+                    // if the variation is not 0, we deny traffic with community going to gamma
+                    INTERNAL, importDefault, 0 < variation ? denyCommunity : exportDefault),
+                EPSILONNODE.getIp(),
+                getBgpActivePeerConfig(INTERNAL, importDefault, exportDefault)));
+    processes
+        .get(GAMMANODE)
+        .setNeighbors(
+            ImmutableSortedMap.of(
+                BETANODE.getIp(), getBgpActivePeerConfig(INTERNAL, importDefault, exportDefault),
+                EPSILONNODE.getIp(),
+                    getBgpActivePeerConfig(INTERNAL, importDefault, exportDefault)));
+    processes
+        .get(DELTANODE)
+        .setNeighbors(
+            ImmutableSortedMap.of(
+                deltaIncoming,
+                getBgpActivePeerConfig(EXTERNAL, importDefault, exportDefault),
+                ALPHANODE.getIp(),
+                getBgpActivePeerConfig(INTERNAL, importDefault, exportDefault),
+                BETANODE.getIp(),
+                getBgpActivePeerConfig(INTERNAL, importDefault, tagOnExport)));
+
+    processes
+        .get(EPSILONNODE)
+        .setNeighbors(
+            ImmutableSortedMap.of(
+                BETANODE.getIp(),
+                getBgpActivePeerConfig(INTERNAL, importDefault, exportDefault),
+                GAMMANODE.getIp(),
+                getBgpActivePeerConfig(
+                    INTERNAL, importDefault, variation == 2 ? denyEverything : exportDefault)));
+
+    // Create the policies
+    RoutingPolicy alphaDefaultImport =
+        makePolicy(configs.get(ALPHANODE), importDefault, permitRoute(true));
+    makePolicy(configs.get(ALPHANODE), exportDefault, permitRoute(true));
+    makePolicy(configs.get(ALPHANODE), removesAllCommunities, clearCommunities());
+
+    makePolicy(configs.get(BETANODE), importDefault, permitRoute(true));
+    makePolicy(configs.get(BETANODE), exportDefault, permitRoute(true));
+    makePolicy(
+        configs.get(BETANODE),
+        denyCommunity,
+        ifStatement(checkForCommunity(community), permitRoute(false), permitRoute(true)));
+
+    makePolicy(configs.get(GAMMANODE), importDefault, permitRoute(true));
+    makePolicy(configs.get(GAMMANODE), exportDefault, permitRoute(true));
+
+    makePolicy(configs.get(DELTANODE), importDefault, permitRoute(true));
+    makePolicy(configs.get(DELTANODE), exportDefault, permitRoute(true));
+    makePolicy(configs.get(DELTANODE), tagOnExport, addToCommunities(community));
+
+    makePolicy(configs.get(EPSILONNODE), importDefault, permitRoute(true));
+    makePolicy(configs.get(EPSILONNODE), exportDefault, permitRoute(true));
+    makePolicy(configs.get(EPSILONNODE), denyEverything, permitRoute(false));
+
+    // Set up the tbdd
+    Set<RegexConstraint> communityRegexes =
+        ImmutableSet.<RegexConstraint>builder().add(RegexConstraint.parse(community)).build();
+    ConfigAtomicPredicates configAPs =
+        getConfigAtomicPredicates(communityRegexes, Set.of(), configs.values());
+    TransferBDD tbdd = new TransferBDD(configAPs);
+
+    return new TestConfigConstructionUtils.Networkv2(tbdd, configs, alphaDefaultImport, List.of());
+  }
+
+  @Test
+  public void weakerExampleBaseTest() {
+    NodeRecord ALPHA_NODE_R = new NodeRecord("10.0.0.1", "alphaNode");
+    NodeRecord BETA_NODE_R = new NodeRecord("10.0.0.2", "betaNode");
+    NodeRecord GAMMA_NODE_R = new NodeRecord("10.0.0.3", "gammaNode");
+    NodeRecord DELTA_NODE_R = new NodeRecord("10.0.0.4", "deltaNode");
+    NodeRecord EPSILON_NODE_R = new NodeRecord("10.0.0.5", "epsilonNode");
+    Ip alphaIncoming = Ip.parse("100.0.0.10");
+    Ip deltaIncoming = Ip.parse("100.0.0.40");
+
+    PrefixSpace BASIC_PREFIX = new PrefixSpace(PrefixRange.fromString(prefixStr));
+
+    TestConfigConstructionUtils.Networkv2 net =
+        weakerPathConstraints(
+            ALPHA_NODE_R,
+            BETA_NODE_R,
+            GAMMA_NODE_R,
+            DELTA_NODE_R,
+            EPSILON_NODE_R,
+            alphaIncoming,
+            deltaIncoming,
+            0);
+    NetworkInfo info = net.getInfo(BASIC_PREFIX);
+
+    Node GAMMANODE = GAMMA_NODE_R.instantiate(info);
+
+    TableAnswerElement result =
+        LivenessAnswerer.run(info, BASIC_PREFIX, GAMMANODE, new Invariant(info.tbdd), Set.of());
+    Pair<Boolean, Boolean> checks = processResultRows(result.getRowsList());
+
+    assertTrue(checks.getLeft());
+    assertFalse(checks.getRight());
+  }
+
+  @Test
+  public void weakerExampleInterferenceTest() {
+    NodeRecord ALPHA_NODE_R = new NodeRecord("10.0.0.1", "alphaNode");
+    NodeRecord BETA_NODE_R = new NodeRecord("10.0.0.2", "betaNode");
+    NodeRecord GAMMA_NODE_R = new NodeRecord("10.0.0.3", "gammaNode");
+    NodeRecord DELTA_NODE_R = new NodeRecord("10.0.0.4", "deltaNode");
+    NodeRecord EPSILON_NODE_R = new NodeRecord("10.0.0.5", "epsilonNode");
+    Ip alphaIncoming = Ip.parse("100.0.0.10");
+    Ip deltaIncoming = Ip.parse("100.0.0.40");
+
+    PrefixSpace BASIC_PREFIX = new PrefixSpace(PrefixRange.fromString(prefixStr));
+
+    TestConfigConstructionUtils.Networkv2 net =
+        weakerPathConstraints(
+            ALPHA_NODE_R,
+            BETA_NODE_R,
+            GAMMA_NODE_R,
+            DELTA_NODE_R,
+            EPSILON_NODE_R,
+            alphaIncoming,
+            deltaIncoming,
+            2);
+    NetworkInfo info = net.getInfo(BASIC_PREFIX);
+
+    Node GAMMANODE = GAMMA_NODE_R.instantiate(info);
+
+    TableAnswerElement result =
+        LivenessAnswerer.run(info, BASIC_PREFIX, GAMMANODE, new Invariant(info.tbdd), Set.of());
+    Pair<Boolean, Boolean> checks = processResultRows(result.getRowsList());
+
+    assertTrue(checks.getLeft());
+    assertTrue(checks.getRight());
+  }
+
+  /// commented out because weakening path constraints commented out
+  /* @Test
+  public void weakerExampleNoInterferenceTest() {
+    NodeRecord ALPHA_NODE_R = new NodeRecord("10.0.0.1", "alphaNode");
+    NodeRecord BETA_NODE_R = new NodeRecord("10.0.0.2", "betaNode");
+    NodeRecord GAMMA_NODE_R = new NodeRecord("10.0.0.3", "gammaNode");
+    NodeRecord DELTA_NODE_R = new NodeRecord("10.0.0.4", "deltaNode");
+    NodeRecord EPSILON_NODE_R = new NodeRecord("10.0.0.5", "epsilonNode");
+    Ip alphaIncoming = Ip.parse("100.0.0.10");
+    Ip deltaIncoming = Ip.parse("100.0.0.40");
+
+    PrefixSpace BASIC_PREFIX = new PrefixSpace(PrefixRange.fromString(prefixStr));
+
+    TestConfigConstructionUtils.Networkv2 net =
+        weakerPathConstraints(
+            ALPHA_NODE_R,
+            BETA_NODE_R,
+            GAMMA_NODE_R,
+            DELTA_NODE_R,
+            EPSILON_NODE_R,
+            alphaIncoming,
+            deltaIncoming,
+            1);
+    NetworkInfo info = net.getInfo(BASIC_PREFIX);
+
+    Node GAMMANODE = GAMMA_NODE_R.instantiate(info);
+
+    TableAnswerElement result =
+        LivenessAnswerer.run(info, BASIC_PREFIX, GAMMANODE, new Invariant(info.tbdd), Set.of());
+    Pair<Boolean, Boolean> checks = processResultRows(result.getRowsList());
+
+     assertTrue(checks.getLeft());
+     assertFalse(checks.getRight());
+  } */
+
+  private TestConfigConstructionUtils.Networkv2 weakerPathConstraints2(
+      NodeRecord ALPHANODE,
+      NodeRecord BETANODE,
+      NodeRecord GAMMANODE,
+      NodeRecord DELTANODE,
+      NodeRecord EPSILONNODE,
+      Ip alphaIncoming,
+      Ip deltaIncoming,
+      int variation) {
+    assert 0 <= variation && variation <= 5;
+    Map<NodeRecord, Configuration> configs = new HashMap<>();
+
+    String community = "1:1";
+    String regex_community = "^" + community + "$";
+
+    String EXTERNAL = "externalNeighbor";
+    String INTERNAL = "internalNeighbor";
+
+    String tagOnExport = "tagCommunityOnExport";
+    String denyEverything = "denyAllTraffic";
+    String removesAllCommunities = "clearCommunities";
+
+    String importDefault = "defaultImportPolicy";
+    String exportDefault = "defaultExportPolicy";
+
+    // Set up the configs and add what features they know about
+    setUpConfigs(configs, ALPHANODE, BETANODE, GAMMANODE, DELTANODE, EPSILONNODE);
+
+    // include the communities on the necessary nodes
+    includeCommunities(configs.get(ALPHANODE), regex_community);
+
+    // Create the BGP processes
+    Map<NodeRecord, BgpProcess> processes =
+        getBgpProcesses(configs, ALPHANODE, BETANODE, GAMMANODE, DELTANODE, EPSILONNODE);
+
+    processes
+        .get(ALPHANODE)
+        .setNeighbors(
+            ImmutableSortedMap.of(
+                alphaIncoming,
+                getBgpActivePeerConfig(EXTERNAL, importDefault, exportDefault),
+                BETANODE.getIp(),
+                getBgpActivePeerConfig(
+                    INTERNAL, importDefault, 0 < variation ? tagOnExport : exportDefault),
+                DELTANODE.getIp(),
+                getBgpActivePeerConfig(INTERNAL, importDefault, tagOnExport)));
+    processes
+        .get(BETANODE)
+        .setNeighbors(
+            ImmutableSortedMap.of(
+                ALPHANODE.getIp(),
+                getBgpActivePeerConfig(INTERNAL, importDefault, exportDefault),
+                DELTANODE.getIp(),
+                getBgpActivePeerConfig(INTERNAL, importDefault, exportDefault),
+                GAMMANODE.getIp(),
+                getBgpActivePeerConfig(INTERNAL, importDefault, exportDefault),
+                EPSILONNODE.getIp(),
+                getBgpActivePeerConfig(INTERNAL, importDefault, exportDefault)));
+    processes
+        .get(GAMMANODE)
+        .setNeighbors(
+            ImmutableSortedMap.of(
+                BETANODE.getIp(),
+                getBgpActivePeerConfig(INTERNAL, importDefault, exportDefault),
+                EPSILONNODE.getIp(),
+                getBgpActivePeerConfig(INTERNAL, importDefault, exportDefault)));
+    processes
+        .get(DELTANODE)
+        .setNeighbors(
+            ImmutableSortedMap.of(
+                deltaIncoming,
+                getBgpActivePeerConfig(EXTERNAL, importDefault, exportDefault),
+                ALPHANODE.getIp(),
+                getBgpActivePeerConfig(INTERNAL, importDefault, exportDefault),
+                BETANODE.getIp(),
+                getBgpActivePeerConfig(
+                    INTERNAL,
+                    importDefault,
+                    variation == 1 || variation == 3 || variation == 5
+                        ? denyEverything
+                        : exportDefault)));
+    processes
+        .get(EPSILONNODE)
+        .setNeighbors(
+            ImmutableSortedMap.of(
+                BETANODE.getIp(),
+                getBgpActivePeerConfig(
+                    INTERNAL, variation == 5 ? denyEverything : importDefault, exportDefault),
+                GAMMANODE.getIp(),
+                getBgpActivePeerConfig(
+                    INTERNAL,
+                    variation == 5 ? denyEverything : importDefault,
+                    3 <= variation ? removesAllCommunities : exportDefault)));
+
+    // Create the policies
+    RoutingPolicy alphaDefaultImport =
+        makePolicy(configs.get(ALPHANODE), importDefault, permitRoute(true));
+    makePolicy(configs.get(ALPHANODE), exportDefault, permitRoute(true));
+    makePolicy(configs.get(ALPHANODE), tagOnExport, addToCommunities(community));
+
+    makePolicy(configs.get(BETANODE), importDefault, permitRoute(true));
+    makePolicy(configs.get(BETANODE), exportDefault, permitRoute(true));
+
+    makePolicy(configs.get(GAMMANODE), importDefault, permitRoute(true));
+    makePolicy(configs.get(GAMMANODE), exportDefault, permitRoute(true));
+
+    makePolicy(configs.get(DELTANODE), importDefault, permitRoute(true));
+    makePolicy(configs.get(DELTANODE), exportDefault, permitRoute(true));
+    makePolicy(configs.get(DELTANODE), denyEverything, permitRoute(false));
+
+    makePolicy(configs.get(EPSILONNODE), importDefault, permitRoute(true));
+    makePolicy(configs.get(EPSILONNODE), exportDefault, permitRoute(true));
+    makePolicy(configs.get(EPSILONNODE), removesAllCommunities, clearCommunities());
+    makePolicy(configs.get(EPSILONNODE), denyEverything, permitRoute(false));
+
+    // Set up the tbdd
+    Set<RegexConstraint> communityRegexes =
+        ImmutableSet.<RegexConstraint>builder().add(RegexConstraint.parse(community)).build();
+    ConfigAtomicPredicates configAPs =
+        getConfigAtomicPredicates(communityRegexes, Set.of(), configs.values());
+    TransferBDD tbdd = new TransferBDD(configAPs);
+
+    return new TestConfigConstructionUtils.Networkv2(tbdd, configs, alphaDefaultImport, List.of());
+  }
+
+  private Pair<Boolean, Boolean> runVersion(int v) {
+    NodeRecord ALPHA_NODE_R = new NodeRecord("10.0.0.1", "alphaNode");
+    NodeRecord BETA_NODE_R = new NodeRecord("10.0.0.2", "betaNode");
+    NodeRecord GAMMA_NODE_R = new NodeRecord("10.0.0.3", "gammaNode");
+    NodeRecord DELTA_NODE_R = new NodeRecord("10.0.0.4", "deltaNode");
+    NodeRecord EPSILON_NODE_R = new NodeRecord("10.0.0.5", "epsilonNode");
+    Ip alphaIncoming = Ip.parse("100.0.0.10");
+    Ip deltaIncoming = Ip.parse("100.0.0.40");
+
+    PrefixSpace BASIC_PREFIX = new PrefixSpace(PrefixRange.fromString(prefixStr));
+
+    TestConfigConstructionUtils.Networkv2 net =
+        weakerPathConstraints2(
+            ALPHA_NODE_R,
+            BETA_NODE_R,
+            GAMMA_NODE_R,
+            DELTA_NODE_R,
+            EPSILON_NODE_R,
+            alphaIncoming,
+            deltaIncoming,
+            v);
+    NetworkInfo info = net.getInfo(BASIC_PREFIX);
+
+    Node GAMMANODE = GAMMA_NODE_R.instantiate(info);
+
+    RegexConstraints comm = new RegexConstraints(List.of(RegexConstraint.parse("1:1")));
+    Invariant target =
+        new Invariant(
+            net.tbdd(),
+            Invariant.clauseBuilder().setCommunities(comm).build(net.tbdd(), net.template()));
+
+    TableAnswerElement result =
+        LivenessAnswerer.run(info, BASIC_PREFIX, GAMMANODE, target, Set.of());
+    return processResultRows(result.getRowsList());
+  }
+
+  @Test
+  public void weakerExample2BaseTest() {
+    // expects no good path
+    Pair<Boolean, Boolean> checks = runVersion(0);
+    assertFalse(checks.getLeft());
+  }
+
+  @Test
+  public void weakerExample2V1Test() {
+    // expects good path and no interference
+    Pair<Boolean, Boolean> checks = runVersion(1);
+    assertTrue(checks.getLeft());
+    assertFalse(checks.getRight());
+  }
+
+  @Test
+  public void weakerExample2V2Test() {
+    // expects good path but there is interference
+    Pair<Boolean, Boolean> checks = runVersion(2);
+    assertTrue(checks.getLeft());
+    assertTrue(checks.getRight());
+  }
+
+  @Test
+  public void weakerExample2V3Test() {
+    // expects good path but there is interference
+    Pair<Boolean, Boolean> checks = runVersion(3);
+    assertTrue(checks.getLeft());
+    assertTrue(checks.getRight());
+  }
+
+  @Test
+  public void weakerExample2V4Test() {
+    // expects good path but there is interference
+    Pair<Boolean, Boolean> checks = runVersion(4);
+    assertTrue(checks.getLeft());
+    assertTrue(checks.getRight());
+  }
+
+  @Test
+  public void weakerExample2V5Test() {
+    // expects good path and no interference
+    Pair<Boolean, Boolean> checks = runVersion(5);
+    assertTrue(checks.getLeft());
+    assertFalse(checks.getRight());
+  }
+
+  private TestConfigConstructionUtils.Networkv2 weakerPathConstraints3(
+      NodeRecord ALPHA_NODE,
+      NodeRecord BETA_NODE,
+      NodeRecord GAMMA_NODE,
+      NodeRecord DELTA_NODE,
+      NodeRecord EPSILON_NODE,
+      NodeRecord ZETA_NODE,
+      Ip alphaIncoming,
+      Ip deltaIncoming,
+      int variation) {
+    assert 0 <= variation && variation <= 3;
+    Map<NodeRecord, Configuration> configs = new HashMap<>();
+
+    String community = "1:1";
+    String regex_community = "^" + community + "$";
+    String red_herring = "2:2";
+    String regex_red_herring = "^" + red_herring + "$";
+
+    String EXTERNAL = "externalNeighbor";
+    String INTERNAL = "internalNeighbor";
+
+    String tagOnImport = "initialTag";
+    String tagOnExport = "tagCommunityOnExport";
+    String checkCommunities = "checksCommunities";
+    String removesAllCommunities = "clearCommunities";
+    String deniesAll = "denyAllTrafficWithCommunity";
+
+    String importDefault = "defaultImportPolicy";
+    String exportDefault = "defaultExportPolicy";
+
+    // Set up the configs and add what features they know about
+    setUpConfigs(configs, ALPHA_NODE, BETA_NODE, GAMMA_NODE, DELTA_NODE, EPSILON_NODE, ZETA_NODE);
+
+    // include the communities on the necessary nodes
+    includeCommunities(configs.get(ALPHA_NODE), regex_red_herring);
+    includeCommunities(configs.get(BETA_NODE), regex_community, regex_red_herring);
+
+    // Create the BGP processes
+    Map<NodeRecord, BgpProcess> processes =
+        getBgpProcesses(
+            configs, ALPHA_NODE, BETA_NODE, GAMMA_NODE, DELTA_NODE, EPSILON_NODE, ZETA_NODE);
+
+    processes
+        .get(ALPHA_NODE)
+        .setNeighbors(
+            ImmutableSortedMap.of(
+                alphaIncoming,
+                getBgpActivePeerConfig(EXTERNAL, tagOnImport, exportDefault),
+                BETA_NODE.getIp(),
+                getBgpActivePeerConfig(INTERNAL, importDefault, tagOnExport)));
+    processes
+        .get(BETA_NODE)
+        .setNeighbors(
+            ImmutableSortedMap.of(
+                ALPHA_NODE.getIp(),
+                getBgpActivePeerConfig(INTERNAL, importDefault, exportDefault),
+                DELTA_NODE.getIp(),
+                getBgpActivePeerConfig(INTERNAL, importDefault, exportDefault),
+                EPSILON_NODE.getIp(),
+                getBgpActivePeerConfig(INTERNAL, importDefault, exportDefault)));
+    processes
+        .get(GAMMA_NODE)
+        .setNeighbors(
+            ImmutableSortedMap.of(
+                EPSILON_NODE.getIp(),
+                getBgpActivePeerConfig(INTERNAL, importDefault, exportDefault),
+                ZETA_NODE.getIp(),
+                getBgpActivePeerConfig(INTERNAL, importDefault, exportDefault)));
+    processes
+        .get(DELTA_NODE)
+        .setNeighbors(
+            ImmutableSortedMap.of(
+                deltaIncoming,
+                getBgpActivePeerConfig(EXTERNAL, tagOnImport, exportDefault),
+                BETA_NODE.getIp(),
+                getBgpActivePeerConfig(INTERNAL, importDefault, exportDefault),
+                ZETA_NODE.getIp(),
+                getBgpActivePeerConfig(INTERNAL, importDefault, exportDefault)));
+    processes
+        .get(EPSILON_NODE)
+        .setNeighbors(
+            ImmutableSortedMap.of(
+                BETA_NODE.getIp(),
+                getBgpActivePeerConfig(INTERNAL, checkCommunities, exportDefault),
+                GAMMA_NODE.getIp(),
+                getBgpActivePeerConfig(INTERNAL, checkCommunities, exportDefault)));
+    processes
+        .get(ZETA_NODE)
+        .setNeighbors(
+            ImmutableSortedMap.of(
+                DELTA_NODE.getIp(),
+                getBgpActivePeerConfig(INTERNAL, importDefault, exportDefault),
+                GAMMA_NODE.getIp(),
+                getBgpActivePeerConfig(
+                    INTERNAL,
+                    importDefault,
+                    variation == 2
+                        ? deniesAll
+                        : (variation == 3 ? removesAllCommunities : exportDefault))));
+
+    // Create the policies
+    RoutingPolicy alphaDefaultImport =
+        makePolicy(configs.get(ALPHA_NODE), importDefault, permitRoute(true));
+    makePolicy(configs.get(ALPHA_NODE), exportDefault, permitRoute(true));
+    makePolicy(configs.get(ALPHA_NODE), tagOnImport, addToCommunities(community));
+    makePolicy(configs.get(ALPHA_NODE), tagOnExport, addToCommunities(red_herring));
+
+    makePolicy(configs.get(BETA_NODE), importDefault, permitRoute(true));
+    makePolicy(configs.get(BETA_NODE), exportDefault, permitRoute(true));
+
+    makePolicy(configs.get(GAMMA_NODE), importDefault, permitRoute(true));
+    makePolicy(configs.get(GAMMA_NODE), exportDefault, permitRoute(true));
+
+    makePolicy(configs.get(DELTA_NODE), importDefault, permitRoute(true));
+    makePolicy(configs.get(DELTA_NODE), exportDefault, permitRoute(true));
+    makePolicy(configs.get(DELTA_NODE), tagOnImport, addToCommunities(community));
+
+    makePolicy(configs.get(EPSILON_NODE), importDefault, permitRoute(true));
+    makePolicy(configs.get(EPSILON_NODE), exportDefault, permitRoute(true));
+    makePolicy(
+        configs.get(EPSILON_NODE),
+        checkCommunities,
+        ifStatement(
+            checkForCommunity(community),
+            ifStatement(checkForCommunity(red_herring), permitRoute(true), permitRoute(false)),
+            permitRoute(false)));
+
+    makePolicy(configs.get(ZETA_NODE), importDefault, permitRoute(true));
+    makePolicy(configs.get(ZETA_NODE), exportDefault, permitRoute(true));
+    makePolicy(
+        configs.get(ZETA_NODE),
+        deniesAll,
+        ifStatement(checkForCommunity(community), permitRoute(false), permitRoute(true)));
+    makePolicy(configs.get(ZETA_NODE), removesAllCommunities, clearCommunities());
+
+    // Set up the tbdd
+    Set<RegexConstraint> communityRegexes =
+        ImmutableSet.<RegexConstraint>builder()
+            .add(RegexConstraint.parse(community))
+            .add(RegexConstraint.parse(red_herring))
+            .build();
+    ConfigAtomicPredicates configAPs =
+        getConfigAtomicPredicates(communityRegexes, Set.of(), configs.values());
+    TransferBDD tbdd = new TransferBDD(configAPs);
+
+    return new TestConfigConstructionUtils.Networkv2(tbdd, configs, alphaDefaultImport, List.of());
+  }
+
+  private Pair<Boolean, Boolean> runVersion3(int v) {
+    NodeRecord ALPHA_NODE_R = new NodeRecord("10.0.0.1", "alphaNode");
+    NodeRecord BETA_NODE_R = new NodeRecord("10.0.0.2", "betaNode");
+    NodeRecord GAMMA_NODE_R = new NodeRecord("10.0.0.3", "gammaNode");
+    NodeRecord DELTA_NODE_R = new NodeRecord("10.0.0.4", "deltaNode");
+    NodeRecord EPSILON_NODE_R = new NodeRecord("10.0.0.5", "epsilonNode");
+    NodeRecord ZETA_NODE_R = new NodeRecord("10.0.0.6", "zetaNode");
+    Ip alphaIncoming = Ip.parse("100.0.0.10");
+    Ip deltaIncoming = Ip.parse("100.0.0.40");
+
+    PrefixSpace BASIC_PREFIX = new PrefixSpace(PrefixRange.fromString(prefixStr));
+
+    TestConfigConstructionUtils.Networkv2 net =
+        weakerPathConstraints3(
+            ALPHA_NODE_R,
+            BETA_NODE_R,
+            GAMMA_NODE_R,
+            DELTA_NODE_R,
+            EPSILON_NODE_R,
+            ZETA_NODE_R,
+            alphaIncoming,
+            deltaIncoming,
+            v);
+    NetworkInfo info = net.getInfo(BASIC_PREFIX);
+
+    Node GAMMANODE = GAMMA_NODE_R.instantiate(info);
+    Edge ingress = new Edge(alphaIncoming, ALPHA_NODE_R.getIp());
+    ingress.setDstNode(ALPHA_NODE_R.instantiate(info));
+
+    RegexConstraints comm = new RegexConstraints(List.of(RegexConstraint.parse("1:1")));
+    Invariant target =
+        new Invariant(
+            net.tbdd(),
+            Invariant.clauseBuilder().setCommunities(comm).build(net.tbdd(), net.template()));
+
+    TableAnswerElement result =
+        LivenessAnswerer.run(
+            info, BASIC_PREFIX, GAMMANODE, target, v == 0 ? Set.of(ingress) : Set.of());
+    return processResultRows(result.getRowsList());
+  }
+
+  /// commented out because weakening path constraints commented out
+  /*@Test
+  public void weakerExample3IngressSetTest() {
+    // expects good path and no interference when ingress node set
+    Pair<Boolean, Boolean> checks = runVersion3(0);
+    boolean goodPath = checks.getLeft();
+    boolean hasInterference = checks.getRight();
+    assertTrue(goodPath);
+    assertFalse(hasInterference);
+  }*/
+
+  @Test
+  public void weakerExample3BaseTest() {
+    // expects good path and no interference
+    Pair<Boolean, Boolean> checks = runVersion3(1);
+    boolean goodPath = checks.getLeft();
+    boolean hasInterference = checks.getRight();
+    assertTrue(goodPath);
+    assertFalse(hasInterference);
+  }
+
+  @Test
+  public void weakerExample3InterferenceV1Test() {
+    // expects good path and no interference
+    Pair<Boolean, Boolean> checks = runVersion3(2);
+    boolean goodPath = checks.getLeft();
+    boolean hasInterference = checks.getRight();
+    assertTrue(goodPath);
+    assertTrue(hasInterference);
+  }
+
+  @Test
+  public void weakerExample3InterferenceV2Test() {
+    // expects good path and no interference
+    Pair<Boolean, Boolean> checks = runVersion3(3);
+    boolean goodPath = checks.getLeft();
+    boolean hasInterference = checks.getRight();
+    assertTrue(goodPath);
+    assertTrue(hasInterference);
+  }
+
+  private TestConfigConstructionUtils.Networkv2 weakerPathConstraintsDiamond(
+      NodeRecord ALPHA_NODE,
+      NodeRecord BETA_NODE,
+      NodeRecord GAMMA_NODE,
+      NodeRecord DELTA_NODE,
+      NodeRecord EPSILON_NODE,
+      Ip alphaIncoming1,
+      Ip alphaIncoming2,
+      int variation) {
+    assert variation == 0;
+    Map<NodeRecord, Configuration> configs = new HashMap<>();
+
+    String community1 = "1:1";
+    String regex_community1 = "^" + community1 + "$";
+    String community2 = "2:2";
+    String regex_community2 = "^" + community2 + "$";
+
+    String EXTERNAL = "externalNeighbor";
+    String INTERNAL = "internalNeighbor";
+
+    String tagOnImport1 = "initialTag1";
+    String tagOnImport2 = "initialTag2";
+    String deniesCommunity1 = "deniesCommunity1";
+    String deniesCommunity2 = "deniesCommunity1";
+
+    String importDefault = "defaultImportPolicy";
+    String exportDefault = "defaultExportPolicy";
+
+    // Set up the configs and add what features they know about
+    setUpConfigs(configs, ALPHA_NODE, BETA_NODE, GAMMA_NODE, DELTA_NODE, EPSILON_NODE);
+
+    // include the communities on the necessary nodes
+    includeCommunities(configs.get(ALPHA_NODE), regex_community1, regex_community2);
+    includeCommunities(configs.get(DELTA_NODE), regex_community1);
+    includeCommunities(configs.get(GAMMA_NODE), regex_community2);
+
+    // Create the BGP processes
+    Map<NodeRecord, BgpProcess> processes =
+        getBgpProcesses(configs, ALPHA_NODE, BETA_NODE, GAMMA_NODE, DELTA_NODE, EPSILON_NODE);
+
+    processes
+        .get(ALPHA_NODE)
+        .setNeighbors(
+            ImmutableSortedMap.of(
+                alphaIncoming1,
+                getBgpActivePeerConfig(EXTERNAL, tagOnImport1, exportDefault),
+                alphaIncoming2,
+                getBgpActivePeerConfig(EXTERNAL, tagOnImport2, exportDefault),
+                BETA_NODE.getIp(),
+                getBgpActivePeerConfig(INTERNAL, importDefault, exportDefault)));
+    processes
+        .get(BETA_NODE)
+        .setNeighbors(
+            ImmutableSortedMap.of(
+                ALPHA_NODE.getIp(),
+                getBgpActivePeerConfig(INTERNAL, importDefault, exportDefault),
+                DELTA_NODE.getIp(),
+                getBgpActivePeerConfig(INTERNAL, importDefault, exportDefault),
+                EPSILON_NODE.getIp(),
+                getBgpActivePeerConfig(INTERNAL, importDefault, exportDefault)));
+    processes
+        .get(GAMMA_NODE)
+        .setNeighbors(
+            ImmutableSortedMap.of(
+                BETA_NODE.getIp(),
+                getBgpActivePeerConfig(INTERNAL, deniesCommunity1, exportDefault),
+                EPSILON_NODE.getIp(),
+                getBgpActivePeerConfig(INTERNAL, importDefault, exportDefault)));
+    processes
+        .get(DELTA_NODE)
+        .setNeighbors(
+            ImmutableSortedMap.of(
+                BETA_NODE.getIp(),
+                getBgpActivePeerConfig(INTERNAL, deniesCommunity2, exportDefault),
+                EPSILON_NODE.getIp(),
+                getBgpActivePeerConfig(INTERNAL, importDefault, exportDefault)));
+    processes
+        .get(EPSILON_NODE)
+        .setNeighbors(
+            ImmutableSortedMap.of(
+                GAMMA_NODE.getIp(),
+                getBgpActivePeerConfig(INTERNAL, importDefault, exportDefault),
+                DELTA_NODE.getIp(),
+                getBgpActivePeerConfig(INTERNAL, importDefault, exportDefault)));
+
+    // Create the policies
+    RoutingPolicy alphaDefaultImport =
+        makePolicy(configs.get(ALPHA_NODE), importDefault, permitRoute(true));
+    makePolicy(configs.get(ALPHA_NODE), exportDefault, permitRoute(true));
+    makePolicy(configs.get(ALPHA_NODE), tagOnImport1, replaceCommunities(community1));
+    makePolicy(configs.get(ALPHA_NODE), tagOnImport2, replaceCommunities(community2));
+
+    makePolicy(configs.get(BETA_NODE), importDefault, permitRoute(true));
+    makePolicy(configs.get(BETA_NODE), exportDefault, permitRoute(true));
+
+    makePolicy(configs.get(GAMMA_NODE), importDefault, permitRoute(true));
+    makePolicy(configs.get(GAMMA_NODE), exportDefault, permitRoute(true));
+    makePolicy(
+        configs.get(GAMMA_NODE),
+        deniesCommunity1,
+        ifStatement(checkForCommunity(community1), permitRoute(false), permitRoute(true)));
+
+    makePolicy(configs.get(DELTA_NODE), importDefault, permitRoute(true));
+    makePolicy(configs.get(DELTA_NODE), exportDefault, permitRoute(true));
+    makePolicy(
+        configs.get(DELTA_NODE),
+        deniesCommunity2,
+        ifStatement(checkForCommunity(community2), permitRoute(false), permitRoute(true)));
+
+    makePolicy(configs.get(EPSILON_NODE), importDefault, permitRoute(true));
+    makePolicy(configs.get(EPSILON_NODE), exportDefault, permitRoute(true));
+
+    // Set up the tbdd
+    Set<RegexConstraint> communityRegexes =
+        ImmutableSet.<RegexConstraint>builder()
+            .add(RegexConstraint.parse(community1))
+            .add(RegexConstraint.parse(community2))
+            .build();
+    ConfigAtomicPredicates configAPs =
+        getConfigAtomicPredicates(communityRegexes, Set.of(), configs.values());
+    TransferBDD tbdd = new TransferBDD(configAPs);
+
+    return new TestConfigConstructionUtils.Networkv2(tbdd, configs, alphaDefaultImport, List.of());
+  }
+
+  private Pair<Boolean, Boolean> runDiamond(int v) {
+    NodeRecord ALPHA_NODE_R = new NodeRecord("10.0.0.1", "alphaNode");
+    NodeRecord BETA_NODE_R = new NodeRecord("10.0.0.2", "betaNode");
+    NodeRecord GAMMA_NODE_R = new NodeRecord("10.0.0.3", "gammaNode");
+    NodeRecord DELTA_NODE_R = new NodeRecord("10.0.0.4", "deltaNode");
+    NodeRecord EPSILON_NODE_R = new NodeRecord("10.0.0.5", "epsilonNode");
+    Ip alphaIncoming1 = Ip.parse("100.0.0.10");
+    Ip alphaIncoming2 = Ip.parse("100.0.0.11");
+
+    PrefixSpace BASIC_PREFIX = new PrefixSpace(PrefixRange.fromString(prefixStr));
+
+    TestConfigConstructionUtils.Networkv2 net =
+        weakerPathConstraintsDiamond(
+            ALPHA_NODE_R,
+            BETA_NODE_R,
+            GAMMA_NODE_R,
+            DELTA_NODE_R,
+            EPSILON_NODE_R,
+            alphaIncoming1,
+            alphaIncoming2,
+            v);
+    NetworkInfo info = net.getInfo(BASIC_PREFIX);
+
+    Node TARGET_NODE = EPSILON_NODE_R.instantiate(info);
+
+    TableAnswerElement result =
+        LivenessAnswerer.run(info, BASIC_PREFIX, TARGET_NODE, new Invariant(info.tbdd), Set.of());
+    return processResultRows(result.getRowsList());
+  }
+
+  /// commented out because weakening path constraints commented out
+  /*@Test
+  public void weakerDiamondTest() {
+    // expects good path and no interference
+    Pair<Boolean, Boolean> checks = runDiamond(0);
+    boolean goodPath = checks.getLeft();
+    boolean hasInterference = checks.getRight();
+    assertTrue(goodPath);
+    assertFalse(hasInterference);
+  }*/
 }

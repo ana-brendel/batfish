@@ -158,13 +158,13 @@ public class Infer {
   }
 
   /// Performs iterative invariant inference using the weakest preconditions
-  private Optional<CounterExample> inferenceLoop() {
+  private Optional<CounterExample> inferenceLoop(boolean pushFalse) {
     while (!working.isEmpty()) {
       Location location = working.remove();
       assert inferred.containsKey(location)
           : "Trying to get existing invariant for unvisited location: " + location;
       Invariant property = inferred.get(location);
-      assert !property.isFalse();
+      // assert !property.isFalse();
       if (location instanceof Edge edge && edge.hasSrcNode()) {
         Node src = edge.getSrcNode();
         assert src != null;
@@ -183,7 +183,7 @@ public class Infer {
           wp.free();
           inferred.put(src, updated);
           // a node will never be a checked assumption
-          if (updated.isFalse()) {
+          if (!pushFalse && updated.isFalse()) {
             existing.free();
             return Optional.of(new CounterExample(src, property, location));
           } else if ((firstVisit || !existing.equals(updated)) && !working.contains(src)) {
@@ -209,7 +209,7 @@ public class Infer {
             inferred.put(edge, updated);
             // if we inferred false, but the edge is incoming then this isn't necessarily a
             // counterexample - rather a condition which should be checked if it holds
-            if (updated.isFalse() && !checkedAssumptions.containsKey(edge)) {
+            if (!pushFalse && updated.isFalse() && !checkedAssumptions.containsKey(edge)) {
               existing.free();
               return Optional.of(new CounterExample(edge, property, location));
             } else if (updated.isFalse() && checkedAssumptions.containsKey(edge)) {
@@ -259,24 +259,18 @@ public class Infer {
    * whatever target properties and locations are provided. Included for violation analysis to avoid
    * logging every inference query in the loop.
    *
-   * @param log indicates if logging message should be displayed
+   * @param pushFalse indicates if inferring a false should halt inference (true is no)
    * @return Result indicating if verification succeeded, what the inferred invariants are and a
    *     counterexample if applicable
    */
-  public Result run(boolean log) {
+  public Result run(boolean pushFalse) {
     inferred.clear();
     working.clear();
-    if (log) {
-      LOGGER.info("Initializing invariants for inference.");
-    }
+    LOGGER.info("Initializing invariants for inference.");
     initializeInvariants(); // adds to working list
-    if (log) {
-      LOGGER.info("Beginning initial inference of safety invariants.");
-    }
-    Optional<CounterExample> counter = inferenceLoop();
-    if (log) {
-      LOGGER.info("Inference loop terminated.");
-    }
+    LOGGER.info("Beginning initial inference of safety invariants.");
+    Optional<CounterExample> counter = inferenceLoop(pushFalse);
+    LOGGER.info("Inference loop terminated.");
     Map<Location, Bgpv4Route> checks = verificationAssumptionCheck();
 
     // Lightyear style check to only run during testing
@@ -295,7 +289,7 @@ public class Infer {
    *     counterexample if applicable
    */
   public Result run() {
-    return this.run(true);
+    return this.run(false);
   }
 
   /// Returns a Refiner object which is used to refine invariants in order to tease out key

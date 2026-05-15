@@ -1,4 +1,4 @@
-package org.batfish.minesweeper.question.safety;
+package org.batfish.minesweeper.question.isolation;
 
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;

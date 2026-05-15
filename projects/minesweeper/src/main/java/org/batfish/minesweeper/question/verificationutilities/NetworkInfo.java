@@ -22,11 +22,14 @@ import org.batfish.minesweeper.ConfigAtomicPredicates;
 import org.batfish.minesweeper.bdd.ModelGeneration;
 import org.batfish.minesweeper.bdd.TransferBDD;
 import org.batfish.minesweeper.bdd.TransferReturn;
-import org.batfish.minesweeper.question.liveness.InterferenceCheck;
-import org.batfish.minesweeper.question.liveness.Path;
-import org.batfish.minesweeper.question.liveness.PathExploration;
-import org.batfish.minesweeper.question.safety.Infer;
+import org.batfish.minesweeper.question.reachability.Path;
+import org.batfish.minesweeper.question.reachability.PathExploration;
+import org.batfish.minesweeper.question.isolation.Infer;
 import org.batfish.minesweeper.question.searchroutepolicies.RegexConstraint;
+import org.batfish.question.bgpsessionstatus.BgpSessionAnswererUtils;
+import org.batfish.question.bgpsessionstatus.BgpSessionCompatibilityAnswerer;
+import org.batfish.question.bgpsessionstatus.BgpSessionCompatibilityQuestion;
+import org.batfish.question.bgpsessionstatus.BgpSessionQuestion;
 import org.batfish.question.edges.EdgesQuestion;
 import org.batfish.specifier.SpecifierContext;
 
@@ -586,24 +589,6 @@ public class NetworkInfo {
     return new PathExploration(context, prefix, location, target, ingress, computedPathsCache);
   }
 
-  /// Returns a PathAnalyzer objective reflective of the network which can be used for interference
-  /// of the provided liveness property (pertaining to the provided prefix space)
-  public InterferenceCheck toInterferenceCheck(
-      PrefixSpace prefix,
-      Location location,
-      Invariant target,
-      Map<RoutingPolicy, List<TransferReturn>> computedPathsCache) {
-    Path.Context context =
-        new Path.Context(
-            this.tbdd,
-            this.checkedAssumptions,
-            this.enforcedAssumptions,
-            this.imports,
-            this.exports,
-            this.defaultIncoming);
-    return new InterferenceCheck(context, prefix, location, target, computedPathsCache);
-  }
-
   /// Returns TableAnswerElement which lists all locations within the network (used when no target
   /// property is provided)
   public TableAnswerElement getAnswerElement() {
@@ -671,45 +656,26 @@ public class NetworkInfo {
       @Nonnull Set<RegexConstraint> communityRegexes,
       @Nonnull Set<RegexConstraint> asPathRegexes,
       @Nullable Invariant.Builder defaultIncoming,
-      boolean exact_communities) {
+      boolean exact_communities,
+      boolean computeDataPlane) {
     SpecifierContext context = batfish.specifierContext(snapshot);
     if (context == null) {
       throw new BatfishException("Cannot get the SpecifierContext from snapshot");
     }
     Map<String, Configuration> configs = context.getConfigs();
 
-    batfish.computeDataPlane(snapshot);
-    EdgesQuestion question = new EdgesQuestion(".*", ".*", EdgesQuestion.EdgeType.BGP, false);
-    Answerer answerer = batfish.createAnswerer(question);
-    if (answerer == null) {
-      throw new BatfishException("Null answerer created");
+    List<Row> sessions;
+    if (computeDataPlane) {
+      batfish.computeDataPlane(snapshot);
+      EdgesQuestion question = new EdgesQuestion(".*", ".*", EdgesQuestion.EdgeType.BGP, false);
+      Answerer answerer = batfish.createAnswerer(question);
+      if (answerer == null) {
+        throw new BatfishException("Null answerer created");
+      }
+      sessions = ((TableAnswerElement) answerer.answer(snapshot)).getRowsList();
+    } else {
+      sessions = getTopologyWithoutDataPlane(batfish, snapshot);
     }
-    List<Row> sessions = ((TableAnswerElement) answerer.answer(snapshot)).getRowsList();
-
-    // ============================== EdgeAnswerer.answer() ============================== //
-    //    EdgesQuestion question = new EdgesQuestion(".*", ".*", EdgesQuestion.EdgeType.BGP, false);
-    //    Map<String, Configuration> configurations = batfish.loadConfigurations(snapshot);
-    //    Set<String> includeNodes =
-    //        question.getNodeSpecifier().resolve(batfish.specifierContext(snapshot));
-    //    Set<String> includeRemoteNodes =
-    //        question.getRemoteNodeSpecifier().resolve(batfish.specifierContext(snapshot));
-    //
-    //    TopologyProvider topologyProvider = batfish.getTopologyProvider();
-    //    Topology topology =
-    //        question.getInitial()
-    //            ? topologyProvider.getInitialLayer3Topology(snapshot)
-    //            : topologyProvider.getLayer3Topology(snapshot);
-    //    Collection<Row> sessions =
-    //        generateRows(
-    //            configurations,
-    //            snapshot,
-    //            topology,
-    //            batfish.getTopologyProvider(),
-    //            includeNodes,
-    //            includeRemoteNodes,
-    //            question.getEdgeType(),
-    //            question.getInitial());
-    // =================================================================================== //
 
     String COL_NODE = "Node";
     String COL_REMOTE_NODE = "Remote_Node";
@@ -859,5 +825,50 @@ public class NetworkInfo {
     int edgesCount =
         nodeByName.values().stream().mapToInt(n -> n.getAllIncomingEdges().size()).sum();
     LOGGER.info("Nodes in Network: {}, Edges in Network: {}", nodeByName.size(), edgesCount);
+  }
+
+  private static final String COL_NODE = "Node";
+  private static final String COL_REMOTE_NODE = "Remote_Node";
+  private static final String COL_AS_NUMBER = "AS_Number";
+  private static final String COL_REMOTE_AS_NUMBER = "Remote_AS_Number";
+  private static final String COL_IP = "IP";
+  private static final String COL_REMOTE_IP = "Remote_IP";
+
+  /// Function to get topology information from BgpSessionCompatibility Question
+  private List<Row> getTopologyWithoutDataPlane(
+      @Nonnull IBatfish batfish, @Nonnull NetworkSnapshot snapshot) {
+    BgpSessionQuestion question = new BgpSessionCompatibilityQuestion();
+    BgpSessionCompatibilityAnswerer answerer =
+        new BgpSessionCompatibilityAnswerer(question, batfish);
+    Map<String, Configuration> configs = batfish.specifierContext(snapshot).getConfigs();
+    return answerer.rowsInAnswer(snapshot).stream()
+        .filter(
+            row ->
+                row.getNode(BgpSessionAnswererUtils.COL_NODE) != null
+                    && row.getNode(BgpSessionAnswererUtils.COL_REMOTE_NODE) != null)
+        .map(
+            row ->
+                Row.builder()
+                    .put(COL_NODE, row.getNode(BgpSessionAnswererUtils.COL_NODE))
+                    .put(
+                        COL_IP,
+                        firstNonNull(
+                            row.getIp(BgpSessionAnswererUtils.COL_LOCAL_IP),
+                            configs.get(row.getNode(BgpSessionAnswererUtils.COL_NODE).getName())))
+                    .put(COL_AS_NUMBER, row.getString(BgpSessionAnswererUtils.COL_LOCAL_AS))
+                    .put(COL_REMOTE_NODE, row.getNode(BgpSessionAnswererUtils.COL_REMOTE_NODE))
+                    .put(
+                        COL_REMOTE_IP,
+                        row.getSelfDescribing(BgpSessionAnswererUtils.COL_REMOTE_IP) != null
+                            ? row.getSelfDescribing(BgpSessionAnswererUtils.COL_REMOTE_IP)
+                                .getValue()
+                            : configs
+                                .get(row.getNode(BgpSessionAnswererUtils.COL_REMOTE_NODE).getName())
+                                .getDefaultVrf()
+                                .getBgpProcess()
+                                .getRouterId())
+                    .put(COL_REMOTE_AS_NUMBER, row.getString(BgpSessionAnswererUtils.COL_REMOTE_AS))
+                    .build())
+        .toList();
   }
 }

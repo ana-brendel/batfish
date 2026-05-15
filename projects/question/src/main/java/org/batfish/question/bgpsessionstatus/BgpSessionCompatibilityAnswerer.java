@@ -124,6 +124,15 @@ public class BgpSessionCompatibilityAnswerer extends Answerer {
     return answer;
   }
 
+  /// Returns the rows from the answerer to get light-weight topology
+  public List<Row> rowsInAnswer(NetworkSnapshot snapshot) {
+    BgpSessionCompatibilityQuestion question = (BgpSessionCompatibilityQuestion) _question;
+    TableAnswerElement answer =
+        new TableAnswerElement(BgpSessionCompatibilityAnswerer.createMetadata(question));
+    answer.postProcessAnswer(question, getRows(snapshot, question));
+    return answer.getRowsList();
+  }
+
   /**
    * Return the answer for {@link BgpSessionCompatibilityQuestion} -- a set of BGP sessions and
    * their compatibility.

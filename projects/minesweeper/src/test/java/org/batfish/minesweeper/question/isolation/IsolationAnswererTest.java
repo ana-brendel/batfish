@@ -1,4 +1,4 @@
-package org.batfish.minesweeper.question.safety;
+package org.batfish.minesweeper.question.isolation;
 
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
@@ -69,7 +69,7 @@ import static org.batfish.minesweeper.question.verificationutilities.TestConfigC
 import static org.hamcrest.Matchers.allOf;
 import static org.hamcrest.Matchers.equalTo;
 
-public class SafetyAnswererTest {
+public class IsolationAnswererTest {
   private static final NetworkFactory nf = new NetworkFactory();
   @Rule public TemporaryFolder _tempFolder = new TemporaryFolder();
 

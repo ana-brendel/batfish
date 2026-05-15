@@ -1,4 +1,4 @@
-package org.batfish.minesweeper.question.safety;
+package org.batfish.minesweeper.question.isolation;
 
 import net.sf.javabdd.BDD;
 import org.batfish.datamodel.Bgpv4Route;
@@ -19,7 +19,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import static org.batfish.minesweeper.question.verificationutilities.Setup.metadata_safety;
 import static org.batfish.minesweeper.question.verificationutilities.Setup.nonDefaultRoute;
 
-public record SafetyResult(
+public record IsolationResult(
     NetworkInfo info,
     boolean refinementOccurred,
     Map<Location, Bgpv4Route> checks,
@@ -220,20 +220,21 @@ public record SafetyResult(
       info.getCheckedAssumptions()
           .forEach(
               (loc, assumption) -> {
-                String assumption_str = assumption.toString(refinementOccurred, cache);
-                assert results.containsKey(loc);
-                String inferred_str = results.get(loc).toString(true, cache);
-                String counterexample_str =
-                    checks.containsKey(loc)
-                        ? nonDefaultRoute(checks.get(loc))
-                        : (results.get(loc).isFalse() ? "any route is counterexample" : "");
+                if (results.containsKey(loc)) {
+                  String assumption_str = assumption.toString(refinementOccurred, cache);
+                  String inferred_str = results.get(loc).toString(true, cache);
+                  String counterexample_str =
+                      checks.containsKey(loc)
+                          ? nonDefaultRoute(checks.get(loc))
+                          : (results.get(loc).isFalse() ? "any route is counterexample" : "");
 
-                // add the specific result to the map
-                groupings
-                    .computeIfAbsent(assumption_str, k -> new HashMap<>())
-                    .computeIfAbsent(inferred_str, k -> new HashMap<>())
-                    .computeIfAbsent(counterexample_str, k -> new HashSet<>())
-                    .add(info.locationStr(loc));
+                  // add the specific result to the map
+                  groupings
+                      .computeIfAbsent(assumption_str, k -> new HashMap<>())
+                      .computeIfAbsent(inferred_str, k -> new HashMap<>())
+                      .computeIfAbsent(counterexample_str, k -> new HashSet<>())
+                      .add(info.locationStr(loc));
+                }
               });
       // add groupings to the table answer element
       addGroupsToTAE(tae, true, groupings);

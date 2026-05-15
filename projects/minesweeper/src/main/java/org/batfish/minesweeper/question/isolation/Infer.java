@@ -1,13 +1,17 @@
-package org.batfish.minesweeper.question.safety;
+package org.batfish.minesweeper.question.isolation;
 
 import net.sf.javabdd.BDD;
+import net.sf.javabdd.BDDFactory;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.batfish.datamodel.Bgpv4Route;
+import org.batfish.datamodel.PrefixRange;
+import org.batfish.datamodel.PrefixSpace;
 import org.batfish.datamodel.routing_policy.RoutingPolicy;
+import org.batfish.minesweeper.bdd.BDDRoute;
 import org.batfish.minesweeper.bdd.TransferBDD;
 import org.batfish.minesweeper.bdd.TransferReturn;
-import org.batfish.minesweeper.question.liveness.Path;
+import org.batfish.minesweeper.question.reachability.Path;
 import org.batfish.minesweeper.question.verificationutilities.Edge;
 import org.batfish.minesweeper.question.verificationutilities.Invariant;
 import org.batfish.minesweeper.question.verificationutilities.Lightyear;
@@ -24,6 +28,7 @@ import java.util.Queue;
 import java.util.Set;
 
 import static com.google.common.base.Preconditions.checkArgument;
+import static org.batfish.minesweeper.bdd.TransferBDD.isRelevantForDestination;
 import static org.batfish.minesweeper.question.verificationutilities.Invariant.strongestCommonImplicant;
 import static org.batfish.minesweeper.question.verificationutilities.NetworkInfo.getRouteExample;
 
@@ -294,5 +299,24 @@ public class Infer {
   /// Get the inferred invariants -- not a copy
   public Map<Location, Invariant> getInferred() {
     return this.inferred;
+  }
+
+  private BDD prefixSpaceToBDD(PrefixSpace space) {
+    BDDRoute r = new BDDRoute(tbdd.getFactory(), tbdd.getConfigAtomicPredicates());
+    BDDFactory factory = r.getPrefix().getFactory();
+    BDD result = factory.zero();
+    for (PrefixRange range : space.getPrefixRanges()) {
+      BDD rangeBDD = isRelevantForDestination(r, range);
+      result = result.or(rangeBDD);
+    }
+    return result;
+  }
+
+  public void addPrefixToAssumptions(PrefixSpace space) {
+    for (Location location : checkedAssumptions.keySet()) {
+      BDD existing = checkedAssumptions.get(location).getBDDCopy();
+      existing.andWith(prefixSpaceToBDD(space));
+      checkedAssumptions.put(location, new Invariant(tbdd, existing));
+    }
   }
 }

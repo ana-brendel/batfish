@@ -1,40 +1,34 @@
 {
-  "class": "org.batfish.minesweeper.question.liveness.LivenessQuestion",
+  "class": "org.batfish.minesweeper.question.isolation.IsolationQuestion",
   "differential": false,
-  "prefix": "${prefix}",
   "target": "${target}",
   "location": "${location}",
   "assumption_locations": "${assumption_locations}",
   "assumptions": "${assumptions}",
   "default_assumption": "${default_assumption}",
-  "ingress": "${ingress}",
   "exact_communities": "${exact_communities}",
+  "isolate_violations": "${isolate_violations}",
+  "compute_data_plane": "${compute_data_plane}",
   "instance": {
     "description": "...",
-    "instanceName": "liveness",
+    "instanceName": "whirlpoolIsolation",
     "longDescription": "This question...",
     "orderedVariableNames": [
-      "prefix",
       "target",
       "location",
       "assumption_locations",
       "assumptions",
       "default_assumption",
-      "ingress",
-      "exact_communities"
+      "exact_communities",
+      "isolate_violations",
+      "compute_data_plane"
     ],
     "tags": [
       "routing"
     ],
     "variables": {
-      "prefix": {
-        "description": "Consider routes for this prefix",
-        "type": "string",
-        "optional": true,
-        "displayName": "Prefix for Liveness Property"
-      },
       "target": {
-        "description": "Liveness property to verify",
+        "description": "Safety property to verify",
         "type": "string",
         "optional": true,
         "displayName": "Target Property"
@@ -63,17 +57,23 @@
         "optional": true,
         "displayName": "Default Incoming Assumptions"
       },
-      "ingress": {
-        "description": "Optional starting point for incoming traffic",
-        "type": "string",
-        "optional": true,
-        "displayName": "Ingress Node for Good Traffic"
-      },
       "exact_communities": {
         "description": "Flag indicating if communities provided should be treated as exact",
         "type": "boolean",
         "optional": true,
         "displayName": "Implicitly negate communities not mentioned"
+      },
+      "isolate_violations": {
+        "description": "Flag indicating if in case of failure, the failures should be isolated",
+        "type": "boolean",
+        "optional": true,
+        "displayName": "Isolate the violations, if applicable"
+      },
+      "compute_data_plane": {
+        "description": "Flag indicating if data plane should be computed (more robust, but expensive)",
+        "type": "boolean",
+        "optional": true,
+        "displayName": "Computes the data plane"
       }
     }
   }

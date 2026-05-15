@@ -1,4 +1,4 @@
-package org.batfish.minesweeper.question.liveness;
+package org.batfish.minesweeper.question.reachability;
 
 import net.sf.javabdd.BDD;
 import org.apache.commons.lang3.tuple.Pair;
@@ -14,7 +14,7 @@ import org.batfish.datamodel.routing_policy.RoutingPolicy;
 import org.batfish.datamodel.table.Row;
 import org.batfish.datamodel.table.TableAnswerElement;
 import org.batfish.minesweeper.bdd.TransferReturn;
-import org.batfish.minesweeper.question.safety.Infer;
+import org.batfish.minesweeper.question.isolation.Infer;
 import org.batfish.minesweeper.question.searchroutepolicies.RegexConstraint;
 import org.batfish.minesweeper.question.verificationutilities.Edge;
 import org.batfish.minesweeper.question.verificationutilities.Invariant;
@@ -35,8 +35,8 @@ import java.util.Set;
 import static org.batfish.minesweeper.question.verificationutilities.Setup.buildTargetLocationInvariant;
 import static org.batfish.minesweeper.question.verificationutilities.Setup.metadata_liveness;
 
-public class LivenessAnswerer extends Answerer {
-  private static final Logger LOGGER = LogManager.getLogger(LivenessAnswerer.class);
+public class ReachabilityAnswerer extends Answerer {
+  private static final Logger LOGGER = LogManager.getLogger(ReachabilityAnswerer.class);
 
   private final @Nonnull PrefixSpace _prefix;
   private final @Nullable Pair<Location.Builder, Invariant.Builder> _target;
@@ -46,14 +46,16 @@ public class LivenessAnswerer extends Answerer {
   private final @Nullable Invariant.Builder _default_assumption;
   private final @Nullable Location.Builders _ingress;
   private final boolean _exact_communities;
+  private final boolean _compute_data_plane;
 
-  public LivenessAnswerer(LivenessQuestion question, IBatfish batfish) {
+  public ReachabilityAnswerer(ReachabilityQuestion question, IBatfish batfish) {
     super(question, batfish);
     _prefix = question.get_prefix();
     _target = question.get_target();
     _default_assumption = question.get_default_assumption();
     _ingress = question.get_ingress();
     _exact_communities = question.get_exact_communities();
+    _compute_data_plane = question.get_compute_data_plane();
 
     // this is added because the assumptions are taken as two lists with corresponding inputs
     List<Invariant.Builder> invAssumptions =
@@ -114,7 +116,8 @@ public class LivenessAnswerer extends Answerer {
             _communityRegexes,
             _asPathRegexes,
             _default_assumption,
-            _exact_communities);
+            _exact_communities,
+            _compute_data_plane);
     LOGGER.info("Constructed Verification.NetworkInfo object");
 
     _assumptions.forEach(info::addAssumption);
@@ -201,6 +204,7 @@ public class LivenessAnswerer extends Answerer {
 
       Path weakenedPathConstraints = paths.getKey();
       Infer inference = info.toInfer();
+      inference.addPrefixToAssumptions(prefix);
 
       /// IN PROGRESS: commented out code attempts to weaken the reachability constraints
       // Pair<Path, Map<Location, BDD>> temp =

@@ -1,4 +1,4 @@
-package org.batfish.minesweeper.question.safety;
+package org.batfish.minesweeper.question.isolation;
 
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -17,28 +17,29 @@ import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 
 // Currently the question takes in a single target location-invariant pair whereas the assumptions
 // might be a list
-public final class SafetyAnswerer extends Answerer {
-  private static final Logger LOGGER = LogManager.getLogger(SafetyAnswerer.class);
+public final class IsolationAnswerer extends Answerer {
+  private static final Logger LOGGER = LogManager.getLogger(IsolationAnswerer.class);
 
   private final @Nonnull Map<Location.Builder, Invariant.Builder> _targets = new HashMap<>();
   private final @Nonnull Map<Location.Builder, Invariant.Builder> _assumptions = new HashMap<>();
   private final @Nullable Invariant.Builder _default_assumption;
   private final @Nonnull Set<RegexConstraint> _communityRegexes = new HashSet<>();
   private final @Nonnull Set<RegexConstraint> _asPathRegexes = new HashSet<>();
-  private final boolean _showAll;
-  private final boolean _refine;
   private final boolean _exact_communities;
+  private final boolean _compute_data_plane;
+  private final boolean _isolate_violations;
 
-  public SafetyAnswerer(SafetyQuestion question, IBatfish batfish) {
+  public IsolationAnswerer(IsolationQuestion question, IBatfish batfish) {
     super(question, batfish);
-    _showAll = question.get_show_all();
-    _refine = question.get_refine();
     _default_assumption = question.get_default_assumption().orElse(null);
     _exact_communities = question.get_exact_communities();
+    _isolate_violations = question.get_isolate_violations();
+    _compute_data_plane = question.get_compute_data_plane();
 
     // we take target property and corresponding locations as two lists with
     // corresponding inputs
@@ -106,8 +107,7 @@ public final class SafetyAnswerer extends Answerer {
   }
 
   /// Driving function to run complete invariant inference and refinement (if applicable)
-  public static SafetyResult run(
-      NetworkInfo info, boolean refine, Map<Location, Invariant.Builder> targets) {
+  public static IsolationResult run(NetworkInfo info, Map<Location, Invariant.Builder> targets) {
     // Set up and run the invariant inference
     Infer inference = info.toInfer();
     targets.forEach(
@@ -118,7 +118,7 @@ public final class SafetyAnswerer extends Answerer {
     Infer.Result result = inference.run();
     LOGGER.info("Finished inferring weakest conditions needed for property to hold.");
 
-    return new SafetyResult(
+    return new IsolationResult(
         info,
         false,
         result.checks,
@@ -139,7 +139,8 @@ public final class SafetyAnswerer extends Answerer {
             _communityRegexes,
             _asPathRegexes,
             _default_assumption,
-            _exact_communities);
+            _exact_communities,
+            _compute_data_plane);
     LOGGER.info("Constructed Verification.NetworkInfo object");
 
     LOGGER.info("Adding any provided assumptions to the NetworkInfo object");
@@ -173,14 +174,15 @@ public final class SafetyAnswerer extends Answerer {
                             info.locationStr(loc));
                       }
                     }));
-    SafetyResult result = run(info, _refine, targetBuilders);
+    IsolationResult result = run(info, targetBuilders);
 
     // potential special case to more efficiently isolate violations (if multiple targets), unused
-    // Optional<String> violations = ViolationAnalysis.run(info, result)
+    Optional<String> violations =
+        _isolate_violations ? ViolationAnalysis.run(info, result) : Optional.empty();
 
     LOGGER.info("Completed analysis. Working on displaying results...");
 
-    // return the answer element associated with desired level of granularity
-    return _showAll ? result.getAnswerElementAll("") : result.getAnswerElementLimited("");
+    // return the answer element associated -- this includes all invariants
+    return result.getAnswerElementAll(violations.orElse(""));
   }
 }

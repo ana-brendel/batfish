@@ -1,4 +1,4 @@
-package org.batfish.minesweeper.question.liveness;
+package org.batfish.minesweeper.question.reachability;
 
 import com.fasterxml.jackson.annotation.JsonCreator;
 import com.fasterxml.jackson.annotation.JsonIgnore;
@@ -18,8 +18,8 @@ import java.util.Map;
 import java.util.Optional;
 
 @ParametersAreNonnullByDefault
-public final class LivenessQuestion extends Question {
-  private static final PrefixRange DEFAULT_PREFIX = PrefixRange.fromString("10.0.0.0/8");
+public final class ReachabilityQuestion extends Question {
+  private static final PrefixRange DEFAULT_PREFIX = PrefixRange.fromString("0.0.0.0/0");
 
   private static final String PROP_PREFIX = "prefix";
   private static final String PROP_PROPERTY = "target";
@@ -29,6 +29,7 @@ public final class LivenessQuestion extends Question {
   private static final String PROP_DEFAULT_ASSUMPTION = "default_assumption";
   private static final String PROP_INGRESS = "ingress";
   private static final String PROP_EXACT_COMM = "exact_communities";
+  private static final String PROP_COMPUTE_DATA_PLANE = "compute_data_plane";
 
   private final @Nonnull PrefixSpace _prefix;
   private final @Nonnull Map<Location.Builder, Invariant.Builder> _target = new HashMap<>();
@@ -37,12 +38,13 @@ public final class LivenessQuestion extends Question {
   private final Invariant.Builder _default_assumption;
   private final Location.Builders _ingress;
   private final boolean _exact_communities;
+  private final boolean _compute_data_plane;
 
-  public LivenessQuestion() {
-    this(DEFAULT_PREFIX, null, null, null, null, null, null, false);
+  public ReachabilityQuestion() {
+    this(DEFAULT_PREFIX, null, null, null, null, null, null, false, false);
   }
 
-  private LivenessQuestion(
+  private ReachabilityQuestion(
       @Nullable PrefixRange prefix,
       @Nullable Invariant.Builder target,
       @Nullable Location.Builder location,
@@ -50,7 +52,8 @@ public final class LivenessQuestion extends Question {
       @Nullable Invariant.Builders assumptions,
       @Nullable Invariant.Builder default_assumption,
       @Nullable Location.Builders ingress,
-      boolean exact_communities) {
+      boolean exact_communities,
+      boolean compute_data_plane) {
     if (target != null && location != null) {
       _target.put(location, target);
     }
@@ -60,10 +63,11 @@ public final class LivenessQuestion extends Question {
     _default_assumption = default_assumption;
     _ingress = ingress;
     _exact_communities = exact_communities;
+    _compute_data_plane = compute_data_plane;
   }
 
   @JsonCreator
-  private static LivenessQuestion jsonCreator(
+  private static ReachabilityQuestion jsonCreator(
       @JsonProperty(PROP_PREFIX) PrefixRange prefix,
       @JsonProperty(PROP_PROPERTY) Invariant.Builder target,
       @JsonProperty(PROP_LOCATION) Location.Builder location,
@@ -71,8 +75,9 @@ public final class LivenessQuestion extends Question {
       @JsonProperty(PROP_ASSUMPTIONS) @Nullable Invariant.Builders assumptions,
       @JsonProperty(PROP_DEFAULT_ASSUMPTION) Invariant.Builder default_assumption,
       @JsonProperty(PROP_INGRESS) Location.Builders ingress,
-      @JsonProperty(PROP_EXACT_COMM) @Nullable Boolean exact_community) {
-    return new LivenessQuestion(
+      @JsonProperty(PROP_EXACT_COMM) @Nullable Boolean exact_community,
+      @JsonProperty(PROP_COMPUTE_DATA_PLANE) @Nullable Boolean compute_data_plane) {
+    return new ReachabilityQuestion(
         prefix,
         target,
         location,
@@ -80,7 +85,8 @@ public final class LivenessQuestion extends Question {
         assumptions,
         default_assumption,
         ingress,
-        exact_community != null && exact_community);
+        exact_community != null && exact_community,
+        compute_data_plane != null && compute_data_plane);
   }
 
   @Nonnull
@@ -118,6 +124,10 @@ public final class LivenessQuestion extends Question {
 
   public boolean get_exact_communities() {
     return _exact_communities;
+  }
+
+  public boolean get_compute_data_plane() {
+    return _compute_data_plane;
   }
 
   @JsonIgnore

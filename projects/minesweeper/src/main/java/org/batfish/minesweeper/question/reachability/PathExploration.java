@@ -1,4 +1,4 @@
-package org.batfish.minesweeper.question.liveness;
+package org.batfish.minesweeper.question.reachability;
 
 import net.sf.javabdd.BDD;
 import org.apache.commons.lang3.tuple.Pair;

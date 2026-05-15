@@ -1,4 +1,4 @@
-package org.batfish.minesweeper.question.liveness;
+package org.batfish.minesweeper.question.reachability;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.collect.ImmutableMap;

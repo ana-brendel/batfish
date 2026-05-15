@@ -1,34 +1,42 @@
 {
-  "class": "org.batfish.minesweeper.question.safety.SafetyQuestion",
+  "class": "org.batfish.minesweeper.question.reachability.ReachabilityQuestion",
   "differential": false,
+  "prefix": "${prefix}",
   "target": "${target}",
   "location": "${location}",
   "assumption_locations": "${assumption_locations}",
   "assumptions": "${assumptions}",
   "default_assumption": "${default_assumption}",
-  "show_all": "${show_all}",
-  "refine": "${refine}",
+  "ingress": "${ingress}",
   "exact_communities": "${exact_communities}",
+  "compute_data_plane": "${compute_data_plane}",
   "instance": {
     "description": "...",
-    "instanceName": "safety",
+    "instanceName": "whirlpoolReachability",
     "longDescription": "This question...",
     "orderedVariableNames": [
+      "prefix",
       "target",
       "location",
       "assumption_locations",
       "assumptions",
       "default_assumption",
-      "show_all",
-      "refine",
-      "exact_communities"
+      "ingress",
+      "exact_communities",
+      "compute_data_plane"
     ],
     "tags": [
       "routing"
     ],
     "variables": {
+      "prefix": {
+        "description": "Consider routes for this prefix",
+        "type": "string",
+        "optional": true,
+        "displayName": "Prefix for Liveness Property"
+      },
       "target": {
-        "description": "Safety property to verify",
+        "description": "Liveness property to verify",
         "type": "string",
         "optional": true,
         "displayName": "Target Property"
@@ -57,23 +65,23 @@
         "optional": true,
         "displayName": "Default Incoming Assumptions"
       },
-      "show_all": {
-        "description": "Flag indicating if you want all of the inferred invariants displayed",
-        "type": "boolean",
+      "ingress": {
+        "description": "Optional starting point for incoming traffic",
+        "type": "string",
         "optional": true,
-        "displayName": "Weak Print"
-      },
-      "refine": {
-        "description": "Flag indicating if refinement of invariants should occur.",
-        "type": "boolean",
-        "optional": true,
-        "displayName": "Perform refinement"
+        "displayName": "Ingress Node for Good Traffic"
       },
       "exact_communities": {
         "description": "Flag indicating if communities provided should be treated as exact",
         "type": "boolean",
         "optional": true,
         "displayName": "Implicitly negate communities not mentioned"
+      },
+      "compute_data_plane": {
+        "description": "Flag indicating if data plane should be computed (more robust, but expensive)",
+        "type": "boolean",
+        "optional": true,
+        "displayName": "Computes the data plane"
       }
     }
   }

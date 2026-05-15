@@ -1,4 +1,4 @@
-package org.batfish.minesweeper.question.liveness;
+package org.batfish.minesweeper.question.reachability;
 
 import org.batfish.datamodel.Bgpv4Route;
 import org.batfish.datamodel.table.Row;
@@ -14,7 +14,7 @@ import java.util.Optional;
 import static org.batfish.minesweeper.question.verificationutilities.Setup.metadata_liveness;
 import static org.batfish.minesweeper.question.verificationutilities.Setup.nonDefaultRoute;
 
-public record LivenessResult(
+public record ReachabilityResult(
     Optional<Path> goodPath,
     List<Path> badPaths,
     Optional<Map<Location, Bgpv4Route>> potentialInterferences) {

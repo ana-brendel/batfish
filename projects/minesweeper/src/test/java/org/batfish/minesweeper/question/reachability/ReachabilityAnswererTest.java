@@ -1,4 +1,4 @@
-package org.batfish.minesweeper.question.liveness;
+package org.batfish.minesweeper.question.reachability;
 
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
@@ -59,7 +59,7 @@ import static org.batfish.minesweeper.question.verificationutilities.TestConfigC
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 
-public class LivenessAnswererTest {
+public class ReachabilityAnswererTest {
   private static final NetworkFactory nf = new NetworkFactory();
   private static final String prefixStr = "10.0.0.0/8";
 
@@ -234,7 +234,7 @@ public class LivenessAnswererTest {
             Invariant.clauseBuilder().setCommunities(comm).build(net.tbdd(), net.template()));
 
     TableAnswerElement result =
-        LivenessAnswerer.run(info, BASIC_PREFIX, GAMMANODE, target, Set.of());
+        ReachabilityAnswerer.run(info, BASIC_PREFIX, GAMMANODE, target, Set.of());
     Pair<Boolean, Boolean> checks = processResultRows(result.getRowsList());
 
     assertTrue(checks.getLeft());
@@ -264,7 +264,7 @@ public class LivenessAnswererTest {
             Invariant.clauseBuilder().setCommunities(comm).build(net.tbdd(), net.template()));
 
     TableAnswerElement result =
-        LivenessAnswerer.run(info, BASIC_PREFIX, GAMMANODE, target, Set.of());
+        ReachabilityAnswerer.run(info, BASIC_PREFIX, GAMMANODE, target, Set.of());
     Pair<Boolean, Boolean> checks = processResultRows(result.getRowsList());
 
     // only good path is not the shortest path
@@ -412,7 +412,7 @@ public class LivenessAnswererTest {
             Invariant.clauseBuilder().setCommunities(comm).build(net.tbdd(), net.template()));
 
     TableAnswerElement result =
-        LivenessAnswerer.run(info, TARGET_PREFIX, GAMMANODE, target, Set.of());
+        ReachabilityAnswerer.run(info, TARGET_PREFIX, GAMMANODE, target, Set.of());
     Pair<Boolean, Boolean> checks = processResultRows(result.getRowsList());
 
     assertTrue(checks.getLeft());
@@ -856,7 +856,7 @@ public class LivenessAnswererTest {
             Invariant.clauseBuilder().setCommunities(comm).build(net.tbdd(), net.template()));
 
     TableAnswerElement result =
-        LivenessAnswerer.run(info, TARGET_PREFIX, GAMMANODE, target, Set.of());
+        ReachabilityAnswerer.run(info, TARGET_PREFIX, GAMMANODE, target, Set.of());
     Pair<Boolean, Boolean> checks = processResultRows(result.getRowsList());
 
     assertTrue(checks.getLeft());
@@ -890,7 +890,7 @@ public class LivenessAnswererTest {
             Invariant.clauseBuilder().setCommunities(comm).build(net.tbdd(), net.template()));
 
     TableAnswerElement result =
-        LivenessAnswerer.run(info, TARGET_PREFIX, GAMMANODE, target, Set.of());
+        ReachabilityAnswerer.run(info, TARGET_PREFIX, GAMMANODE, target, Set.of());
     Pair<Boolean, Boolean> checks = processResultRows(result.getRowsList());
 
     assertTrue(checks.getLeft());
@@ -933,7 +933,7 @@ public class LivenessAnswererTest {
             Invariant.clauseBuilder().setCommunities(comm).build(net.tbdd(), net.template()));
 
     TableAnswerElement result =
-        LivenessAnswerer.run(info, TARGET_PREFIX, GAMMANODE, target, Set.of());
+        ReachabilityAnswerer.run(info, TARGET_PREFIX, GAMMANODE, target, Set.of());
     Pair<Boolean, Boolean> checks = processResultRows(result.getRowsList());
 
     assertTrue(checks.getLeft());
@@ -1092,7 +1092,7 @@ public class LivenessAnswererTest {
     Node GAMMANODE = GAMMA_NODE_R.instantiate(info);
 
     TableAnswerElement result =
-        LivenessAnswerer.run(info, BASIC_PREFIX, GAMMANODE, new Invariant(info.tbdd), Set.of());
+        ReachabilityAnswerer.run(info, BASIC_PREFIX, GAMMANODE, new Invariant(info.tbdd), Set.of());
     Pair<Boolean, Boolean> checks = processResultRows(result.getRowsList());
 
     assertTrue(checks.getLeft());
@@ -1126,7 +1126,7 @@ public class LivenessAnswererTest {
     Node GAMMANODE = GAMMA_NODE_R.instantiate(info);
 
     TableAnswerElement result =
-        LivenessAnswerer.run(info, BASIC_PREFIX, GAMMANODE, new Invariant(info.tbdd), Set.of());
+        ReachabilityAnswerer.run(info, BASIC_PREFIX, GAMMANODE, new Invariant(info.tbdd), Set.of());
     Pair<Boolean, Boolean> checks = processResultRows(result.getRowsList());
 
     assertTrue(checks.getLeft());
@@ -1325,7 +1325,7 @@ public class LivenessAnswererTest {
             Invariant.clauseBuilder().setCommunities(comm).build(net.tbdd(), net.template()));
 
     TableAnswerElement result =
-        LivenessAnswerer.run(info, BASIC_PREFIX, GAMMANODE, target, Set.of());
+        ReachabilityAnswerer.run(info, BASIC_PREFIX, GAMMANODE, target, Set.of());
     return processResultRows(result.getRowsList());
   }
 
@@ -1560,7 +1560,7 @@ public class LivenessAnswererTest {
             Invariant.clauseBuilder().setCommunities(comm).build(net.tbdd(), net.template()));
 
     TableAnswerElement result =
-        LivenessAnswerer.run(
+        ReachabilityAnswerer.run(
             info, BASIC_PREFIX, GAMMANODE, target, v == 0 ? Set.of(ingress) : Set.of());
     return processResultRows(result.getRowsList());
   }
@@ -1757,7 +1757,8 @@ public class LivenessAnswererTest {
     Node TARGET_NODE = EPSILON_NODE_R.instantiate(info);
 
     TableAnswerElement result =
-        LivenessAnswerer.run(info, BASIC_PREFIX, TARGET_NODE, new Invariant(info.tbdd), Set.of());
+        ReachabilityAnswerer.run(
+            info, BASIC_PREFIX, TARGET_NODE, new Invariant(info.tbdd), Set.of());
     return processResultRows(result.getRowsList());
   }
 

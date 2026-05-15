@@ -164,7 +164,9 @@ public class Node extends Location {
 
   @Override
   public boolean equals(Object obj) {
-    if (this.getClass() == obj.getClass()) {
+    if (obj == null) {
+      return false;
+    } else if (this.getClass() == obj.getClass()) {
       Node node = (Node) obj;
       // equality for ips compares the longs
       return node.name.equals(this.name)

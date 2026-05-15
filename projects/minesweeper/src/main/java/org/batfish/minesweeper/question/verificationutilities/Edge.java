@@ -138,7 +138,9 @@ public class Edge extends Location {
 
   @Override
   public boolean equals(Object obj) {
-    if (this.getClass() == obj.getClass()) {
+    if (obj == null) {
+      return false;
+    } else if (this.getClass() == obj.getClass()) {
       Edge edge = (Edge) obj;
       return edge.src.equals(this.src)
           && edge.dst.equals(this.dst)

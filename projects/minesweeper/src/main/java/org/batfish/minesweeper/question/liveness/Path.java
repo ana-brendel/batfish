@@ -519,4 +519,8 @@ public class Path {
       return Integer.compare(this.steps.size(), o.steps.size());
     }
   }
+
+  public Location[] getLocations() {
+    return steps;
+  }
 }

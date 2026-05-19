@@ -16,7 +16,7 @@ fi
 
 bazel build //projects/allinone:allinone_main
 ./bazel-bin/projects/allinone/allinone_main \
-    --jvm_flag=-Xmx12g \
+    --jvm_flag=-Xmx16g \
     --jvm_flag=-Dlog4j2.configurationFile=tools/log4j2.yaml \
     ${DEBUG} \
     -runclient false \

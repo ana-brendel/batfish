@@ -97,6 +97,7 @@ import org.batfish.datamodel.BgpActivePeerConfig;
 import org.batfish.datamodel.BgpPassivePeerConfig;
 import org.batfish.datamodel.BgpPeerConfig;
 import org.batfish.datamodel.BgpTieBreaker;
+import org.batfish.datamodel.BgpUnnumberedPeerConfig;
 import org.batfish.datamodel.Bgpv4ToEvpnVrfLeakConfig;
 import org.batfish.datamodel.BumTransportMethod;
 import org.batfish.datamodel.ConcreteInterfaceAddress;
@@ -140,6 +141,7 @@ import org.batfish.datamodel.SubRange;
 import org.batfish.datamodel.SwitchportEncapsulationType;
 import org.batfish.datamodel.TraceElement;
 import org.batfish.datamodel.TunnelConfiguration;
+import org.batfish.datamodel.UnnumberedAddress;
 import org.batfish.datamodel.VrfLeakConfig;
 import org.batfish.datamodel.acl.AclLineMatchExpr;
 import org.batfish.datamodel.acl.AclLineMatchExprs;
@@ -147,6 +149,7 @@ import org.batfish.datamodel.bgp.BgpConfederation;
 import org.batfish.datamodel.isis.IsisInterfaceLevelSettings;
 import org.batfish.datamodel.isis.IsisInterfaceMode;
 import org.batfish.datamodel.isis.IsisInterfaceSettings;
+import org.batfish.datamodel.ospf.OspfAddresses;
 import org.batfish.datamodel.ospf.OspfArea;
 import org.batfish.datamodel.ospf.OspfAreaSummary;
 import org.batfish.datamodel.ospf.OspfDefaultOriginateType;
@@ -167,18 +170,15 @@ import org.batfish.datamodel.routing_policy.expr.Conjunction;
 import org.batfish.datamodel.routing_policy.expr.DestinationNetwork;
 import org.batfish.datamodel.routing_policy.expr.Disjunction;
 import org.batfish.datamodel.routing_policy.expr.ExplicitPrefixSet;
-import org.batfish.datamodel.routing_policy.expr.LiteralInt;
 import org.batfish.datamodel.routing_policy.expr.LiteralLong;
 import org.batfish.datamodel.routing_policy.expr.LiteralOrigin;
 import org.batfish.datamodel.routing_policy.expr.MatchPrefixSet;
 import org.batfish.datamodel.routing_policy.expr.MatchProtocol;
 import org.batfish.datamodel.routing_policy.expr.Not;
 import org.batfish.datamodel.routing_policy.statement.If;
-import org.batfish.datamodel.routing_policy.statement.SetLocalPreference;
 import org.batfish.datamodel.routing_policy.statement.SetMetric;
 import org.batfish.datamodel.routing_policy.statement.SetOrigin;
 import org.batfish.datamodel.routing_policy.statement.SetOspfMetricType;
-import org.batfish.datamodel.routing_policy.statement.SetWeight;
 import org.batfish.datamodel.routing_policy.statement.Statement;
 import org.batfish.datamodel.routing_policy.statement.Statements;
 import org.batfish.datamodel.routing_policy.statement.TraceableStatement;
@@ -274,7 +274,6 @@ public final class AristaConfiguration extends VendorConfiguration {
   @VisibleForTesting public static final int DEFAULT_EBGP_ADMIN = 200;
   @VisibleForTesting public static final int DEFAULT_IBGP_ADMIN = 200;
   @VisibleForTesting public static final int DEFAULT_LOCAL_BGP_ADMIN = 200;
-  @VisibleForTesting public static final int DEFAULT_LOCAL_BGP_WEIGHT = 32768;
   static final boolean DEFAULT_VRRP_PREEMPT = true;
 
   static final int DEFAULT_VRRP_PRIORITY = 100;
@@ -892,10 +891,18 @@ public final class AristaConfiguration extends VendorConfiguration {
     RoutingPolicy.Builder redistributionPolicy =
         RoutingPolicy.builder().setOwner(c).setName(redistPolicyName);
 
-    // Arista sets local routes' local preference to 0
-    // actually, it is unset but treated like 0 in terms of BgpRib comparisons.
-    redistributionPolicy.addStatement(new SetLocalPreference(new LiteralLong(0)));
-    redistributionPolicy.addStatement(new SetWeight(new LiteralInt(DEFAULT_LOCAL_BGP_WEIGHT)));
+    // Note: Arista EOS locally-originated BGP paths use standard BGP
+    // defaults for both weight (0) and local-preference (100).
+    // Unlike IOS/IOS-XE, Arista does NOT set weight 32768 on local
+    // paths. And unlike what the previous code assumed, local-pref
+    // is not 0 — it is the standard default 100 (verified empirically
+    // on EOS 4.36 in both multi-agent and ribd by forcing best-path
+    // tiebreaks at each step; see lab-validation#152). We therefore
+    // set neither attribute here; the BGP pipeline's defaults suffice.
+    // A route-map on a `network` statement or `redistribute` can
+    // still override as usual. (Aggregate routes are still generated
+    // with weight 32768 via the shared BgpProtocolHelper.toBgpv4Route
+    // code path; fixing that is left for a follow-up.)
 
     // Arista sets origin type differently depending on source protocol. Redistributed connected
     // routes have origin type IGP and redistributed static routes have origin type incomplete.
@@ -1091,6 +1098,19 @@ public final class AristaConfiguration extends VendorConfiguration {
             _peerFilters,
             _w);
     newBgpProcess.setPassiveNeighbors(ImmutableSortedMap.copyOf(passiveNeighbors));
+
+    Map<String, BgpUnnumberedPeerConfig> interfaceNeighbors =
+        AristaConversions.getInterfaceNeighbors(
+            c,
+            v,
+            newBgpProcess,
+            bgpGlobal,
+            bgpVrf,
+            _eosVxlan,
+            vxlanSourceInterfaceIp,
+            _peerFilters,
+            _w);
+    newBgpProcess.setInterfaceNeighbors(ImmutableSortedMap.copyOf(interfaceNeighbors));
 
     return newBgpProcess;
   }
@@ -1320,6 +1340,19 @@ public final class AristaConfiguration extends VendorConfiguration {
           }
           newIface.setAutoState(iface.getAutoState());
         }
+        // Resolve unnumbered interface address from source interface.
+        if (iface.getUnnumberedSourceInterface() != null && iface.getAddress() == null) {
+          Interface sourceIface = _interfaces.get(iface.getUnnumberedSourceInterface());
+          if (sourceIface != null && sourceIface.getAddress() != null) {
+            UnnumberedAddress unnumbered =
+                UnnumberedAddress.of(
+                    iface.getUnnumberedSourceInterface(), sourceIface.getAddress().getIp());
+            newIface.setAddress(unnumbered);
+            newIface.setAllAddresses(ImmutableSet.of(unnumbered));
+            // No address metadata needed — unnumbered addresses don't generate connected routes.
+            break;
+          }
+        }
         // All prefixes is the combination of the interface prefix + any secondary prefixes.
         ImmutableSet.Builder<ConcreteInterfaceAddress> allPrefixesBuilder = ImmutableSet.builder();
         if (iface.getAddress() != null) {
@@ -1329,24 +1362,22 @@ public final class AristaConfiguration extends VendorConfiguration {
         allPrefixesBuilder.addAll(iface.getSecondaryAddresses());
         ImmutableSet<ConcreteInterfaceAddress> allPrefixes = allPrefixesBuilder.build();
         newIface.setAllAddresses(allPrefixes);
+        ConnectedRouteMetadata metadata =
+            ConnectedRouteMetadata.builder().setGenerateLocalRoute(false).build();
         newIface.setAddressMetadata(
             allPrefixes.stream()
-                .collect(
-                    toImmutableSortedMap(
-                        Function.identity(),
-                        addr ->
-                            ConnectedRouteMetadata.builder()
-                                .setGenerateLocalRoute(false)
-                                .build())));
+                .collect(toImmutableSortedMap(Function.identity(), addr -> metadata)));
 
         break;
 
       case ACCESS:
         // switch settings
+        warnSwitchportWithAddress(iface);
         newIface.setAccessVlan(firstNonNull(iface.getAccessVlan(), 1));
         break;
 
       case TRUNK:
+        warnSwitchportWithAddress(iface);
         newIface.setNativeVlan(firstNonNull(iface.getNativeVlan(), 1));
         /*
          * Compute allowed VLANs as configured allowed vlans (or default) minus vlans in other trunk groups.
@@ -1364,7 +1395,7 @@ public final class AristaConfiguration extends VendorConfiguration {
         break;
 
       default:
-        // not handled
+        warnSwitchportWithAddress(iface);
         break;
     }
 
@@ -1402,6 +1433,14 @@ public final class AristaConfiguration extends VendorConfiguration {
     }
 
     return newIface;
+  }
+
+  private void warnSwitchportWithAddress(Interface iface) {
+    if (iface.getAddress() != null
+        || !iface.getSecondaryAddresses().isEmpty()
+        || iface.getUnnumberedSourceInterface() != null) {
+      _w.redFlag(String.format("Ignoring IP address for switchport interface %s", iface.getName()));
+    }
   }
 
   private void generateDestinationStaticNats(
@@ -1545,7 +1584,8 @@ public final class AristaConfiguration extends VendorConfiguration {
     org.batfish.datamodel.ospf.OspfProcess newProcess =
         org.batfish.datamodel.ospf.OspfProcess.builder()
             .setProcessId(proc.getName())
-            .setReferenceBandwidth(proc.getReferenceBandwidth())
+            .setReferenceBandwidth(
+                firstNonNull(proc.getReferenceBandwidth(), OspfProcess.DEFAULT_REFERENCE_BANDWIDTH))
             .setAdminCosts(
                 org.batfish.datamodel.ospf.OspfProcess.computeDefaultAdminCosts(
                     c.getConfigurationFormat()))
@@ -1631,13 +1671,12 @@ public final class AristaConfiguration extends VendorConfiguration {
       Map<Prefix, OspfAreaSummary> summaries = e1.getValue();
       OspfArea.Builder area = areas.get(areaLong);
       String summaryFilterName = "~OSPF_SUMMARY_FILTER:" + vrfName + ":" + areaLong + "~";
-      RouteFilterList summaryFilter = new RouteFilterList(summaryFilterName);
-      c.getRouteFilterLists().put(summaryFilterName, summaryFilter);
       if (area == null) {
         area = OspfArea.builder().setNumber(areaLong);
         areas.put(areaLong, area);
       }
       area.setSummaryFilter(summaryFilterName);
+      ImmutableList.Builder<RouteFilterLine> summaryLines = ImmutableList.builder();
       for (Entry<Prefix, OspfAreaSummary> e2 : summaries.entrySet()) {
         Prefix prefix = e2.getKey();
         OspfAreaSummary summary = e2.getValue();
@@ -1646,18 +1685,20 @@ public final class AristaConfiguration extends VendorConfiguration {
             summary.isAdvertised()
                 ? Math.min(Prefix.MAX_PREFIX_LENGTH, prefixLength + 1)
                 : prefixLength;
-        summaryFilter.addLine(
+        summaryLines.add(
             new RouteFilterLine(
                 LineAction.DENY,
                 IpWildcard.create(prefix),
                 new SubRange(filterMinPrefixLength, Prefix.MAX_PREFIX_LENGTH)));
       }
       area.addSummaries(ImmutableSortedMap.copyOf(summaries));
-      summaryFilter.addLine(
+      summaryLines.add(
           new RouteFilterLine(
               LineAction.PERMIT,
               IpWildcard.create(Prefix.ZERO),
               new SubRange(0, Prefix.MAX_PREFIX_LENGTH)));
+      c.getRouteFilterLists()
+          .put(summaryFilterName, new RouteFilterList(summaryFilterName, summaryLines.build()));
     }
     newProcess.setAreas(toImmutableSortedMap(areas, Entry::getKey, e -> e.getValue().build()));
 
@@ -1755,15 +1796,25 @@ public final class AristaConfiguration extends VendorConfiguration {
     org.batfish.datamodel.ospf.OspfNetworkType networkType =
         toOspfNetworkType(vsIface.getOspfNetworkType(), _w);
     ospfSettings.setNetworkType(networkType);
-    if (vsIface.getOspfCost() == null
-        && iface.isLoopback()
-        && networkType != OspfNetworkType.POINT_TO_POINT) {
+    if (vsIface.getOspfCost() != null) {
+      ospfSettings.setCost(vsIface.getOspfCost());
+    } else if (proc != null && proc.getReferenceBandwidth() == null) {
+      // EOS: when auto-cost reference-bandwidth is not configured, use flat default cost of 10.
+      ospfSettings.setCost(OspfProcess.DEFAULT_INTERFACE_OSPF_COST);
+    } else if (iface.isLoopback() && networkType != OspfNetworkType.POINT_TO_POINT) {
       ospfSettings.setCost(DEFAULT_LOOPBACK_OSPF_COST);
     } else {
-      ospfSettings.setCost(vsIface.getOspfCost());
+      ospfSettings.setCost(null);
     }
     ospfSettings.setHelloInterval(toOspfHelloInterval(vsIface, networkType));
     ospfSettings.setDeadInterval(toOspfDeadInterval(vsIface, networkType));
+    // For unnumbered interfaces, set explicit OSPF addresses so neighbor init can find the IP.
+    if (vsIface.getUnnumberedSourceInterface() != null) {
+      Interface sourceIface = _interfaces.get(vsIface.getUnnumberedSourceInterface());
+      if (sourceIface != null && sourceIface.getAddress() != null) {
+        ospfSettings.setOspfAddresses(OspfAddresses.of(ImmutableList.of(sourceIface.getAddress())));
+      }
+    }
 
     iface.setOspfSettings(ospfSettings.build());
   }
@@ -2933,9 +2984,7 @@ public final class AristaConfiguration extends VendorConfiguration {
         .filter(keyring -> !keyring.getLocalInterfaceName().equals(UNSET_LOCAL_INTERFACE))
         .forEach(
             keyring ->
-                keyring.setLocalAddress(
-                    firstNonNull(
-                        ifaceNameToPrimaryIp.get(keyring.getLocalInterfaceName()), Ip.AUTO)));
+                keyring.setLocalAddress(ifaceNameToPrimaryIp.get(keyring.getLocalInterfaceName())));
 
     _isakmpProfiles.values().stream()
         .filter(
@@ -2943,8 +2992,7 @@ public final class AristaConfiguration extends VendorConfiguration {
         .forEach(
             isakmpProfile ->
                 isakmpProfile.setLocalAddress(
-                    firstNonNull(
-                        ifaceNameToPrimaryIp.get(isakmpProfile.getLocalInterfaceName()), Ip.AUTO)));
+                    ifaceNameToPrimaryIp.get(isakmpProfile.getLocalInterfaceName())));
   }
 
   /** Resolves the addresses of the interfaces used in sourceInterfaceName of Tunnel interfaces */

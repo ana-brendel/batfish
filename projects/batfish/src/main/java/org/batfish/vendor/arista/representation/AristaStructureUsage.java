@@ -15,6 +15,8 @@ public enum AristaStructureUsage implements StructureUsage {
   BGP_NEIGHBOR_DISTRIBUTE_LIST_ACCESS6_LIST_IN("bgp neighbor distribute-list ipv6 access-list in"),
   BGP_NEIGHBOR_DISTRIBUTE_LIST_ACCESS6_LIST_OUT(
       "bgp neighbor distribute-list ipv6 access-list out"),
+  BGP_NEIGHBOR_INTERFACE_PEER_FILTER("bgp neighbor interface peer-filter"),
+  BGP_NEIGHBOR_INTERFACE_PEER_GROUP("bgp neighbor interface peer-group"),
   BGP_NEIGHBOR_PEER_GROUP("bgp neighbor peer-group"),
   BGP_NEIGHBOR_SELF_REF("bgp neighbor self ref"),
   BGP_NETWORK_ORIGINATION_ROUTE_MAP("bgp ipv4 network statement route-map"),
@@ -49,6 +51,7 @@ public enum AristaStructureUsage implements StructureUsage {
   INTERFACE_IGMP_ACCESS_GROUP_ACL("interface igmp access-group acl"),
   INTERFACE_IGMP_HOST_PROXY_ACCESS_LIST("interface igmp host-proxy access-list"),
   INTERFACE_IGMP_STATIC_GROUP_ACL("interface igmp static-group acl"),
+  INTERFACE_IP_ADDRESS_UNNUMBERED("interface ip address unnumbered"),
   INTERFACE_IP_ACCESS_GROUP_IN("interface ip access-group in"),
   INTERFACE_IP_ACCESS_GROUP_OUT("interface ip access-group out"),
   INTERFACE_IP_INBAND_ACCESS_GROUP("interface ip inband access-group"),

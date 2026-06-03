@@ -271,14 +271,6 @@ public abstract class BDDFactory {
   public abstract double setMinFreeNodes(double x);
 
   /**
-   * Set factor by which to increase node table after a garbage collection.
-   *
-   * @param x factor by which to increase node table after GC
-   * @return old value
-   */
-  public abstract double setIncreaseFactor(double x);
-
-  /**
    * Sets the cache ratio for the operator caches. When the node table grows, operator caches will
    * also grow to maintain the ratio.
    *
@@ -393,7 +385,8 @@ public abstract class BDDFactory {
     }
 
     // Speculative optimization: sort by decreasing level
-    List<BDD> ordered = Arrays.stream(bdds).sorted((b1, b2) -> b2.level() - b1.level()).toList();
+    BDD[] ordered = bdds.clone();
+    Arrays.sort(ordered, (b1, b2) -> b2.level() - b1.level());
 
     BDD onehot = zero();
     BDD allFalse = one();

@@ -14,16 +14,16 @@ import static org.batfish.datamodel.matchers.BgpProcessMatchers.hasMultipathIbgp
 import static org.batfish.datamodel.matchers.BgpProcessMatchers.hasRouterId;
 import static org.batfish.datamodel.matchers.ConfigurationMatchers.hasHostname;
 import static org.batfish.datamodel.matchers.ConfigurationMatchers.hasInterface;
-import static org.batfish.datamodel.matchers.DataModelMatchers.hasBandwidth;
-import static org.batfish.datamodel.matchers.DataModelMatchers.hasDefinedStructure;
-import static org.batfish.datamodel.matchers.DataModelMatchers.hasDefinedStructureWithDefinitionLines;
-import static org.batfish.datamodel.matchers.DataModelMatchers.hasNumReferrers;
-import static org.batfish.datamodel.matchers.DataModelMatchers.hasOutgoingFilter;
-import static org.batfish.datamodel.matchers.DataModelMatchers.hasReferencedStructure;
-import static org.batfish.datamodel.matchers.DataModelMatchers.hasUndefinedReference;
+import static org.batfish.datamodel.matchers.ConvertConfigurationAnswerElementMatchers.hasDefinedStructure;
+import static org.batfish.datamodel.matchers.ConvertConfigurationAnswerElementMatchers.hasDefinedStructureWithDefinitionLines;
+import static org.batfish.datamodel.matchers.ConvertConfigurationAnswerElementMatchers.hasNumReferrers;
+import static org.batfish.datamodel.matchers.ConvertConfigurationAnswerElementMatchers.hasReferencedStructure;
+import static org.batfish.datamodel.matchers.ConvertConfigurationAnswerElementMatchers.hasUndefinedReference;
 import static org.batfish.datamodel.matchers.InterfaceMatchers.hasAddress;
+import static org.batfish.datamodel.matchers.InterfaceMatchers.hasBandwidth;
 import static org.batfish.datamodel.matchers.InterfaceMatchers.hasDescription;
 import static org.batfish.datamodel.matchers.InterfaceMatchers.hasInterfaceType;
+import static org.batfish.datamodel.matchers.InterfaceMatchers.hasOutgoingFilter;
 import static org.batfish.datamodel.matchers.InterfaceMatchers.hasSpeed;
 import static org.batfish.datamodel.matchers.IpAccessListMatchers.accepts;
 import static org.batfish.datamodel.matchers.IpAccessListMatchers.rejects;
@@ -46,6 +46,7 @@ import static org.hamcrest.Matchers.hasItems;
 import static org.hamcrest.Matchers.hasKey;
 import static org.hamcrest.Matchers.hasSize;
 import static org.hamcrest.Matchers.not;
+import static org.hamcrest.Matchers.notNullValue;
 import static org.hamcrest.Matchers.nullValue;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNull;
@@ -746,7 +747,7 @@ public final class FortiosGrammarTest {
         anEmptyMap());
 
     BgpProcess bgpProcess = vc.getBgpProcess();
-    assert bgpProcess != null;
+    assertThat(bgpProcess, notNullValue());
     assertThat(bgpProcess.getAs(), equalTo(1L));
     assertThat(bgpProcess.getRouterId(), equalTo(Ip.parse("1.1.1.1")));
     assertNull(bgpProcess.getEbgpMultipath());
@@ -955,7 +956,7 @@ public final class FortiosGrammarTest {
     // First config has multipath enabled for EBGP, disabled for IBGP; vice versa for second config
     FortiosConfiguration vc1 = parseVendorConfig(hostname1);
     BgpProcess vcProc1 = vc1.getBgpProcess();
-    assert vcProc1 != null;
+    assertThat(vcProc1, notNullValue());
     assertThat(vcProc1.getEbgpMultipath(), equalTo(true));
     assertThat(vcProc1.getIbgpMultipath(), equalTo(false));
     assertThat(vcProc1.getEbgpMultipathEffective(), equalTo(true));
@@ -963,7 +964,7 @@ public final class FortiosGrammarTest {
 
     FortiosConfiguration vc2 = parseVendorConfig(hostname2);
     BgpProcess vcProc2 = vc2.getBgpProcess();
-    assert vcProc2 != null;
+    assertThat(vcProc2, notNullValue());
     assertThat(vcProc2.getEbgpMultipath(), equalTo(false));
     assertThat(vcProc2.getIbgpMultipath(), equalTo(true));
     assertThat(vcProc2.getEbgpMultipathEffective(), equalTo(false));

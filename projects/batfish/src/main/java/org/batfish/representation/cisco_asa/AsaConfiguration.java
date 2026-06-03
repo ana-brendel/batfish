@@ -2216,13 +2216,12 @@ public final class AsaConfiguration extends VendorConfiguration {
       Map<Prefix, OspfAreaSummary> summaries = e1.getValue();
       OspfArea.Builder area = areas.get(areaLong);
       String summaryFilterName = "~OSPF_SUMMARY_FILTER:" + vrfName + ":" + areaLong + "~";
-      RouteFilterList summaryFilter = new RouteFilterList(summaryFilterName);
-      c.getRouteFilterLists().put(summaryFilterName, summaryFilter);
       if (area == null) {
         area = OspfArea.builder().setNumber(areaLong);
         areas.put(areaLong, area);
       }
       area.setSummaryFilter(summaryFilterName);
+      ImmutableList.Builder<RouteFilterLine> summaryLines = ImmutableList.builder();
       for (Entry<Prefix, OspfAreaSummary> e2 : summaries.entrySet()) {
         Prefix prefix = e2.getKey();
         OspfAreaSummary summary = e2.getValue();
@@ -2231,18 +2230,20 @@ public final class AsaConfiguration extends VendorConfiguration {
             summary.isAdvertised()
                 ? Math.min(Prefix.MAX_PREFIX_LENGTH, prefixLength + 1)
                 : prefixLength;
-        summaryFilter.addLine(
+        summaryLines.add(
             new RouteFilterLine(
                 LineAction.DENY,
                 IpWildcard.create(prefix),
                 new SubRange(filterMinPrefixLength, Prefix.MAX_PREFIX_LENGTH)));
       }
       area.addSummaries(ImmutableSortedMap.copyOf(summaries));
-      summaryFilter.addLine(
+      summaryLines.add(
           new RouteFilterLine(
               LineAction.PERMIT,
               IpWildcard.create(Prefix.ZERO),
               new SubRange(0, Prefix.MAX_PREFIX_LENGTH)));
+      c.getRouteFilterLists()
+          .put(summaryFilterName, new RouteFilterList(summaryFilterName, summaryLines.build()));
     }
     newProcess.setAreas(toImmutableSortedMap(areas, Entry::getKey, e -> e.getValue().build()));
 
@@ -4008,9 +4009,7 @@ public final class AsaConfiguration extends VendorConfiguration {
         .filter(keyring -> !keyring.getLocalInterfaceName().equals(UNSET_LOCAL_INTERFACE))
         .forEach(
             keyring ->
-                keyring.setLocalAddress(
-                    firstNonNull(
-                        ifaceNameToPrimaryIp.get(keyring.getLocalInterfaceName()), Ip.AUTO)));
+                keyring.setLocalAddress(ifaceNameToPrimaryIp.get(keyring.getLocalInterfaceName())));
 
     _isakmpProfiles.values().stream()
         .filter(
@@ -4018,8 +4017,7 @@ public final class AsaConfiguration extends VendorConfiguration {
         .forEach(
             isakmpProfile ->
                 isakmpProfile.setLocalAddress(
-                    firstNonNull(
-                        ifaceNameToPrimaryIp.get(isakmpProfile.getLocalInterfaceName()), Ip.AUTO)));
+                    ifaceNameToPrimaryIp.get(isakmpProfile.getLocalInterfaceName())));
   }
 
   /** Resolves the addresses of the interfaces used in sourceInterfaceName of Tunnel interfaces */

@@ -13,6 +13,7 @@ import static org.hamcrest.Matchers.equalTo;
 import static org.hamcrest.Matchers.hasEntry;
 import static org.hamcrest.Matchers.hasItem;
 import static org.hamcrest.Matchers.not;
+import static org.hamcrest.Matchers.nullValue;
 
 import com.google.common.collect.ImmutableSet;
 import com.google.common.collect.ImmutableSortedMap;
@@ -30,10 +31,10 @@ import org.batfish.datamodel.ConfigurationFormat;
 import org.batfish.datamodel.DataPlane;
 import org.batfish.datamodel.EvpnRoute;
 import org.batfish.datamodel.GenericRib;
+import org.batfish.datamodel.InterfaceType;
 import org.batfish.datamodel.Ip;
 import org.batfish.datamodel.NetworkFactory;
 import org.batfish.datamodel.Prefix;
-import org.batfish.datamodel.Route;
 import org.batfish.datamodel.Vrf;
 import org.batfish.datamodel.bgp.AddressFamilyCapabilities;
 import org.batfish.datamodel.bgp.EvpnAddressFamily;
@@ -199,6 +200,197 @@ public class EvpnTest {
         hasEntry(equalTo("n2"), contains(hasBumTransportIps(contains(Ip.parse("1.111.111.111"))))));
   }
 
+  /**
+   * Build a 2-node network with L2 VNIs and VLAN interfaces that have no physical switchport
+   * members. VTEP source IPs are on loopbacks, reachable via direct link. VLAN interfaces should be
+   * deactivated by autostate pre-dataplane, then reactivated when VXLAN tunnels come up.
+   */
+  private static SortedMap<String, Configuration> twoNodeNetworkWithVlanInterfaces() {
+    NetworkFactory nf = new NetworkFactory();
+
+    // -- Node 1 --
+    Configuration c1 =
+        nf.configurationBuilder()
+            .setConfigurationFormat(ConfigurationFormat.CISCO_IOS)
+            .setHostname("n1")
+            .build();
+    policyName = "EXPORT_ALL";
+    RoutingPolicy.builder()
+        .setOwner(c1)
+        .setName(policyName)
+        .addStatement(Statements.ReturnTrue.toStaticStatement())
+        .build();
+    Ip loopback1 = Ip.parse("10.0.0.1");
+    Ip loopback2 = Ip.parse("10.0.0.2");
+    Ip link1 = Ip.parse("10.1.0.1");
+    Ip link2 = Ip.parse("10.1.0.2");
+
+    Vrf vrf1 = nf.vrfBuilder().setOwner(c1).setName(DEFAULT_VRF_NAME).build();
+    BgpProcess bgp1 = BgpProcess.testBgpProcess(loopback1);
+    vrf1.setBgpProcess(bgp1);
+    // Loopback (VTEP source)
+    nf.interfaceBuilder()
+        .setOwner(c1)
+        .setVrf(vrf1)
+        .setName("Loopback0")
+        .setAddress(ConcreteInterfaceAddress.create(loopback1, 32))
+        .build();
+    // Physical link to n2
+    nf.interfaceBuilder()
+        .setOwner(c1)
+        .setVrf(vrf1)
+        .setName("Ethernet1")
+        .setAddress(ConcreteInterfaceAddress.create(link1, 30))
+        .build();
+    // VLAN interface — no switchport members, autostate enabled
+    nf.interfaceBuilder()
+        .setOwner(c1)
+        .setVrf(vrf1)
+        .setName("Vlan100")
+        .setType(InterfaceType.VLAN)
+        .setVlan(100)
+        .setAutoState(true)
+        .setAddress(ConcreteInterfaceAddress.parse("172.16.100.1/24"))
+        .build();
+    // L2 VNI for VLAN 100
+    int vni = 10100;
+    vrf1.setLayer2Vnis(
+        ImmutableSet.of(
+            Layer2Vni.testBuilder()
+                .setVni(vni)
+                .setVlan(100)
+                .setBumTransportMethod(BumTransportMethod.UNICAST_FLOOD_GROUP)
+                .setSourceAddress(loopback1)
+                .build()));
+    Layer2VniConfig vniConfig1 =
+        Layer2VniConfig.builder()
+            .setVni(vni)
+            .setVrf(DEFAULT_VRF_NAME)
+            .setRouteDistinguisher(RouteDistinguisher.from(bgp1.getRouterId(), 1))
+            .setRouteTarget(ExtendedCommunity.target(65500, vni))
+            .build();
+    nf.bgpNeighborBuilder()
+        .setPeerAddress(loopback2)
+        .setRemoteAs(2L)
+        .setLocalIp(loopback1)
+        .setLocalAs(1L)
+        .setBgpProcess(bgp1)
+        .setEvpnAddressFamily(
+            EvpnAddressFamily.builder()
+                .setL2Vnis(ImmutableSet.of(vniConfig1))
+                .setL3Vnis(ImmutableSet.of())
+                .setPropagateUnmatched(true)
+                .setAddressFamilyCapabilities(
+                    AddressFamilyCapabilities.builder()
+                        .setSendCommunity(true)
+                        .setSendExtendedCommunity(true)
+                        .build())
+                .setExportPolicy(policyName)
+                .build())
+        .setIpv4UnicastAddressFamily(
+            Ipv4UnicastAddressFamily.builder().setExportPolicy(policyName).build())
+        .build();
+
+    // -- Node 2 --
+    Configuration c2 =
+        nf.configurationBuilder()
+            .setConfigurationFormat(ConfigurationFormat.CISCO_IOS)
+            .setHostname("n2")
+            .build();
+    RoutingPolicy.builder()
+        .setOwner(c2)
+        .setName(policyName)
+        .addStatement(Statements.ReturnTrue.toStaticStatement())
+        .build();
+    Vrf vrf2 = nf.vrfBuilder().setOwner(c2).setName(DEFAULT_VRF_NAME).build();
+    BgpProcess bgp2 = BgpProcess.testBgpProcess(loopback2);
+    vrf2.setBgpProcess(bgp2);
+    nf.interfaceBuilder()
+        .setOwner(c2)
+        .setVrf(vrf2)
+        .setName("Loopback0")
+        .setAddress(ConcreteInterfaceAddress.create(loopback2, 32))
+        .build();
+    nf.interfaceBuilder()
+        .setOwner(c2)
+        .setVrf(vrf2)
+        .setName("Ethernet1")
+        .setAddress(ConcreteInterfaceAddress.create(link2, 30))
+        .build();
+    nf.interfaceBuilder()
+        .setOwner(c2)
+        .setVrf(vrf2)
+        .setName("Vlan100")
+        .setType(InterfaceType.VLAN)
+        .setVlan(100)
+        .setAutoState(true)
+        .setAddress(ConcreteInterfaceAddress.parse("172.16.100.2/24"))
+        .build();
+    vrf2.setLayer2Vnis(
+        ImmutableSet.of(
+            Layer2Vni.testBuilder()
+                .setVni(vni)
+                .setVlan(100)
+                .setBumTransportMethod(BumTransportMethod.UNICAST_FLOOD_GROUP)
+                .setSourceAddress(loopback2)
+                .build()));
+    Layer2VniConfig vniConfig2 =
+        Layer2VniConfig.builder()
+            .setVni(vni)
+            .setVrf(DEFAULT_VRF_NAME)
+            .setRouteDistinguisher(RouteDistinguisher.from(bgp2.getRouterId(), 2))
+            .setRouteTarget(ExtendedCommunity.target(65500, vni))
+            .build();
+    nf.bgpNeighborBuilder()
+        .setPeerAddress(loopback1)
+        .setRemoteAs(1L)
+        .setLocalIp(loopback2)
+        .setLocalAs(2L)
+        .setBgpProcess(bgp2)
+        .setEvpnAddressFamily(
+            EvpnAddressFamily.builder()
+                .setL2Vnis(ImmutableSet.of(vniConfig2))
+                .setL3Vnis(ImmutableSet.of())
+                .setPropagateUnmatched(true)
+                .setAddressFamilyCapabilities(
+                    AddressFamilyCapabilities.builder()
+                        .setSendCommunity(true)
+                        .setSendExtendedCommunity(true)
+                        .build())
+                .setExportPolicy(policyName)
+                .build())
+        .setIpv4UnicastAddressFamily(
+            Ipv4UnicastAddressFamily.builder().setExportPolicy(policyName).build())
+        .build();
+
+    return ImmutableSortedMap.of(c1.getHostname(), c1, c2.getHostname(), c2);
+  }
+
+  @Test
+  public void testVxlanAutostateReactivatesIrb() throws IOException {
+    SortedMap<String, Configuration> configs = twoNodeNetworkWithVlanInterfaces();
+    Batfish batfish = BatfishTestUtils.getBatfish(configs, _folder);
+    batfish.computeDataPlane(batfish.getSnapshot());
+    IncrementalDataPlane dp = (IncrementalDataPlane) batfish.loadDataPlane(batfish.getSnapshot());
+
+    // After dataplane computation, VXLAN tunnels should be up and IRBs reactivated.
+    // Check that Vlan100 on both nodes is active.
+    Configuration n1 = configs.get("n1");
+    Configuration n2 = configs.get("n2");
+    assertThat(n1.getAllInterfaces().get("Vlan100").getActive(), equalTo(true));
+    assertThat(n2.getAllInterfaces().get("Vlan100").getActive(), equalTo(true));
+
+    // Connected routes for the IRB subnets should be in the main RIBs
+    SortedMap<String, SortedMap<String, GenericRib<AnnotatedRoute<AbstractRoute>>>> ribs =
+        dp.getRibsForTesting();
+    assertThat(
+        ribs.get("n1").get(DEFAULT_VRF_NAME).getUnannotatedRoutes(),
+        hasItem(hasPrefix(Prefix.parse("172.16.100.0/24"))));
+    assertThat(
+        ribs.get("n2").get(DEFAULT_VRF_NAME).getUnannotatedRoutes(),
+        hasItem(hasPrefix(Prefix.parse("172.16.100.0/24"))));
+  }
+
   @Test(expected = AssertionError.class) // xfail this until NX-OS supports type 5 routes
   public void testEvpnSymmetricSingleSpine() throws IOException {
     String testRigResourcePrefix = "org/batfish/dataplane/ibdp/evpn-nxos-symmetric";
@@ -250,7 +442,7 @@ public class EvpnTest {
               isEvpnType3RouteThat(
                   allOf(
                       hasPrefix(exitgwVtepPrefix),
-                      hasNextHopIp(Route.UNSET_ROUTE_NEXT_HOP_IP),
+                      hasNextHopIp(nullValue()),
                       hasCommunities(ExtendedCommunity.target(65000, 10010))))));
       assertThat(
           exitgwRoutes,
@@ -258,7 +450,7 @@ public class EvpnTest {
               isEvpnType3RouteThat(
                   allOf(
                       hasPrefix(exitgwVtepPrefix),
-                      hasNextHopIp(Route.UNSET_ROUTE_NEXT_HOP_IP),
+                      hasNextHopIp(nullValue()),
                       hasCommunities(ExtendedCommunity.target(65000, 10020))))));
     }
 
@@ -289,7 +481,7 @@ public class EvpnTest {
               isEvpnType3RouteThat(
                   allOf(
                       hasPrefix(leaf1VtepPrefix),
-                      hasNextHopIp(Route.UNSET_ROUTE_NEXT_HOP_IP),
+                      hasNextHopIp(nullValue()),
                       hasCommunities(ExtendedCommunity.target(65000, 10010))))));
       assertThat(
           leaf1Routes,
@@ -297,7 +489,7 @@ public class EvpnTest {
               isEvpnType3RouteThat(
                   allOf(
                       hasPrefix(leaf1VtepPrefix),
-                      hasNextHopIp(Route.UNSET_ROUTE_NEXT_HOP_IP),
+                      hasNextHopIp(nullValue()),
                       hasCommunities(ExtendedCommunity.target(65000, 10020))))));
     }
   }

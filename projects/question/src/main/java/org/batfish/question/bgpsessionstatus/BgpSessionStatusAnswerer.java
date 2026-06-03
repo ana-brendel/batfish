@@ -1,6 +1,5 @@
 package org.batfish.question.bgpsessionstatus;
 
-import static com.google.common.base.MoreObjects.firstNonNull;
 import static org.batfish.datamodel.BgpSessionProperties.getSessionType;
 import static org.batfish.datamodel.questions.BgpSessionStatus.ESTABLISHED;
 import static org.batfish.datamodel.questions.BgpSessionStatus.NOT_COMPATIBLE;
@@ -17,6 +16,7 @@ import static org.batfish.question.bgpsessionstatus.BgpSessionAnswererUtils.COL_
 import static org.batfish.question.bgpsessionstatus.BgpSessionAnswererUtils.COL_REMOTE_IP;
 import static org.batfish.question.bgpsessionstatus.BgpSessionAnswererUtils.COL_REMOTE_NODE;
 import static org.batfish.question.bgpsessionstatus.BgpSessionAnswererUtils.COL_SESSION_TYPE;
+import static org.batfish.question.bgpsessionstatus.BgpSessionAnswererUtils.COL_SESSION_VRF;
 import static org.batfish.question.bgpsessionstatus.BgpSessionAnswererUtils.COL_VRF;
 import static org.batfish.question.bgpsessionstatus.BgpSessionAnswererUtils.getConfiguredStatus;
 import static org.batfish.question.bgpsessionstatus.BgpSessionAnswererUtils.getLocallyBrokenStatus;
@@ -75,6 +75,12 @@ public class BgpSessionStatusAnswerer extends Answerer {
               COL_NODE, Schema.NODE, "The node where this session is configured", true, false),
           new ColumnMetadata(
               COL_VRF, Schema.STRING, "The VRF in which this session is configured", true, false),
+          new ColumnMetadata(
+              COL_SESSION_VRF,
+              Schema.STRING,
+              "The VRF in which this session's TCP connection takes place, if different from VRF",
+              false,
+              false),
           new ColumnMetadata(
               COL_LOCAL_AS, Schema.LONG, "The local AS of the session", false, false),
           new ColumnMetadata(
@@ -241,6 +247,7 @@ public class BgpSessionStatusAnswerer extends Answerer {
         .put(COL_REMOTE_NODE, remoteNode)
         .put(COL_REMOTE_INTERFACE, null)
         .put(COL_REMOTE_IP, new SelfDescribingObject(Schema.IP, remoteIp))
+        .put(COL_SESSION_VRF, activePeer.getSessionVrf())
         .put(COL_SESSION_TYPE, getSessionType(activePeer))
         .put(COL_VRF, activeId.getVrfName())
         .build();
@@ -292,16 +299,16 @@ public class BgpSessionStatusAnswerer extends Answerer {
     // - remote IP
     // - session type
     // Local and remote interface will not be filled in (reserved for unnumbered peers).
-    // Local IP is set to Ip.AUTO if null, for presentation backwards compatibility.
     Row.TypedRowBuilder rb =
         Row.builder(METADATA_MAP)
             .put(COL_ADDRESS_FAMILIES, ImmutableSet.of())
             .put(COL_LOCAL_AS, passivePeer.getLocalAs())
-            .put(COL_LOCAL_IP, firstNonNull(passivePeer.getLocalIp(), Ip.AUTO))
+            .put(COL_LOCAL_IP, passivePeer.getLocalIp())
             .put(COL_NODE, new Node(passiveId.getHostname()))
             .put(COL_REMOTE_AS, passivePeer.getRemoteAsns().toString())
             .put(
                 COL_REMOTE_IP, new SelfDescribingObject(Schema.PREFIX, passivePeer.getPeerPrefix()))
+            .put(COL_SESSION_VRF, passivePeer.getSessionVrf())
             .put(COL_SESSION_TYPE, SessionType.UNSET)
             .put(COL_VRF, passiveId.getVrfName());
 
@@ -409,6 +416,7 @@ public class BgpSessionStatusAnswerer extends Answerer {
         .put(COL_REMOTE_NODE, remoteNode)
         .put(COL_REMOTE_INTERFACE, remoteInterface)
         .put(COL_REMOTE_IP, null)
+        .put(COL_SESSION_VRF, unnumPeer.getSessionVrf())
         .put(COL_SESSION_TYPE, getSessionType(unnumPeer))
         .put(COL_VRF, unnumId.getVrfName())
         .build();

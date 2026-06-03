@@ -1,0 +1,23 @@
+load("@rules_java//java:defs.bzl", "java_library")
+load("//skylark:antlr.bzl", "antlr_grammar")
+
+package(
+    default_visibility = ["//docs/example_code:__subpackages__"],
+)
+
+antlr_grammar(
+    name = "grammar_generated",
+    srcs = glob(["*.g4"]),
+    package = "org.batfish.vendor.cool_nos.grammar",
+)
+
+java_library(
+    name = "grammar",
+    srcs = [":grammar_generated"],
+    javacopts = ["-XepDisableAllChecks"],
+    deps = [
+        "//docs/example_code/new_vendor/src/main/java/org/batfish/vendor/cool_nos/grammar:cool_nos_base",
+        "//projects/common:parser_common",
+        "@maven//:org_antlr_antlr4_runtime",
+    ],
+)

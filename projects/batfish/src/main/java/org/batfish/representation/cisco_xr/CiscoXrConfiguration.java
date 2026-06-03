@@ -1657,9 +1657,8 @@ public final class CiscoXrConfiguration extends VendorConfiguration {
       // Populate VI area summaries and create summary filter
       if (!area.getSummaries().isEmpty()) {
         String summaryFilterName = "~OSPF_SUMMARY_FILTER:" + vrfName + ":" + areaNum + "~";
-        RouteFilterList summaryFilter = new RouteFilterList(summaryFilterName);
-        c.getRouteFilterLists().put(summaryFilterName, summaryFilter);
         viAreaBuilder.setSummaryFilter(summaryFilterName);
+        ImmutableList.Builder<RouteFilterLine> summaryLines = ImmutableList.builder();
         for (Entry<Prefix, OspfAreaSummary> e : area.getSummaries().entrySet()) {
           Prefix prefix = e.getKey();
           OspfAreaSummary summary = e.getValue();
@@ -1668,18 +1667,20 @@ public final class CiscoXrConfiguration extends VendorConfiguration {
               summary.isAdvertised()
                   ? Math.min(Prefix.MAX_PREFIX_LENGTH, prefixLength + 1)
                   : prefixLength;
-          summaryFilter.addLine(
+          summaryLines.add(
               new RouteFilterLine(
                   LineAction.DENY,
                   IpWildcard.create(prefix),
                   new SubRange(filterMinPrefixLength, Prefix.MAX_PREFIX_LENGTH)));
         }
         viAreaBuilder.addSummaries(ImmutableSortedMap.copyOf(area.getSummaries()));
-        summaryFilter.addLine(
+        summaryLines.add(
             new RouteFilterLine(
                 LineAction.PERMIT,
                 IpWildcard.create(Prefix.ZERO),
                 new SubRange(0, Prefix.MAX_PREFIX_LENGTH)));
+        c.getRouteFilterLists()
+            .put(summaryFilterName, new RouteFilterList(summaryFilterName, summaryLines.build()));
       }
 
       areas.put(areaNum, viAreaBuilder.build());
@@ -2446,9 +2447,7 @@ public final class CiscoXrConfiguration extends VendorConfiguration {
         .filter(keyring -> !keyring.getLocalInterfaceName().equals(UNSET_LOCAL_INTERFACE))
         .forEach(
             keyring ->
-                keyring.setLocalAddress(
-                    firstNonNull(
-                        ifaceNameToPrimaryIp.get(keyring.getLocalInterfaceName()), Ip.AUTO)));
+                keyring.setLocalAddress(ifaceNameToPrimaryIp.get(keyring.getLocalInterfaceName())));
 
     _isakmpProfiles.values().stream()
         .filter(
@@ -2456,8 +2455,7 @@ public final class CiscoXrConfiguration extends VendorConfiguration {
         .forEach(
             isakmpProfile ->
                 isakmpProfile.setLocalAddress(
-                    firstNonNull(
-                        ifaceNameToPrimaryIp.get(isakmpProfile.getLocalInterfaceName()), Ip.AUTO)));
+                    ifaceNameToPrimaryIp.get(isakmpProfile.getLocalInterfaceName())));
   }
 
   /** Resolves the addresses of the interfaces used in sourceInterfaceName of Tunnel interfaces */

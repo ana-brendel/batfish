@@ -87,7 +87,6 @@ import org.batfish.datamodel.PrefixTrieMultiMap;
 import org.batfish.datamodel.ReceivedFromIp;
 import org.batfish.datamodel.ReceivedFromSelf;
 import org.batfish.datamodel.ResolutionRestriction;
-import org.batfish.datamodel.Route;
 import org.batfish.datamodel.RoutingProtocol;
 import org.batfish.datamodel.bgp.AddressFamily;
 import org.batfish.datamodel.bgp.AddressFamily.Type;
@@ -169,6 +168,7 @@ final class BgpRoutingProcess implements RoutingProcess<BgpTopology, BgpRoute<?,
   private final @Nonnull PrefixTrieMultiMap<BgpAggregate> _aggregates;
 
   private final @Nonnull RoutingPolicies _policies;
+  private final @Nullable RoutingPolicy _tableMapPolicy;
   private final @Nonnull String _hostname;
 
   /** Name of our VRF */
@@ -382,6 +382,8 @@ final class BgpRoutingProcess implements RoutingProcess<BgpTopology, BgpRoute<?,
     _c = configuration;
     _hostname = configuration.getHostname();
     _policies = RoutingPolicies.from(configuration);
+    _tableMapPolicy =
+        Optional.ofNullable(process.getTableMapPolicy()).flatMap(_policies::get).orElse(null);
     _vrfName = vrfName;
     _mainRib = mainRib;
     _topology = topology;
@@ -705,13 +707,24 @@ final class BgpRoutingProcess implements RoutingProcess<BgpTopology, BgpRoute<?,
 
   @Override
   public void redistribute(RibDelta<AnnotatedRoute<AbstractRoute>> mainRibDelta) {
-    // A redistribution policy must be defined iff exporting from BGP RIB
-    assert !_exportFromBgpRib ^ _process.getRedistributionPolicy() != null;
+    boolean hasRedistPolicy = _process.getRedistributionPolicy() != null;
 
-    if (!_exportFromBgpRib) {
+    if (!_exportFromBgpRib && !hasRedistPolicy) {
       // Export from main RIB; no local routes in BGP RIB (Juniper-like redistribution)
       assert _mainRibDelta.isEmpty();
       _mainRibDelta = mainRibDelta;
+    } else if (!_exportFromBgpRib) {
+      // Juniper EVPN tenant VRF: redistribute into BGP RIB for getRoutesToLeak() / EVPN type-5
+      // origination, but also keep main RIB delta for normal Junos-style per-peer export.
+      assert _mainRibDelta.isEmpty();
+      _mainRibDelta = mainRibDelta;
+      RoutingPolicy redistributionPolicy =
+          _policies.get(_process.getRedistributionPolicy()).orElse(null);
+      if (redistributionPolicy != null) {
+        for (RouteAdvertisement<AnnotatedRoute<AbstractRoute>> a : mainRibDelta.getActions()) {
+          redistributeRouteToBgpRib(a, redistributionPolicy, REDISTRIBUTE);
+        }
+      }
     } else {
       // Place redistributed routes into our RIB
       RoutingPolicy redistributionPolicy =
@@ -945,7 +958,32 @@ final class BgpRoutingProcess implements RoutingProcess<BgpTopology, BgpRoute<?,
     RibDelta<Bgpv4Route> bgpv4RibDelta = _bgpv4DeltaBuilder.build();
     LOGGER.trace(
         "{}: Unstaged BGP routes, current bgpv4Delta: {}", _c.getHostname(), bgpv4RibDelta);
-    _toMainRib.from(bgpv4RibDelta);
+    if (_tableMapPolicy == null) {
+      _toMainRib.from(bgpv4RibDelta);
+    } else {
+      applyTableMap(bgpv4RibDelta);
+    }
+  }
+
+  /**
+   * Apply the table-map routing policy to filter BGP routes before installation into the main RIB.
+   * Routes denied by the policy are marked nonRouting so they remain in the BGP RIB (for
+   * advertisement to peers) but are not installed in the main RIB.
+   */
+  private void applyTableMap(RibDelta<Bgpv4Route> bgpv4RibDelta) {
+    assert _tableMapPolicy != null;
+    for (RouteAdvertisement<Bgpv4Route> adv : bgpv4RibDelta.getActions()) {
+      if (adv.isWithdrawn()) {
+        _toMainRib.from(adv);
+      } else {
+        Bgpv4Route route = adv.getRoute();
+        if (_tableMapPolicy.processReadOnly(route)) {
+          _toMainRib.from(adv);
+        } else {
+          _toMainRib.from(RouteAdvertisement.adding(route.toBuilder().setNonRouting(true).build()));
+        }
+      }
+    }
   }
 
   /** Pull v4Unicast routes from our neighbors' deltas, merge them into our own RIBs */
@@ -1908,7 +1946,7 @@ final class BgpRoutingProcess implements RoutingProcess<BgpTopology, BgpRoute<?,
         transformedOutgoingRouteBuilder,
         ourSessionProperties,
         v4Family,
-        Route.UNSET_ROUTE_NEXT_HOP_IP,
+        null,
         _pathIdGenerators,
         _routesToPathIds);
 
@@ -1952,7 +1990,7 @@ final class BgpRoutingProcess implements RoutingProcess<BgpTopology, BgpRoute<?,
               .setMetric(advert.getMed())
               .setNetwork(advert.getNetwork())
               .setNextHopIp(advert.getNextHopIp())
-              .setOriginatorIp(advert.getOriginatorIp())
+              .setOriginatorIp(firstNonNull(advert.getOriginatorIp(), advert.getSrcIp()))
               .setOriginMechanism(LEARNED)
               .setOriginType(advert.getOriginType())
               .setProtocol(targetProtocol)
@@ -1984,7 +2022,7 @@ final class BgpRoutingProcess implements RoutingProcess<BgpTopology, BgpRoute<?,
               .setMetric(advert.getMed())
               .setNetwork(advert.getNetwork())
               .setNextHopIp(advert.getNextHopIp())
-              .setOriginatorIp(advert.getOriginatorIp())
+              .setOriginatorIp(firstNonNull(advert.getOriginatorIp(), advert.getSrcIp()))
               // Don't know the origin mechanism on the sender, but for us it will be LEARNED
               .setOriginMechanism(LEARNED)
               .setOriginType(advert.getOriginType())
@@ -2352,12 +2390,19 @@ final class BgpRoutingProcess implements RoutingProcess<BgpTopology, BgpRoute<?,
 
   public void importCrossVrfEvpnRoutesToV4(
       Stream<RouteAdvertisement<EvpnType5Route>> routesToLeak,
-      EvpnToBgpv4VrfLeakConfig leakConfig) {
+      EvpnToBgpv4VrfLeakConfig leakConfig,
+      @Nullable RouteDistinguisher selfRd) {
     // TODO: Should type 3 routes leak?
     @Nullable
     RoutingPolicy policy =
         Optional.ofNullable(leakConfig.getImportPolicy()).flatMap(_policies::get).orElse(null);
-    routesToLeak.forEach(
+    Stream<RouteAdvertisement<EvpnType5Route>> filteredRoutes =
+        routesToLeak.filter(
+            ra -> {
+              // Import loop prevention heuristic: exclude route if originated from this VRF
+              return selfRd == null || !selfRd.equals(ra.getRoute().getRouteDistinguisher());
+            });
+    filteredRoutes.forEach(
         ra -> {
           EvpnType5Route route = ra.getRoute();
           LOGGER.trace("Node {}, VRF {}, Leaking EVPN route {}", _hostname, _vrfName, route);

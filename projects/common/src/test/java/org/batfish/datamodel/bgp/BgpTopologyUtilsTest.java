@@ -94,6 +94,48 @@ public class BgpTopologyUtilsTest {
     _node3BgpProcess.setInterfaceNeighbors(ImmutableSortedMap.of());
   }
 
+  /**
+   * A peer in a non-default VRF with sessionVrf="default" and local IP owned by the default VRF
+   * should pass sanity checks and appear in the topology.
+   */
+  @Test
+  public void testInitTopologySessionVrf() {
+    // Peer on node1 in VRF "myVrf" with local IP 1.1.1.1 (owned by default VRF).
+    // sessionVrf is set to "default", so sanity check should pass.
+    Ip ip1 = Ip.parse("1.1.1.1");
+    Ip ip2 = Ip.parse("2.2.2.2");
+
+    BgpActivePeerConfig peer1 =
+        BgpActivePeerConfig.builder()
+            .setLocalIp(ip1)
+            .setLocalAs(1L)
+            .setPeerAddress(ip2)
+            .setRemoteAs(2L)
+            .setSessionVrf(DEFAULT_VRF_NAME)
+            .setIpv4UnicastAddressFamily(
+                Ipv4UnicastAddressFamily.builder()
+                    .setAddressFamilyCapabilities(AddressFamilyCapabilities.builder().build())
+                    .build())
+            .build();
+
+    // Add peer to node1's default VRF BGP process (for simplicity; the key point is that
+    // the ipOwners map has ip1 in DEFAULT_VRF_NAME, not "myVrf")
+    _node1BgpProcess.setNeighbors(ImmutableSortedMap.of(ip2, peer1));
+
+    // ip1 is in the default VRF, not in "myVrf"
+    Map<Ip, Map<String, Set<String>>> ipOwners =
+        ImmutableMap.of(
+            ip1,
+            ImmutableMap.of(NODE1, ImmutableSet.of(DEFAULT_VRF_NAME)),
+            ip2,
+            ImmutableMap.of(NODE2, ImmutableSet.of(DEFAULT_VRF_NAME)));
+
+    // With keepInvalid=false, peer should still appear (sessionVrf makes it valid)
+    ValueGraph<BgpPeerConfigId, BgpSessionProperties> bgpTopology =
+        initBgpTopology(_configs, ipOwners, false, null).getGraph();
+    assertThat(bgpTopology.nodes(), hasSize(1));
+  }
+
   @Test
   public void testInitTopologyRemotePrefixNotMatchingLocalIp() {
     // Peer 1 on node1 with IP 1.1.1.1 is active, set up to peer with 2.2.2.2
@@ -394,18 +436,22 @@ public class BgpTopologyUtilsTest {
             initiatorLocalAs,
             initiatorConfed,
             initiatorRemoteAsns,
+            null,
             listenerLocalAs,
             listenerConfed,
-            listenerRemoteAsns),
+            listenerRemoteAsns,
+            null),
         result != null ? equalTo(result) : nullValue());
     assertThat(
         computeAsPair(
             listenerLocalAs,
             listenerConfed,
             listenerRemoteAsns,
+            null,
             initiatorLocalAs,
             initiatorConfed,
-            initiatorRemoteAsns),
+            initiatorRemoteAsns,
+            null),
         result != null ? equalTo(result.reverse()) : nullValue());
   }
 
@@ -684,6 +730,60 @@ public class BgpTopologyUtilsTest {
         null,
         ALL_AS_NUMBERS,
         new AsPair(100, 2000, ConfedSessionType.ACROSS_CONFED_BORDER));
+  }
+
+  /**
+   * Regression test for https://github.com/batfish/batfish/issues/9877.
+   *
+   * <p>When an external peer's AS matches a confederation member-AS, the confederation router would
+   * treat it as a confed-eBGP peer and send its member-AS (not confed ID) in the OPEN message. The
+   * external peer expects the confed ID, causing an AS mismatch. No session should form.
+   */
+  @Test
+  public void testComputeAsPair_confedMemberCollisionWithExternalPeer() {
+    LongSpace confedMembers = LongSpace.builder().including(65001L).including(65002L).build();
+
+    // Initiator is confed peer (R2: localAs=65001, confed=65000, members={65001,65002})
+    // Listener is external (R1: localAs=65002, no confed)
+    // R2 sees R1's AS (65002) in its confed members → treats as confed-eBGP → sends member-AS
+    // R1 expects confed ID (65000) → AS mismatch → no session
+    assertThat(
+        computeAsPair(
+            65001L,
+            65000L,
+            LongSpace.of(65002L),
+            confedMembers,
+            65002L,
+            null,
+            LongSpace.of(65000L),
+            null),
+        nullValue());
+
+    // Reverse direction: R1 as initiator, R2 as listener — same result
+    assertThat(
+        computeAsPair(
+            65002L,
+            null,
+            LongSpace.of(65000L),
+            null,
+            65001L,
+            65000L,
+            LongSpace.of(65002L),
+            confedMembers),
+        nullValue());
+
+    // Sanity check: a non-member external peer (AS 2000) should still work across confed border
+    assertThat(
+        computeAsPair(
+            65001L,
+            65000L,
+            LongSpace.of(2000L),
+            confedMembers,
+            2000L,
+            null,
+            LongSpace.of(65000L),
+            null),
+        equalTo(new AsPair(65000, 2000, ConfedSessionType.ACROSS_CONFED_BORDER)));
   }
 
   @Test

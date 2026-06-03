@@ -25,27 +25,30 @@ import static org.batfish.datamodel.matchers.ConfigurationMatchers.hasInterface;
 import static org.batfish.datamodel.matchers.ConfigurationMatchers.hasIpAccessList;
 import static org.batfish.datamodel.matchers.ConfigurationMatchers.hasIpSpace;
 import static org.batfish.datamodel.matchers.ConfigurationMatchers.hasVrf;
-import static org.batfish.datamodel.matchers.DataModelMatchers.hasBandwidth;
-import static org.batfish.datamodel.matchers.DataModelMatchers.hasDefinedStructure;
-import static org.batfish.datamodel.matchers.DataModelMatchers.hasDefinedStructureWithDefinitionLines;
-import static org.batfish.datamodel.matchers.DataModelMatchers.hasMemberInterfaces;
-import static org.batfish.datamodel.matchers.DataModelMatchers.hasNumReferrers;
-import static org.batfish.datamodel.matchers.DataModelMatchers.hasOutgoingOriginalFlowFilter;
-import static org.batfish.datamodel.matchers.DataModelMatchers.hasReferencedStructure;
-import static org.batfish.datamodel.matchers.DataModelMatchers.hasUndefinedReference;
-import static org.batfish.datamodel.matchers.DataModelMatchers.hasZone;
+import static org.batfish.datamodel.matchers.ConfigurationMatchers.hasZone;
+import static org.batfish.datamodel.matchers.ConvertConfigurationAnswerElementMatchers.hasDefinedStructure;
+import static org.batfish.datamodel.matchers.ConvertConfigurationAnswerElementMatchers.hasDefinedStructureWithDefinitionLines;
+import static org.batfish.datamodel.matchers.ConvertConfigurationAnswerElementMatchers.hasNumReferrers;
+import static org.batfish.datamodel.matchers.ConvertConfigurationAnswerElementMatchers.hasReferencedStructure;
+import static org.batfish.datamodel.matchers.ConvertConfigurationAnswerElementMatchers.hasUndefinedReference;
 import static org.batfish.datamodel.matchers.InterfaceMatchers.hasAddress;
 import static org.batfish.datamodel.matchers.InterfaceMatchers.hasAddressMetadata;
 import static org.batfish.datamodel.matchers.InterfaceMatchers.hasAllAddresses;
+import static org.batfish.datamodel.matchers.InterfaceMatchers.hasAllowedVlans;
+import static org.batfish.datamodel.matchers.InterfaceMatchers.hasBandwidth;
 import static org.batfish.datamodel.matchers.InterfaceMatchers.hasDependencies;
 import static org.batfish.datamodel.matchers.InterfaceMatchers.hasDescription;
 import static org.batfish.datamodel.matchers.InterfaceMatchers.hasEncapsulationVlan;
 import static org.batfish.datamodel.matchers.InterfaceMatchers.hasInterfaceType;
 import static org.batfish.datamodel.matchers.InterfaceMatchers.hasMtu;
+import static org.batfish.datamodel.matchers.InterfaceMatchers.hasOutgoingOriginalFlowFilter;
 import static org.batfish.datamodel.matchers.InterfaceMatchers.hasSpeed;
+import static org.batfish.datamodel.matchers.InterfaceMatchers.hasSwitchPortMode;
+import static org.batfish.datamodel.matchers.InterfaceMatchers.hasVlan;
 import static org.batfish.datamodel.matchers.InterfaceMatchers.hasZoneName;
 import static org.batfish.datamodel.matchers.InterfaceMatchers.isActive;
 import static org.batfish.datamodel.matchers.InterfaceMatchers.isLineUp;
+import static org.batfish.datamodel.matchers.InterfaceMatchers.isSwitchport;
 import static org.batfish.datamodel.matchers.IpAccessListMatchers.accepts;
 import static org.batfish.datamodel.matchers.IpAccessListMatchers.rejects;
 import static org.batfish.datamodel.matchers.MapMatchers.hasKeys;
@@ -60,6 +63,7 @@ import static org.batfish.datamodel.matchers.TraceTreeMatchers.isTraceTree;
 import static org.batfish.datamodel.matchers.VrfMatchers.hasBgpProcess;
 import static org.batfish.datamodel.matchers.VrfMatchers.hasName;
 import static org.batfish.datamodel.matchers.VrfMatchers.hasStaticRoutes;
+import static org.batfish.datamodel.matchers.ZoneMatchers.hasMemberInterfaces;
 import static org.batfish.grammar.VendorConfigurationFormatDetector.BATFISH_FLATTENED_PALO_ALTO_HEADER;
 import static org.batfish.main.BatfishTestUtils.DUMMY_SNAPSHOT_1;
 import static org.batfish.main.BatfishTestUtils.configureBatfishTestSettings;
@@ -82,11 +86,14 @@ import static org.batfish.representation.palo_alto.PaloAltoStructureType.SERVICE
 import static org.batfish.representation.palo_alto.PaloAltoStructureType.SHARED_GATEWAY;
 import static org.batfish.representation.palo_alto.PaloAltoStructureType.TEMPLATE;
 import static org.batfish.representation.palo_alto.PaloAltoStructureType.ZONE;
+import static org.batfish.representation.palo_alto.PaloAltoStructureUsage.BGP_PEER_ADDRESS;
+import static org.batfish.representation.palo_alto.PaloAltoStructureUsage.BGP_PEER_LOCAL_ADDRESS_IP;
 import static org.batfish.representation.palo_alto.PaloAltoStructureUsage.IMPORT_INTERFACE;
 import static org.batfish.representation.palo_alto.PaloAltoStructureUsage.LAYER3_INTERFACE_ADDRESS;
 import static org.batfish.representation.palo_alto.PaloAltoStructureUsage.SECURITY_RULE_APPLICATION;
 import static org.batfish.representation.palo_alto.PaloAltoStructureUsage.SECURITY_RULE_CATEGORY;
 import static org.batfish.representation.palo_alto.PaloAltoStructureUsage.STATIC_ROUTE_INTERFACE;
+import static org.batfish.representation.palo_alto.PaloAltoStructureUsage.STATIC_ROUTE_NEXTHOP_IP;
 import static org.batfish.representation.palo_alto.PaloAltoStructureUsage.TEMPLATE_STACK_TEMPLATES;
 import static org.batfish.representation.palo_alto.PaloAltoStructureUsage.VIRTUAL_ROUTER_INTERFACE;
 import static org.batfish.representation.palo_alto.PaloAltoTraceElementCreators.emptyZoneRejectTraceElement;
@@ -168,6 +175,7 @@ import org.batfish.common.bdd.IpSpaceToBDD;
 import org.batfish.common.matchers.ParseWarningMatchers;
 import org.batfish.common.plugin.IBatfish;
 import org.batfish.common.runtime.SnapshotRuntimeData;
+import org.batfish.common.topology.L3Adjacencies;
 import org.batfish.config.Settings;
 import org.batfish.datamodel.AclIpSpace;
 import org.batfish.datamodel.AclLine;
@@ -183,6 +191,7 @@ import org.batfish.datamodel.ConnectedRoute;
 import org.batfish.datamodel.ConnectedRouteMetadata;
 import org.batfish.datamodel.DeviceModel;
 import org.batfish.datamodel.DiffieHellmanGroup;
+import org.batfish.datamodel.Edge;
 import org.batfish.datamodel.EmptyIpSpace;
 import org.batfish.datamodel.EncryptionAlgorithm;
 import org.batfish.datamodel.ExprAclLine;
@@ -205,11 +214,14 @@ import org.batfish.datamodel.LongSpace;
 import org.batfish.datamodel.OriginType;
 import org.batfish.datamodel.Prefix;
 import org.batfish.datamodel.RoutingProtocol;
+import org.batfish.datamodel.SwitchportMode;
+import org.batfish.datamodel.Topology;
 import org.batfish.datamodel.TraceElement;
 import org.batfish.datamodel.Vrf;
 import org.batfish.datamodel.acl.AclTracer;
 import org.batfish.datamodel.answers.ConvertConfigurationAnswerElement;
 import org.batfish.datamodel.collections.InsertOrderedMap;
+import org.batfish.datamodel.collections.NodeInterfacePair;
 import org.batfish.datamodel.matchers.InterfaceMatchers;
 import org.batfish.datamodel.matchers.NssaSettingsMatchers;
 import org.batfish.datamodel.matchers.OspfAreaMatchers;
@@ -915,8 +927,12 @@ public final class PaloAltoGrammarTest {
     assertThat(peer.getEnable(), equalTo(true));
     assertThat(peer.getEnableSenderSideLoopDetection(), equalTo(false));
     assertThat(peer.getLocalInterface(), equalTo("ethernet1/1"));
-    assertThat(peer.getLocalAddress(), equalTo(Ip.parse("1.2.3.6")));
-    assertThat(peer.getPeerAddress(), equalTo(Ip.parse("5.4.3.2")));
+    assertThat(
+        peer.getLocalAddress(),
+        equalTo(new InterfaceAddress(InterfaceAddress.Type.IP_PREFIX, "1.2.3.6/24")));
+    assertThat(
+        peer.getPeerAddress(),
+        equalTo(new InterfaceAddress(InterfaceAddress.Type.IP_ADDRESS, "5.4.3.2")));
     assertThat(peer.getPeerAs(), equalTo(54321L));
     assertThat(peer.getReflectorClient(), equalTo(ReflectorClient.NON_CLIENT));
 
@@ -953,6 +969,8 @@ public final class PaloAltoGrammarTest {
     String exportPolicyName = peer.getIpv4UnicastAddressFamily().getExportPolicy();
     assertThat(exportPolicyName, not(nullValue()));
     assertThat(c.getRoutingPolicies().get(exportPolicyName), not(nullValue()));
+    // No multihop configured: peer should be single-hop
+    assertFalse(peer.getEbgpMultihop());
   }
 
   @Test
@@ -4249,7 +4267,7 @@ public final class PaloAltoGrammarTest {
             .getPeerGroups()
             .get("pg1")
             .getPeers()
-            .get("peer1")
+            .get("peer-disabled")
             .getMultihop(),
         equalTo(0));
   }
@@ -4258,13 +4276,14 @@ public final class PaloAltoGrammarTest {
   public void testBgpMultihopConversion() {
     String hostname = "bgp-multihop";
     Configuration c = parseConfig(hostname);
-    assertTrue(
-        c.getVrfs()
-            .get("vr1")
-            .getBgpProcess()
-            .getActiveNeighbors()
-            .get(Ip.parse("120.120.120.120"))
-            .getEbgpMultihop());
+    Map<Ip, BgpActivePeerConfig> neighbors =
+        c.getVrfs().get("vr1").getBgpProcess().getActiveNeighbors();
+    // multihop 0 (disabled) -> single-hop
+    assertFalse(neighbors.get(Ip.parse("10.0.0.1")).getEbgpMultihop());
+    // multihop 1 (TTL 1) -> also single-hop; multihop requires TTL >= 2
+    assertFalse(neighbors.get(Ip.parse("10.0.0.2")).getEbgpMultihop());
+    // multihop 5 -> true multi-hop
+    assertTrue(neighbors.get(Ip.parse("10.0.0.3")).getEbgpMultihop());
   }
 
   @Test
@@ -4741,6 +4760,88 @@ public final class PaloAltoGrammarTest {
   }
 
   @Test
+  public void testTunnelUnitIp() {
+    String hostname = "paloalto_vlan_tunnel_units";
+    Configuration c = parseConfig(hostname);
+    // tunnel.3 has ip 169.254.0.1/30 and mtu 1427 configured; confirm both appear in the VI model.
+    assertThat(
+        c,
+        hasInterface(
+            "tunnel.3",
+            hasAllAddresses(contains(ConcreteInterfaceAddress.parse("169.254.0.1/30")))));
+    assertThat(c, hasInterface("tunnel.3", hasMtu(1427)));
+  }
+
+  @Test
+  public void testVlanUnitIp() {
+    String hostname = "paloalto_vlan_tunnel_units";
+    Configuration c = parseConfig(hostname);
+    // vlan.1 has ip 10.0.0.1/24 and mtu 1500 configured; confirm both appear in the VI model.
+    // The numeric suffix in vlan.1 should also surface as the SVI VLAN ID.
+    assertThat(
+        c,
+        hasInterface(
+            "vlan.1", hasAllAddresses(contains(ConcreteInterfaceAddress.parse("10.0.0.1/24")))));
+    assertThat(c, hasInterface("vlan.1", hasMtu(1500)));
+    assertThat(c, hasInterface("vlan.1", hasVlan(1)));
+  }
+
+  @Test
+  public void testLayer2AeBridgesToVlanUnit() {
+    // ae1 is a layer2 trunk carrying VLAN 10 and 20 via tagged sub-interfaces
+    // ae1.10 and ae1.20. vlan.10 and vlan.20 are SVIs for the matching VLANs.
+    // The parent ae must be modeled as a TRUNK with allowedVlans = {10, 20} so
+    // Batfish's L2 topology can bridge a tagged frame on ae1 to its SVI for L3
+    // processing.
+    String hostname = "paloalto_layer2_ae_svi";
+    Configuration c = parseConfig(hostname);
+    assertThat(c, hasInterface("ae1", isSwitchport()));
+    assertThat(c, hasInterface("ae1", hasSwitchPortMode(SwitchportMode.TRUNK)));
+    assertThat(
+        c,
+        hasInterface(
+            "ae1",
+            hasAllowedVlans(IntegerSpace.unionOf(IntegerSpace.of(10), IntegerSpace.of(20)))));
+    assertThat(c, hasInterface("vlan.10", hasVlan(10)));
+    assertThat(c, hasInterface("vlan.20", hasVlan(20)));
+  }
+
+  /**
+   * End-to-end check that a packet on a PAN-OS layer2 ae trunk bridges to its matching {@code
+   * vlan.X} SVI for L3 processing. Two PA devices: {@code pa_fw} has a layer2 ae1 carrying VLAN 10
+   * (sub-interface ae1.10 tag 10) plus an SVI vlan.10 (10.0.10.1/24); {@code r1} has an aggregate
+   * ae1 with a layer3 sub-interface ae1.10 tag 10 (10.0.10.2/24). The L1 link is ethernet1/1 ↔
+   * ethernet1/1. We expect pa_fw.vlan.10 and r1.ae1.10 to land in the same broadcast domain and to
+   * form a layer-3 edge.
+   */
+  @Test
+  public void testLayer2AeBridgesToVlanUnitL3() throws IOException {
+    String snapshotName = "layer2_ae_trunk";
+    String pa = "pa_fw";
+    String r1 = "r1";
+    String resourcePrefix = SNAPSHOTS_PREFIX + snapshotName;
+    Batfish batfish =
+        BatfishTestUtils.getBatfishFromTestrigText(
+            TestrigText.builder()
+                .setLayer1TopologyPrefix(resourcePrefix)
+                .setConfigurationFiles(resourcePrefix, ImmutableSet.of(pa, r1))
+                .build(),
+            _folder);
+    batfish.loadConfigurations(batfish.getSnapshot());
+
+    L3Adjacencies adjacencies =
+        batfish.getTopologyProvider().getInitialL3Adjacencies(batfish.getSnapshot());
+    NodeInterfacePair svi = NodeInterfacePair.of(pa, "vlan.10");
+    NodeInterfacePair peer = NodeInterfacePair.of(r1, "ae1.10");
+    assertTrue(adjacencies.inSameBroadcastDomain(svi, peer));
+
+    Topology layer3Topology =
+        batfish.getTopologyProvider().getInitialLayer3Topology(batfish.getSnapshot());
+    Edge edge = Edge.of(pa, "vlan.10", r1, "ae1.10");
+    assertThat(layer3Topology.getEdges(), containsInAnyOrder(edge, edge.reverse()));
+  }
+
+  @Test
   public void testPanoramaRulebaseCopy() {
     String panoramaHostname = "panorama-rulebase-copy";
     PaloAltoConfiguration c = parsePaloAltoConfig(panoramaHostname);
@@ -4783,5 +4884,112 @@ public final class PaloAltoGrammarTest {
     assertThat(ccae, hasNumReferrers(filename, ADDRESS_OBJECT, addrDstName, 3));
     assertThat(ccae, hasNumReferrers(filename, SERVICE, serviceName, 1));
     assertThat(ccae, hasNumReferrers(filename, APPLICATION_GROUP, appGroupName, 1));
+  }
+
+  @Test
+  public void testAddressObjectNexthop() throws IOException {
+    String hostname = "address-object-nexthop";
+    Batfish batfish = getBatfishForConfigurationNames(hostname);
+    Configuration c = batfish.loadConfigurations(batfish.getSnapshot()).get(hostname);
+
+    // Static route with address object as nexthop should resolve to the IP in the object
+    assertThat(
+        c,
+        hasVrf(
+            "BGP",
+            hasStaticRoutes(
+                hasItem(allOf(hasPrefix(Prefix.ZERO), hasNextHopIp(Ip.parse("10.10.10.1")))))));
+
+    // Static route with literal IP should still work
+    assertThat(
+        c,
+        hasVrf(
+            "BGP",
+            hasStaticRoutes(
+                hasItem(
+                    allOf(
+                        hasPrefix(Prefix.strict("192.168.1.0/24")),
+                        hasNextHopIp(Ip.parse("192.168.2.1")))))));
+
+    // Static route with address object defined AFTER the route - order shouldn't matter
+    assertThat(
+        c,
+        hasVrf(
+            "BGP",
+            hasStaticRoutes(
+                hasItem(
+                    allOf(
+                        hasPrefix(Prefix.strict("172.16.0.0/16")),
+                        hasNextHopIp(Ip.parse("10.20.20.1")))))));
+
+    // BGP peer with address object as peer-address should resolve to the IP in the object
+    assertThat(c, hasVrf("BGP", hasBgpProcess(any(BgpProcess.class))));
+    BgpProcess proc = c.getVrfs().get("BGP").getBgpProcess();
+    assertThat(
+        proc.getActiveNeighbors().keySet(),
+        containsInAnyOrder(Ip.parse("5.4.3.2"), Ip.parse("6.5.4.3")));
+    BgpActivePeerConfig bgpPeer = proc.getActiveNeighbors().get(Ip.parse("5.4.3.2"));
+    assertThat(bgpPeer.getDescription(), equalTo("PEER"));
+
+    // BGP peer with an interface-subnet-masked (/29) address object as local-address ip should
+    // resolve to the object's host IP (10.0.0.1), ignoring the mask.
+    BgpActivePeerConfig bgpPeer2 = proc.getActiveNeighbors().get(Ip.parse("6.5.4.3"));
+    assertThat(bgpPeer2.getDescription(), equalTo("PEER2"));
+    assertThat(bgpPeer2.getLocalIp(), equalTo(Ip.parse("10.0.0.1")));
+
+    // Verify structure references
+    ConvertConfigurationAnswerElement ccae =
+        batfish.loadConvertConfigurationAnswerElementOrReparse(batfish.getSnapshot());
+    String filename = "configs/" + hostname;
+
+    // NEXTHOP-OBJ should be referenced by static route
+    assertThat(
+        ccae,
+        hasReferencedStructure(
+            filename,
+            PaloAltoStructureType.ADDRESS_OBJECT,
+            computeObjectName(DEFAULT_VSYS_NAME, "NEXTHOP-OBJ"),
+            STATIC_ROUTE_NEXTHOP_IP));
+
+    // PEER-OBJ should be referenced by BGP peer
+    assertThat(
+        ccae,
+        hasReferencedStructure(
+            filename,
+            PaloAltoStructureType.ADDRESS_OBJECT,
+            computeObjectName(DEFAULT_VSYS_NAME, "PEER-OBJ"),
+            BGP_PEER_ADDRESS));
+
+    // LOCAL-MASKED should be referenced by BGP peer local-address ip
+    assertThat(
+        ccae,
+        hasReferencedStructure(
+            filename,
+            PaloAltoStructureType.ADDRESS_OBJECT,
+            computeObjectName(DEFAULT_VSYS_NAME, "LOCAL-MASKED"),
+            BGP_PEER_LOCAL_ADDRESS_IP));
+  }
+
+  @Test
+  public void testAddressObjectNexthopWarnings() throws IOException {
+    String hostname = "address-object-nexthop-warnings";
+    Batfish batfish = getBatfishForConfigurationNames(hostname);
+    Configuration c = batfish.loadConfigurations(batfish.getSnapshot()).get(hostname);
+
+    // Routes with invalid nexthops should not be converted
+    assertThat(c, hasVrf("VR", hasStaticRoutes(empty())));
+
+    // Verify warnings are generated for unresolved references
+    Warnings warnings =
+        batfish
+            .loadConvertConfigurationAnswerElementOrReparse(batfish.getSnapshot())
+            .getWarnings()
+            .get(hostname);
+    assertThat(
+        warnings,
+        hasRedFlag(hasText(containsString("Could not resolve address reference: UNDEFINED-OBJ"))));
+    assertThat(
+        warnings,
+        hasRedFlag(hasText(containsString("NEXTHOP-NETMASK' is not a valid host address"))));
   }
 }

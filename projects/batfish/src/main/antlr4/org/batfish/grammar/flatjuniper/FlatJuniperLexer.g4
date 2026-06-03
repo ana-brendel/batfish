@@ -128,6 +128,7 @@ ADMIN_GROUP: 'admin-group' -> pushMode(M_AdminGroup);
 
 ADMIN_GROUPS: 'admin-groups' -> pushMode(M_Name);
 
+ADVERTISE: 'advertise';
 ADVERTISE_EXTERNAL: 'advertise-external';
 ADVERTISE_FROM_MAIN_VPN_TABLES: 'advertise-from-main-vpn-tables';
 ADVERTISE_HIGH_METRICS: 'advertise-high-metrics';
@@ -281,7 +282,7 @@ AS_PATH_PREPEND
    'as-path-prepend' -> pushMode ( M_AsPathPrepend )
 ;
 
-ASCII_TEXT: 'ascii-text';
+ASCII_TEXT: 'ascii-text' -> pushMode(M_SecretString);
 
 ASDOT_NOTATION: 'asdot-notation';
 
@@ -469,6 +470,7 @@ CONNECTIONS_LIMIT: 'connections-limit';
 CONNECTION_MODE: 'connection-mode';
 
 CONNECTIVITY_FAULT_MANAGEMENT: 'connectivity-fault-management';
+CONSISTENT_HASH: 'consistent-hash';
 CONSOLE: 'console';
 
 CONTACT: 'contact';
@@ -571,6 +573,8 @@ DESTINATION_IP: 'destination-ip';
 
 DESTINATION_IP_BASED: 'destination-ip-based';
 
+DESTINATION_IP_ONLY: 'destination-ip-only';
+
 DESTINATION_NAT: 'destination-nat';
 
 DESTINATION_NETWORK_PROHIBITED: 'destination-network-prohibited';
@@ -599,6 +603,8 @@ DHCP_RELAY: 'dhcp-relay';
 DHCP_SECURITY: 'dhcp-security';
 
 DIRECT: 'direct';
+
+DIRECT_NEXTHOP: 'direct-nexthop';
 
 DISABLE: 'disable';
 
@@ -667,6 +673,8 @@ ECE: 'ece';
 ECHO_REPLY: 'echo-reply';
 
 ECHO_REQUEST: 'echo-request';
+
+EDGE: 'edge';
 
 EGP: 'egp';
 
@@ -853,6 +861,8 @@ G: 'g';
 
 GATEWAY: 'gateway' -> pushMode(M_Name);
 
+GATEWAY_ADDRESS: 'gateway-address';
+
 GENERATE: 'generate';
 
 GIGETHER_OPTIONS: 'gigether-options';
@@ -908,7 +918,7 @@ HELLO_INTERVAL: 'hello-interval';
 HELLO_PADDING: 'hello-padding';
 
 HELPERS: 'helpers';
-HEXADECIMAL: 'hexadecimal';
+HEXADECIMAL: 'hexadecimal' -> pushMode(M_SecretString);
 
 HIGH: 'high';
 
@@ -918,7 +928,8 @@ HOME_ADDRESS_OPTION: 'home-address-option';
 
 HOP_BY_HOP_HEADER: 'hop-by-hop-header';
 
-HOP_LIMIT: 'hop-limit';
+HOP_LIMIT: 'hop-limit' -> pushMode(M_SubRange);
+HOP_LIMIT_EXCEPT: 'hop-limit-except' -> pushMode(M_SubRange);
 
 HOST_OUTBOUND_TRAFFIC: 'host-outbound-traffic';
 
@@ -1168,6 +1179,8 @@ INTERPOLATE: 'interpolate';
 INTERVAL: 'interval';
 INVERT_MATCH: 'invert-match';
 
+INVALID: 'invalid';
+
 IP: 'ip';
 
 IP_DESTINATION_ADDRESS: 'ip-destination-address';
@@ -1177,6 +1190,8 @@ IP_HEADER_BAD: 'ip-header-bad';
 IP_IN_UDP: 'ip-in-udp';
 
 IP_OPTIONS: 'ip-options';
+
+IP_PREFIX_ROUTES: 'ip-prefix-routes';
 
 IP_PROTOCOL: 'ip-protocol';
 
@@ -2029,13 +2044,9 @@ NNTP: 'nntp';
 NTALK: 'ntalk';
 
 NO_ACTIVE_BACKBONE: 'no-active-backbone';
-
 NO_ADJACENCY_DOWN_NOTIFICATION: 'no-adjacency-down-notification';
-
 NO_ADVERTISE: 'no-advertise';
-
 NO_ANTI_REPLAY: 'no-anti-replay';
-
 NO_ARP: 'no-arp';
 NO_AUTO_NEGOTIATION: 'no-auto-negotiation';
 NO_CHALLENGE_RESPONSE: 'no-challenge-response';
@@ -2049,50 +2060,29 @@ NO_GATEWAY_COMMUNITY: 'no-gateway-community';
 NO_INSTALL: 'no-install';
 NO_IPV4_ROUTING: 'no-ipv4-routing';
 NO_NAT_TRAVERSAL: 'no-nat-traversal';
-
-
 NO_NEIGHBOR_DOWN_NOTIFICATION: 'no-neighbor-down-notification';
 NO_NEIGHBOR_LEARN: 'no-neighbor-learn';
-
 NO_NEXT_HEADER: 'no-next-header';
-
 NO_NEXTHOP_CHANGE: 'no-nexthop-change';
-
 NO_PASSWORD_AUTHENTICATION: 'no-password-authentication';
-
 NO_PASSWORDS: 'no-passwords';
-
 NO_PEER_LOOP_CHECK: 'no-peer-loop-check';
-
 NO_PING_RECORD_ROUTE: 'no-ping-record-route';
-
 NO_PING_TIME_STAMP: 'no-ping-time-stamp';
-
 NO_PREEMPT: 'no-preempt';
-
 NO_PREPEND_GLOBAL_AS: 'no-prepend-global-as';
-
 NO_PUBLIC_KEYS: 'no-public-keys';
-
 NO_READVERTISE: 'no-readvertise';
-
 NO_REDIRECTS: 'no-redirects';
-
 NO_REDIRECTS_IPV6: 'no-redirects-ipv6';
-
 NO_RESOLVE: 'no-resolve';
-
 NO_RETAIN: 'no-retain';
-
 NO_RFC_1583: 'no-rfc-1583';
+NO_ROOT_PORT: 'no-root-port';
 NO_SELF_PING: 'no-self-ping';
-
 NO_SUMMARIES: 'no-summaries';
-
 NO_TCP_FORWARDING: 'no-tcp-forwarding';
-
 NO_TRANSLATION: 'no-translation';
-
 NO_TRAPS: 'no-traps';
 
 NODE_DEVICE: 'node-device' -> pushMode(M_FabricDevice);
@@ -2176,7 +2166,9 @@ PAYLOAD_PROTOCOL: 'payload-protocol';
 PEER_ADDRESS: 'peer-address';
 PEER_AS: 'peer-as' -> pushMode(M_BgpAsn);
 PEER_UNIT: 'peer-unit';
+PER_FLOW: 'per-flow';
 PER_PACKET: 'per-packet';
+PER_PREFIX: 'per-prefix';
 PER_UNIT_SCHEDULER: 'per-unit-scheduler';
 PERCENT: 'percent';
 PERFECT_FORWARD_SECRECY: 'perfect-forward-secrecy';
@@ -2332,6 +2324,8 @@ PRIVATE: 'private';
 
 PROBE_IDLE_TUNNEL: 'probe-idle-tunnel';
 PROCESSES: 'processes';
+PROFILE1: 'profile1';
+PROFILE2: 'profile2';
 
 PROPOSAL: 'proposal' -> pushMode(M_Name);
 
@@ -2755,6 +2749,7 @@ SOURCE_HOST_ISOLATED: 'source-host-isolated';
 SOURCE_IDENTITY: 'source-identity' -> pushMode(M_SourceIdentity);
 SOURCE_INTERFACE: 'source-interface' -> pushMode(M_Interface);
 SOURCE_IP_BASED: 'source-ip-based';
+SOURCE_IP_ONLY: 'source-ip-only';
 SOURCE_MAC_ADDRESS: 'source-mac-address' -> pushMode(M_MacAddressAndLength);
 SOURCE_NAT: 'source-nat';
 SOURCE_PORT: 'source-port' -> pushMode(M_Port);
@@ -2784,6 +2779,8 @@ SRLG: 'srlg' -> pushMode(M_Name);
 SRLG_COST: 'srlg-cost';
 
 SRLG_VALUE: 'srlg-value';
+
+SRV6: 'srv6';
 
 SSH: 'ssh';
 
@@ -2843,6 +2840,8 @@ SWAP_SWAP: 'swap-swap';
 SWITCH_OPTIONS: 'switch-options';
 
 SWITCHOVER_ON_ROUTING_CRASH: 'switchover-on-routing-crash';
+
+SYMMETRIC_CONSISTENT_HASH: 'symmetric-consistent-hash';
 
 SYN_ACK_ACK_PROXY: 'syn-ack-ack-proxy';
 
@@ -2980,6 +2979,8 @@ UNICAST: 'unicast';
 
 UNIT: 'unit';
 
+UNKNOWN: 'unknown';
+
 UNKNOWN_PROTOCOL: 'unknown-protocol';
 
 UNREACHABLE: 'unreachable';
@@ -3004,7 +3005,11 @@ UUID: 'uuid';
 
 V1_ONLY: 'v1-only';
 V2_ONLY: 'v2-only';
+VALID: 'valid';
+
 VALIDATION: 'validation';
+
+VALIDATION_DATABASE: 'validation-database';
 
 VERSION
 :
@@ -5004,6 +5009,7 @@ M_SubRange_DASH: '-' -> type(DASH), mode(M_SubRangeDash);
 M_SubRange_OTHER: F_Alpha F_NonWhitespaceChar* { less(); } -> popMode;
 
 mode M_SubRangeDash;
+M_SubRangeDash_WS: F_WhitespaceChar+ -> skip;
 M_SubRangeDash_NEWLINE: F_Newline -> type(NEWLINE), popMode;
 M_SubRangeDash_UINT8: F_Uint8 -> type(UINT8), popMode;
 M_SubRangeDash_UINT16: F_Uint16 -> type(UINT16), popMode;

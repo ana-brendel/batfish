@@ -41,7 +41,9 @@ import static org.batfish.representation.palo_alto.PaloAltoStructureUsage.APPLIC
 import static org.batfish.representation.palo_alto.PaloAltoStructureUsage.APPLICATION_OVERRIDE_RULE_SELF_REF;
 import static org.batfish.representation.palo_alto.PaloAltoStructureUsage.APPLICATION_OVERRIDE_RULE_SOURCE;
 import static org.batfish.representation.palo_alto.PaloAltoStructureUsage.APPLICATION_OVERRIDE_RULE_TO_ZONE;
+import static org.batfish.representation.palo_alto.PaloAltoStructureUsage.BGP_PEER_ADDRESS;
 import static org.batfish.representation.palo_alto.PaloAltoStructureUsage.BGP_PEER_LOCAL_ADDRESS_INTERFACE;
+import static org.batfish.representation.palo_alto.PaloAltoStructureUsage.BGP_PEER_LOCAL_ADDRESS_IP;
 import static org.batfish.representation.palo_alto.PaloAltoStructureUsage.ETHERNET_AGGREGATE_GROUP;
 import static org.batfish.representation.palo_alto.PaloAltoStructureUsage.IMPORT_INTERFACE;
 import static org.batfish.representation.palo_alto.PaloAltoStructureUsage.LAYER2_INTERFACE_ZONE;
@@ -67,12 +69,15 @@ import static org.batfish.representation.palo_alto.PaloAltoStructureUsage.SECURI
 import static org.batfish.representation.palo_alto.PaloAltoStructureUsage.SECURITY_RULE_TO_ZONE;
 import static org.batfish.representation.palo_alto.PaloAltoStructureUsage.SERVICE_GROUP_MEMBER;
 import static org.batfish.representation.palo_alto.PaloAltoStructureUsage.STATIC_ROUTE_INTERFACE;
+import static org.batfish.representation.palo_alto.PaloAltoStructureUsage.STATIC_ROUTE_NEXTHOP_IP;
 import static org.batfish.representation.palo_alto.PaloAltoStructureUsage.STATIC_ROUTE_NEXT_VR;
 import static org.batfish.representation.palo_alto.PaloAltoStructureUsage.TAP_INTERFACE_ZONE;
 import static org.batfish.representation.palo_alto.PaloAltoStructureUsage.TEMPLATE_STACK_TEMPLATES;
+import static org.batfish.representation.palo_alto.PaloAltoStructureUsage.TUNNEL_INTERFACE_ADDRESS;
 import static org.batfish.representation.palo_alto.PaloAltoStructureUsage.VIRTUAL_ROUTER_INTERFACE;
 import static org.batfish.representation.palo_alto.PaloAltoStructureUsage.VIRTUAL_ROUTER_SELF_REFERENCE;
 import static org.batfish.representation.palo_alto.PaloAltoStructureUsage.VIRTUAL_WIRE_INTERFACE_ZONE;
+import static org.batfish.representation.palo_alto.PaloAltoStructureUsage.VLAN_INTERFACE_ADDRESS;
 import static org.batfish.representation.palo_alto.PaloAltoStructureUsage.VSYS_IMPORT_INTERFACE;
 import static org.batfish.representation.palo_alto.PaloAltoStructureUsage.ZONE_INTERFACE;
 import static org.batfish.representation.palo_alto.Zone.Type.EXTERNAL;
@@ -283,6 +288,8 @@ import org.batfish.grammar.palo_alto.PaloAltoParser.Sniel3_mtuContext;
 import org.batfish.grammar.palo_alto.PaloAltoParser.Sniel3_unitContext;
 import org.batfish.grammar.palo_alto.PaloAltoParser.Snil_ipContext;
 import org.batfish.grammar.palo_alto.PaloAltoParser.Snil_unitContext;
+import org.batfish.grammar.palo_alto.PaloAltoParser.Snit_ipContext;
+import org.batfish.grammar.palo_alto.PaloAltoParser.Snit_mtuContext;
 import org.batfish.grammar.palo_alto.PaloAltoParser.Snit_unitContext;
 import org.batfish.grammar.palo_alto.PaloAltoParser.Sniv_unitContext;
 import org.batfish.grammar.palo_alto.PaloAltoParser.Snsg_display_nameContext;
@@ -998,8 +1005,8 @@ public class PaloAltoConfigurationBuilder extends PaloAltoParserBaseListener
 
   @Override
   public void exitBgppgp_la_ip(Bgppgp_la_ipContext ctx) {
-    ConcreteInterfaceAddress address = toConcreteInterfaceAddress(ctx.interface_address());
-    _currentBgpPeer.setLocalAddress(address.getIp());
+    _currentBgpPeer.setLocalAddress(toInterfaceAddress(ctx.addr));
+    referenceInterfaceAddress(ctx.addr, BGP_PEER_LOCAL_ADDRESS_IP);
   }
 
   @Override
@@ -1009,7 +1016,8 @@ public class PaloAltoConfigurationBuilder extends PaloAltoParserBaseListener
 
   @Override
   public void exitBgppgp_peer_address(Bgppgp_peer_addressContext ctx) {
-    toIp(ctx, ctx.addr, "BGP peer-address").ifPresent(_currentBgpPeer::setPeerAddress);
+    _currentBgpPeer.setPeerAddress(toInterfaceAddress(ctx.addr));
+    referenceInterfaceAddress(ctx.addr, BGP_PEER_ADDRESS);
   }
 
   @Override
@@ -2222,6 +2230,18 @@ public class PaloAltoConfigurationBuilder extends PaloAltoParserBaseListener
   }
 
   @Override
+  public void exitSnit_ip(Snit_ipContext ctx) {
+    InterfaceAddress address = toInterfaceAddress(ctx.address);
+    _currentInterface.addAddress(address);
+    referenceInterfaceAddress(ctx.address, TUNNEL_INTERFACE_ADDRESS);
+  }
+
+  @Override
+  public void exitSnit_mtu(Snit_mtuContext ctx) {
+    _currentInterface.setMtu(Integer.parseInt(getText(ctx.mtu)));
+  }
+
+  @Override
   public void enterSnit_unit(Snit_unitContext ctx) {
     String name = getText(ctx.name);
     _currentInterface =
@@ -2246,8 +2266,18 @@ public class PaloAltoConfigurationBuilder extends PaloAltoParserBaseListener
             .computeIfAbsent(name, n -> new Interface(n, Interface.Type.VLAN_UNIT));
     _currentInterface.setParent(_currentParentInterface);
     defineFlattenedStructure(INTERFACE, name, ctx);
-    // TODO: convert vlan ID for created vlan units
-    todo(ctx);
+  }
+
+  @Override
+  public void exitSnivu_ip(PaloAltoParser.Snivu_ipContext ctx) {
+    InterfaceAddress address = toInterfaceAddress(ctx.address);
+    _currentInterface.addAddress(address);
+    referenceInterfaceAddress(ctx.address, VLAN_INTERFACE_ADDRESS);
+  }
+
+  @Override
+  public void exitSnivu_mtu(PaloAltoParser.Snivu_mtuContext ctx) {
+    _currentInterface.setMtu(Integer.parseInt(getText(ctx.mtu)));
   }
 
   @Override
@@ -2489,8 +2519,8 @@ public class PaloAltoConfigurationBuilder extends PaloAltoParserBaseListener
 
   @Override
   public void exitVrrtn_ip(Vrrtn_ipContext ctx) {
-    toIp(ctx, ctx.addr, "static route nexthop ip-address")
-        .ifPresent(_currentStaticRoute::setNextHopIp);
+    _currentStaticRoute.setNextHopIp(toInterfaceAddress(ctx.addr));
+    referenceInterfaceAddress(ctx.addr, STATIC_ROUTE_NEXTHOP_IP);
   }
 
   @Override

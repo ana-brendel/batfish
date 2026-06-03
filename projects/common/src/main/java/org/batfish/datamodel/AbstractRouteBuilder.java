@@ -27,7 +27,7 @@ public abstract class AbstractRouteBuilder<
   private boolean _nonRouting;
   private long _tag = Route.UNSET_ROUTE_TAG;
 
-  public @Nonnull abstract T build();
+  public abstract @Nonnull T build();
 
   public final long getAdmin() {
     return _admin;
@@ -41,7 +41,7 @@ public abstract class AbstractRouteBuilder<
   }
 
   // To handle the class casting exception while returning S in chaining methods
-  protected @Nonnull abstract S getThis();
+  protected abstract @Nonnull S getThis();
 
   public final long getMetric() {
     return _metric;
@@ -61,20 +61,16 @@ public abstract class AbstractRouteBuilder<
     return getThis();
   }
 
-  public final @Nonnull Ip getNextHopIp() {
+  public final @Nullable Ip getNextHopIp() {
     if (_nextHop == null) {
-      return Route.UNSET_ROUTE_NEXT_HOP_IP;
+      return null;
     }
-    return LegacyNextHops.getNextHopIp(_nextHop).orElse(Route.UNSET_ROUTE_NEXT_HOP_IP);
+    return LegacyNextHops.getNextHopIp(_nextHop).orElse(null);
   }
 
   public final @Nonnull S setNextHopIp(@Nullable Ip nextHopIp) {
     if (nextHopIp == null) {
       _nextHop = null;
-      return getThis();
-    }
-    if (nextHopIp.equals(Route.UNSET_ROUTE_NEXT_HOP_IP)) {
-      _nextHop = NextHopDiscard.instance();
       return getThis();
     }
     if (_nextHop instanceof NextHopInterface) {

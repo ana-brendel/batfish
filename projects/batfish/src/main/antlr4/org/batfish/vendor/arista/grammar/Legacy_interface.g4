@@ -8,12 +8,17 @@ options {
 
 eos_bandwidth_specifier
 :
-   FORTYG_FULL
+   FIFTYG_FULL
+   | FORTYG_FULL
+   | FOUR_HUNDREDG_4
+   | FOUR_HUNDREDG_FULL
+   | ONE_HUNDREDG_1
    | ONE_HUNDREDG_FULL
    | ONE_HUNDRED_FULL
    | ONE_THOUSAND_FULL
    | TEN_THOUSAND_FULL
    | TWENTY_FIVEG_FULL
+   | TWO_HUNDREDG_2
 ;
 
 eos_vxlan_if_inner
@@ -315,7 +320,7 @@ ifip_address_eos
   (
     ifip_address_address_eos
     | ifip_address_dhcp_eos
-    // | ifip_address_unnumbered_eos
+    | ifip_address_unnumbered_eos
     | ifip_address_virtual_eos
   )
 ;
@@ -328,6 +333,11 @@ ifip_address_address_eos
 ifip_address_dhcp_eos
 :
    DHCP NEWLINE
+;
+
+ifip_address_unnumbered_eos
+:
+  UNNUMBERED iname = interface_name NEWLINE
 ;
 
 ifip_address_virtual_eos

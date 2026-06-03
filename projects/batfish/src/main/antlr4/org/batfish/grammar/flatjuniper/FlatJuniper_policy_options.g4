@@ -202,6 +202,7 @@ pops_from
       | popsf_source_address_filter
       | popsf_tag
       | popsf_tag2
+      | popsf_validation_database
    )
 ;
 
@@ -443,6 +444,16 @@ popsf_tag2
    TAG2 uint32
 ;
 
+popsf_validation_database
+:
+   VALIDATION_DATABASE
+   (
+      INVALID
+      | UNKNOWN
+      | VALID
+   )
+;
+
 popsfpl_exact
 :
    EXACT
@@ -592,7 +603,7 @@ popst_common
    | popst_next_hop
    | popst_next_policy
    | popst_next_term
-   | popst_null
+   | popst_load_balance
    | popst_origin
    | popst_preference
    | popst_priority
@@ -785,9 +796,22 @@ popst_next_term
    NEXT TERM
 ;
 
-popst_null
+popst_load_balance
 :
-   LOAD_BALANCE null_filler
+   LOAD_BALANCE
+   (
+      ADAPTIVE
+      | CONSISTENT_HASH
+      | DESTINATION_IP_ONLY
+      | PER_FLOW
+      | PER_PACKET
+      | PER_PREFIX
+      | PROFILE1
+      | PROFILE2
+      | RANDOM
+      | SOURCE_IP_ONLY
+      | SYMMETRIC_CONSISTENT_HASH
+   )
 ;
 
 popst_origin

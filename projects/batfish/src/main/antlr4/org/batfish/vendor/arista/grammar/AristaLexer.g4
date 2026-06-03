@@ -1650,6 +1650,8 @@ FIBER_NODE
    'fiber-node' -> pushMode ( M_FiberNode )
 ;
 
+FIFTYG_FULL: '50gfull';
+
 FILE_TRANSFER: 'file-transfer';
 
 FILTER: 'filter';
@@ -1687,6 +1689,10 @@ FOR: 'for';
 FORMAT: 'format';
 
 FORTYG_FULL: '40gfull';
+
+FOUR_HUNDREDG_4: '400g-4';
+
+FOUR_HUNDREDG_FULL: '400gfull';
 
 FORWARD: 'forward';
 
@@ -3073,6 +3079,8 @@ ON_STARTUP: 'on-startup';
 ON_SUCCESS: 'on-success';
 
 ONE_HUNDRED_FULL: '100full';
+
+ONE_HUNDREDG_1: '100g-1';
 
 ONE_HUNDREDG_FULL: '100gfull';
 
@@ -4644,6 +4652,8 @@ TUNNELED: 'tunneled';
 TWENTY_FIVEG_FULL: '25gfull';
 TWENTY_FIVE_GBASE_CR: '25gbase-cr';
 
+TWO_HUNDREDG_2: '200g-2';
+
 TX_QUEUE: 'tx-queue';
 
 TXSPEED: 'txspeed';
@@ -4693,6 +4703,11 @@ UPDATE_INTERVAL: 'update-interval';
 UPDATE_SOURCE
 :
    'update-source' -> pushMode ( M_Interface )
+;
+
+UNNUMBERED
+:
+   'unnumbered' -> pushMode ( M_Interface )
 ;
 
 UPLINK_FAILURE_DETECTION: 'uplink-failure-detection';
@@ -6355,6 +6370,11 @@ M_Interface_IPV4
    'IPv4' -> type ( IPV4 )
 ;
 
+M_Interface_PEER_GROUP
+:
+   'peer-group' -> type ( PEER_GROUP ) , mode ( M_NEIGHBOR )
+;
+
 M_Interface_POINT_TO_POINT
 :
    'point-to-point' -> type ( POINT_TO_POINT ) , popMode
@@ -6592,6 +6612,11 @@ M_NEIGHBOR_PASSIVE
 M_NEIGHBOR_SRC_IP
 :
    'src-ip' -> type ( SRC_IP ) , popMode
+;
+
+M_NEIGHBOR_INTERFACE
+:
+   'interface' -> type ( INTERFACE ) , mode ( M_Interface )
 ;
 
 M_NEIGHBOR_NEWLINE

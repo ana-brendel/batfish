@@ -77,13 +77,13 @@ import org.batfish.datamodel.Prefix;
 import org.batfish.datamodel.ResolutionRestriction;
 import org.batfish.datamodel.RipInternalRoute;
 import org.batfish.datamodel.RipProcess;
-import org.batfish.datamodel.Route;
 import org.batfish.datamodel.RoutingProtocol;
 import org.batfish.datamodel.StaticRoute;
 import org.batfish.datamodel.Topology;
 import org.batfish.datamodel.Vrf;
 import org.batfish.datamodel.VrfLeakConfig;
 import org.batfish.datamodel.bgp.BgpTopology;
+import org.batfish.datamodel.bgp.RouteDistinguisher;
 import org.batfish.datamodel.collections.NodeInterfacePair;
 import org.batfish.datamodel.dataplane.rib.RibGroup;
 import org.batfish.datamodel.dataplane.rib.RibId;
@@ -712,7 +712,17 @@ public final class VirtualRouter {
   /** Compute the FIB from the main RIB */
   public void computeFib() {
     _fib = null; // free the old one.
-    _fib = new FibImpl(_mainRib, _resolutionRestriction);
+    String fibExportPolicyName = _vrf.getFibExportPolicy();
+    if (fibExportPolicyName == null) {
+      _fib = new FibImpl(_mainRib, _resolutionRestriction);
+    } else {
+      RoutingPolicy fibExportPolicy = _c.getRoutingPolicies().get(fibExportPolicyName);
+      _fib =
+          new FibImpl(
+              _mainRib,
+              _resolutionRestriction,
+              fibExportPolicy == null ? r -> true : fibExportPolicy::processReadOnly);
+    }
   }
 
   void initBgpAggregateRoutes() {
@@ -763,6 +773,33 @@ public final class VirtualRouter {
     _c.getActiveInterfaces(_name).values().stream()
         .flatMap(VirtualRouter::generateConnectedRoutes)
         .forEach(r -> _connectedRib.mergeRoute(annotateRoute(r)));
+  }
+
+  /**
+   * Recompute connected and local routes, applying deltas to the main RIB. Called when VXLAN-aware
+   * autostate changes interface status during topology iteration.
+   */
+  void updateConnectedAndLocalRoutesForAutostateChange() {
+    // Withdraw old connected routes from main RIB
+    for (AnnotatedRoute<ConnectedRoute> route : _connectedRib.getRoutes()) {
+      _mainRibRouteDeltaBuilder.from(
+          _mainRib.removeRouteGetDelta(
+              new AnnotatedRoute<>(route.getRoute(), route.getSourceVrf())));
+    }
+    // Withdraw old local routes from main RIB
+    for (AnnotatedRoute<LocalRoute> route : _localRib.getRoutes()) {
+      _mainRibRouteDeltaBuilder.from(
+          _mainRib.removeRouteGetDelta(
+              new AnnotatedRoute<>(route.getRoute(), route.getSourceVrf())));
+    }
+    // Rebuild connected and local RIBs from current active interfaces
+    _connectedRib = new ConnectedRib();
+    initConnectedRib();
+    _localRib = new LocalRib();
+    initLocalRib();
+    // Add new routes to main RIB
+    _mainRibRouteDeltaBuilder.from(importRib(_mainRib, _connectedRib));
+    _mainRibRouteDeltaBuilder.from(importRib(_mainRib, _localRib));
   }
 
   /** Generate connected routes for a given active interface. */
@@ -968,7 +1005,7 @@ public final class VirtualRouter {
               .setLevel(IsisLevel.LEVEL_1)
               .setMetric(0L)
               .setNetwork(Prefix.ZERO)
-              .setNextHopIp(Route.UNSET_ROUTE_NEXT_HOP_IP)
+              .setNextHop(NextHopDiscard.instance())
               .setProtocol(RoutingProtocol.ISIS_L1)
               .setSystemId(proc.getNetAddress().getSystemIdString())
               .build();
@@ -1644,6 +1681,7 @@ public final class VirtualRouter {
     // invariants of being called from bgpIteration
     assert _bgpRoutingProcess != null && _vrf.getVrfLeakConfig() != null;
 
+    RouteDistinguisher selfRd = _vrf.getRouteDistinguisher();
     for (EvpnToBgpv4VrfLeakConfig leakConfig :
         _vrf.getVrfLeakConfig().getEvpnToBgpv4VrfLeakConfigs()) {
       Optional<BgpRoutingProcess> exportingBgpProc =
@@ -1652,7 +1690,7 @@ public final class VirtualRouter {
               .map(VirtualRouter::getBgpRoutingProcess);
       if (exportingBgpProc.isPresent()) {
         _bgpRoutingProcess.importCrossVrfEvpnRoutesToV4(
-            exportingBgpProc.get().getEvpnRoutesToLeak(), leakConfig);
+            exportingBgpProc.get().getEvpnRoutesToLeak(), leakConfig, selfRd);
       } else {
         LOGGER.error(
             "Exporting EVPN routes to BGP from VRF {} to VRF {} on node {} failed. Exporting VRF"

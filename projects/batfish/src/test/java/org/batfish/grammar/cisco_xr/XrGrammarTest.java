@@ -17,30 +17,30 @@ import static org.batfish.datamodel.matchers.AbstractRouteDecoratorMatchers.hasN
 import static org.batfish.datamodel.matchers.AbstractRouteDecoratorMatchers.hasPrefix;
 import static org.batfish.datamodel.matchers.ConfigurationMatchers.hasConfigurationFormat;
 import static org.batfish.datamodel.matchers.ConfigurationMatchers.hasInterface;
+import static org.batfish.datamodel.matchers.ConfigurationMatchers.hasRouteFilterList;
 import static org.batfish.datamodel.matchers.ConfigurationMatchers.hasTrackingGroups;
-import static org.batfish.datamodel.matchers.DataModelMatchers.hasBandwidth;
-import static org.batfish.datamodel.matchers.DataModelMatchers.hasDefinedStructure;
-import static org.batfish.datamodel.matchers.DataModelMatchers.hasDefinedStructureWithDefinitionLines;
-import static org.batfish.datamodel.matchers.DataModelMatchers.hasIncomingFilter;
-import static org.batfish.datamodel.matchers.DataModelMatchers.hasNumReferrers;
-import static org.batfish.datamodel.matchers.DataModelMatchers.hasParseWarning;
-import static org.batfish.datamodel.matchers.DataModelMatchers.hasRedFlagWarning;
-import static org.batfish.datamodel.matchers.DataModelMatchers.hasReferencedStructure;
-import static org.batfish.datamodel.matchers.DataModelMatchers.hasRouteFilterList;
-import static org.batfish.datamodel.matchers.DataModelMatchers.hasUndefinedReference;
-import static org.batfish.datamodel.matchers.DataModelMatchers.permits;
+import static org.batfish.datamodel.matchers.ConvertConfigurationAnswerElementMatchers.hasDefinedStructure;
+import static org.batfish.datamodel.matchers.ConvertConfigurationAnswerElementMatchers.hasDefinedStructureWithDefinitionLines;
+import static org.batfish.datamodel.matchers.ConvertConfigurationAnswerElementMatchers.hasNumReferrers;
+import static org.batfish.datamodel.matchers.ConvertConfigurationAnswerElementMatchers.hasRedFlagWarning;
+import static org.batfish.datamodel.matchers.ConvertConfigurationAnswerElementMatchers.hasReferencedStructure;
+import static org.batfish.datamodel.matchers.ConvertConfigurationAnswerElementMatchers.hasUndefinedReference;
 import static org.batfish.datamodel.matchers.HsrpGroupMatchers.hasIps;
 import static org.batfish.datamodel.matchers.HsrpGroupMatchers.hasPreempt;
 import static org.batfish.datamodel.matchers.HsrpGroupMatchers.hasPriority;
 import static org.batfish.datamodel.matchers.HsrpGroupMatchers.hasSourceAddress;
 import static org.batfish.datamodel.matchers.HsrpGroupMatchers.hasTrackActions;
+import static org.batfish.datamodel.matchers.InterfaceMatchers.hasBandwidth;
 import static org.batfish.datamodel.matchers.InterfaceMatchers.hasEncapsulationVlan;
 import static org.batfish.datamodel.matchers.InterfaceMatchers.hasHsrpGroup;
+import static org.batfish.datamodel.matchers.InterfaceMatchers.hasIncomingFilter;
 import static org.batfish.datamodel.matchers.InterfaceMatchers.isActive;
 import static org.batfish.datamodel.matchers.IpAccessListMatchers.accepts;
 import static org.batfish.datamodel.matchers.IpAccessListMatchers.hasName;
 import static org.batfish.datamodel.matchers.IpAccessListMatchers.rejects;
 import static org.batfish.datamodel.matchers.MapMatchers.hasKeys;
+import static org.batfish.datamodel.matchers.ParseVendorConfigurationAnswerElementMatchers.hasParseWarning;
+import static org.batfish.datamodel.matchers.RouteFilterListMatchers.permits;
 import static org.batfish.datamodel.ospf.OspfNetworkType.BROADCAST;
 import static org.batfish.datamodel.ospf.OspfNetworkType.POINT_TO_POINT;
 import static org.batfish.datamodel.routing_policy.Common.SUMMARY_ONLY_SUPPRESSION_POLICY_NAME;
@@ -1539,7 +1539,7 @@ public final class XrGrammarTest {
       RoutingPolicy exportPolicy =
           c.getRoutingPolicies()
               .get(generatedOspfExportPolicyName(DEFAULT_VRF_NAME, proc.getProcessId()));
-      assert exportPolicy != null;
+      assertThat(exportPolicy, notNullValue());
       // set export route's values to non-defaults to confirm they really get set by the policy
       exportedRouteBuilder.setMetric(2L).setOspfMetricType(OspfMetricType.E1);
       assertRoutingPolicyPermitsRoute(exportPolicy, route, exportedRouteBuilder);
@@ -1561,7 +1561,7 @@ public final class XrGrammarTest {
       RoutingPolicy exportPolicy =
           c.getRoutingPolicies()
               .get(generatedOspfExportPolicyName(DEFAULT_VRF_NAME, proc.getProcessId()));
-      assert exportPolicy != null;
+      assertThat(exportPolicy, notNullValue());
       // set export route's values to confirm they really get rewritten by the policy
       exportedRouteBuilder.setMetric(2L).setOspfMetricType(OspfMetricType.E2);
       assertRoutingPolicyPermitsRoute(exportPolicy, route, exportedRouteBuilder);
@@ -1591,7 +1591,7 @@ public final class XrGrammarTest {
       RoutingPolicy exportPolicy =
           c.getRoutingPolicies()
               .get(generatedOspfExportPolicyName(DEFAULT_VRF_NAME, proc.getProcessId()));
-      assert exportPolicy != null;
+      assertThat(exportPolicy, notNullValue());
       // set export route's values to confirm they really get rewritten by the policy
       exportedRouteBuilder.setMetric(2L).setOspfMetricType(OspfMetricType.E1);
       assertRoutingPolicyPermitsRoute(exportPolicy, route, exportedRouteBuilder);

@@ -56,6 +56,8 @@ import static org.batfish.vendor.arista.representation.AristaStructureUsage.BGP_
 import static org.batfish.vendor.arista.representation.AristaStructureUsage.BGP_INBOUND_ROUTE_MAP;
 import static org.batfish.vendor.arista.representation.AristaStructureUsage.BGP_LISTEN_RANGE_PEER_FILTER;
 import static org.batfish.vendor.arista.representation.AristaStructureUsage.BGP_LISTEN_RANGE_SELF_REF;
+import static org.batfish.vendor.arista.representation.AristaStructureUsage.BGP_NEIGHBOR_INTERFACE_PEER_FILTER;
+import static org.batfish.vendor.arista.representation.AristaStructureUsage.BGP_NEIGHBOR_INTERFACE_PEER_GROUP;
 import static org.batfish.vendor.arista.representation.AristaStructureUsage.BGP_NEIGHBOR_PEER_GROUP;
 import static org.batfish.vendor.arista.representation.AristaStructureUsage.BGP_NEIGHBOR_SELF_REF;
 import static org.batfish.vendor.arista.representation.AristaStructureUsage.BGP_NETWORK_ORIGINATION_ROUTE_MAP;
@@ -381,6 +383,8 @@ import org.batfish.vendor.arista.grammar.AristaParser.Eos_as_rangeContext;
 import org.batfish.vendor.arista.grammar.AristaParser.Eos_as_range_listContext;
 import org.batfish.vendor.arista.grammar.AristaParser.Eos_bandwidth_specifierContext;
 import org.batfish.vendor.arista.grammar.AristaParser.Eos_bgp_communityContext;
+import org.batfish.vendor.arista.grammar.AristaParser.Eos_bgp_iface_rangeContext;
+import org.batfish.vendor.arista.grammar.AristaParser.Eos_bgp_iface_tailContext;
 import org.batfish.vendor.arista.grammar.AristaParser.Eos_mlag_domainContext;
 import org.batfish.vendor.arista.grammar.AristaParser.Eos_mlag_local_interfaceContext;
 import org.batfish.vendor.arista.grammar.AristaParser.Eos_mlag_peer_linkContext;
@@ -476,6 +480,7 @@ import org.batfish.vendor.arista.grammar.AristaParser.Eos_rbi_distanceContext;
 import org.batfish.vendor.arista.grammar.AristaParser.Eos_rbi_maximum_pathsContext;
 import org.batfish.vendor.arista.grammar.AristaParser.Eos_rbi_neighbor4Context;
 import org.batfish.vendor.arista.grammar.AristaParser.Eos_rbi_neighbor6Context;
+import org.batfish.vendor.arista.grammar.AristaParser.Eos_rbi_neighbor_interfaceContext;
 import org.batfish.vendor.arista.grammar.AristaParser.Eos_rbi_network4Context;
 import org.batfish.vendor.arista.grammar.AristaParser.Eos_rbi_network6Context;
 import org.batfish.vendor.arista.grammar.AristaParser.Eos_rbi_peer_groupContext;
@@ -536,6 +541,7 @@ import org.batfish.vendor.arista.grammar.AristaParser.Eos_rbino_bgp_default_ipv4
 import org.batfish.vendor.arista.grammar.AristaParser.Eos_rbino_bgp_next_hop_unchangedContext;
 import org.batfish.vendor.arista.grammar.AristaParser.Eos_rbino_default_metricContext;
 import org.batfish.vendor.arista.grammar.AristaParser.Eos_rbino_neighborContext;
+import org.batfish.vendor.arista.grammar.AristaParser.Eos_rbino_neighbor_interfaceContext;
 import org.batfish.vendor.arista.grammar.AristaParser.Eos_rbino_neighbor_neighborContext;
 import org.batfish.vendor.arista.grammar.AristaParser.Eos_rbino_router_idContext;
 import org.batfish.vendor.arista.grammar.AristaParser.Eos_rbino_shutdownContext;
@@ -640,6 +646,7 @@ import org.batfish.vendor.arista.grammar.AristaParser.Ifigmphp_access_listContex
 import org.batfish.vendor.arista.grammar.AristaParser.Ifigmpsg_aclContext;
 import org.batfish.vendor.arista.grammar.AristaParser.Ifip_access_group_eosContext;
 import org.batfish.vendor.arista.grammar.AristaParser.Ifip_address_address_eosContext;
+import org.batfish.vendor.arista.grammar.AristaParser.Ifip_address_unnumbered_eosContext;
 import org.batfish.vendor.arista.grammar.AristaParser.Ifip_address_virtual_eosContext;
 import org.batfish.vendor.arista.grammar.AristaParser.Ifip_proxy_arp_eosContext;
 import org.batfish.vendor.arista.grammar.AristaParser.Ifipm_boundary_eosContext;
@@ -974,6 +981,7 @@ import org.batfish.vendor.arista.representation.eos.AristaBgpAggregateNetwork;
 import org.batfish.vendor.arista.representation.eos.AristaBgpBestpathTieBreaker;
 import org.batfish.vendor.arista.representation.eos.AristaBgpDefaultOriginate;
 import org.batfish.vendor.arista.representation.eos.AristaBgpHasPeerGroup;
+import org.batfish.vendor.arista.representation.eos.AristaBgpInterfaceNeighbor;
 import org.batfish.vendor.arista.representation.eos.AristaBgpNeighbor;
 import org.batfish.vendor.arista.representation.eos.AristaBgpNeighbor.RemovePrivateAsMode;
 import org.batfish.vendor.arista.representation.eos.AristaBgpNeighborAddressFamily;
@@ -991,6 +999,7 @@ import org.batfish.vendor.arista.representation.eos.AristaBgpVlanBase;
 import org.batfish.vendor.arista.representation.eos.AristaBgpVrf;
 import org.batfish.vendor.arista.representation.eos.AristaBgpVrfAddressFamily;
 import org.batfish.vendor.arista.representation.eos.AristaBgpVrfIpv4UnicastAddressFamily;
+import org.batfish.vendor.arista.representation.eos.AristaBgpVrfIpv6UnicastAddressFamily;
 import org.batfish.vendor.arista.representation.eos.AristaEosVxlan;
 import org.batfish.vendor.arista.representation.eos.AristaRedistributeType;
 
@@ -2532,15 +2541,19 @@ public class AristaControlPlaneExtractor extends AristaParserBaseListener
   @Override
   public void exitEos_rbafnc_prefix_list(Eos_rbafnc_prefix_listContext ctx) {
     String name = ctx.name.getText();
+    AristaStructureType type =
+        _currentAristaBgpVrfAf instanceof AristaBgpVrfIpv6UnicastAddressFamily
+            ? PREFIX6_LIST
+            : PREFIX_LIST;
     if (ctx.IN() != null) {
       _currentAristaBgpNeighborAddressFamily.setPrefixListIn(name);
       _configuration.referenceStructure(
-          PREFIX_LIST, name, BGP_INBOUND_PREFIX_LIST, ctx.getStart().getLine());
+          type, name, BGP_INBOUND_PREFIX_LIST, ctx.getStart().getLine());
     } else {
       assert ctx.OUT() != null;
       _currentAristaBgpNeighborAddressFamily.setPrefixListOut(name);
       _configuration.referenceStructure(
-          PREFIX_LIST, name, BGP_OUTBOUND_PREFIX_LIST, ctx.getStart().getLine());
+          type, name, BGP_OUTBOUND_PREFIX_LIST, ctx.getStart().getLine());
     }
   }
 
@@ -2852,6 +2865,79 @@ public class AristaControlPlaneExtractor extends AristaParserBaseListener
   public void exitEos_rbi_neighbor6(Eos_rbi_neighbor6Context ctx) {
     _currentAristaBgpNeighbor = null;
     _currentAristaBgpNeighborAddressFamily = null;
+  }
+
+  @Override
+  public void exitEos_rbi_neighbor_interface(Eos_rbi_neighbor_interfaceContext ctx) {
+    List<String> ifaceNames = expandBgpIfaceRange(ctx.irange, ctx);
+    String peerGroup = ctx.pg.getText();
+    String peerFilter = ctx.pf != null ? ctx.pf.getText() : null;
+    Long remoteAs = ctx.asn != null ? toAsNum(ctx.asn) : null;
+    for (String ifaceName : ifaceNames) {
+      AristaBgpInterfaceNeighbor n = _currentAristaBgpVrf.getOrCreateInterfaceNeighbor(ifaceName);
+      n.setPeerGroup(peerGroup);
+      if (peerFilter != null) {
+        n.setPeerFilter(peerFilter);
+      }
+      if (remoteAs != null) {
+        n.setRemoteAs(remoteAs);
+      }
+      String structName = bgpNeighborStructureName(ifaceName, _currentAristaBgpVrf.getName());
+      _configuration.defineStructure(BGP_NEIGHBOR, structName, ctx);
+      _configuration.referenceStructure(
+          BGP_NEIGHBOR, structName, BGP_NEIGHBOR_SELF_REF, ctx.getStart().getLine());
+    }
+    _configuration.referenceStructure(
+        BGP_PEER_GROUP, peerGroup, BGP_NEIGHBOR_INTERFACE_PEER_GROUP, ctx.pg.getStart().getLine());
+    if (peerFilter != null) {
+      _configuration.referenceStructure(
+          PEER_FILTER, peerFilter, BGP_NEIGHBOR_INTERFACE_PEER_FILTER, ctx.pf.getStart().getLine());
+    }
+  }
+
+  /**
+   * Upper bound on the size of a single {@code neighbor interface} range entry. A typical Arista
+   * chassis has far fewer physical interfaces than this; any range that exceeds it is almost
+   * certainly a typo or misuse of the syntax.
+   */
+  private static final int BGP_IFACE_RANGE_MAX = 1000;
+
+  /**
+   * Expands a {@code neighbor interface} range to canonical interface names. The prefix (e.g.
+   * {@code Et}) appears once; each comma-separated entry is a bare numeric path with optional
+   * trailing dash-range ({@code Et1/1,2/1,3-4} = Ethernet1/1, Ethernet2/1, Ethernet3, Ethernet4).
+   */
+  private @Nonnull List<String> expandBgpIfaceRange(
+      Eos_bgp_iface_rangeContext range, ParserRuleContext ctx) {
+    String canonicalPrefix;
+    try {
+      canonicalPrefix = AristaConfiguration.getCanonicalInterfaceNamePrefix(range.prefix.getText());
+    } catch (BatfishException e) {
+      warn(ctx, "Unrecognized interface name: " + e.getMessage());
+      return ImmutableList.of();
+    }
+    List<String> ifaceNames = new ArrayList<>();
+    for (Eos_bgp_iface_tailContext entry : range.entries) {
+      String base = canonicalPrefix + entry.path.getText();
+      SubRange sr = toSubRange(entry.sr);
+      if (sr.getEnd() - sr.getStart() > BGP_IFACE_RANGE_MAX) {
+        warn(
+            ctx,
+            String.format(
+                "Interface range %s%s exceeds %d entries; skipping this range.",
+                base, sr, BGP_IFACE_RANGE_MAX));
+        continue;
+      }
+      sr.asStream().forEach(i -> ifaceNames.add(base + i));
+    }
+    return ifaceNames;
+  }
+
+  @Override
+  public void exitEos_rbino_neighbor_interface(Eos_rbino_neighbor_interfaceContext ctx) {
+    for (String ifaceName : expandBgpIfaceRange(ctx.irange, ctx)) {
+      _currentAristaBgpVrf.removeInterfaceNeighbor(ifaceName);
+    }
   }
 
   @Override
@@ -5069,10 +5155,6 @@ public class AristaControlPlaneExtractor extends AristaParserBaseListener
     ConcreteInterfaceAddress addr = toAddress(ctx.addr);
     _currentInterfaces.forEach(
         i -> {
-          if (i.getSwitchport()) {
-            warn(ctx, String.format("Ignoring IP address for switchport %s", i.getName()));
-            return;
-          }
           if (ctx.SECONDARY() != null) {
             i.getSecondaryAddresses().add(addr);
           } else {
@@ -5082,15 +5164,22 @@ public class AristaControlPlaneExtractor extends AristaParserBaseListener
   }
 
   @Override
+  public void exitIfip_address_unnumbered_eos(Ifip_address_unnumbered_eosContext ctx) {
+    String sourceInterface = toInterfaceName(ctx.iname);
+    _configuration.referenceStructure(
+        INTERFACE,
+        sourceInterface,
+        AristaStructureUsage.INTERFACE_IP_ADDRESS_UNNUMBERED,
+        ctx.iname.getStart().getLine());
+    _currentInterfaces.forEach(i -> i.setUnnumberedSourceInterface(sourceInterface));
+  }
+
+  @Override
   public void exitIfip_address_virtual_eos(Ifip_address_virtual_eosContext ctx) {
     // TODO: this should be handled differently, since virtual is present.
     ConcreteInterfaceAddress addr = toAddress(ctx.addr);
     _currentInterfaces.forEach(
         i -> {
-          if (i.getSwitchport()) {
-            warn(ctx, String.format("Ignoring IP address for switchport %s", i.getName()));
-            return;
-          }
           if (ctx.SECONDARY() != null) {
             i.getSecondaryAddresses().add(addr);
           } else {
@@ -5460,18 +5549,28 @@ public class AristaControlPlaneExtractor extends AristaParserBaseListener
   }
 
   private double toBandwidth(Eos_bandwidth_specifierContext ctx) {
-    if (ctx.FORTYG_FULL() != null) {
+    if (ctx.FIFTYG_FULL() != null) {
+      return 50E9D;
+    } else if (ctx.FORTYG_FULL() != null) {
       return 40E9D;
+    } else if (ctx.FOUR_HUNDREDG_4() != null) {
+      return 400E9D;
+    } else if (ctx.FOUR_HUNDREDG_FULL() != null) {
+      return 400E9D;
     } else if (ctx.ONE_HUNDRED_FULL() != null) {
       return 100E6D;
     } else if (ctx.ONE_THOUSAND_FULL() != null) {
       return 1E9D;
+    } else if (ctx.ONE_HUNDREDG_1() != null) {
+      return 100E9D;
     } else if (ctx.ONE_HUNDREDG_FULL() != null) {
       return 100E9D;
     } else if (ctx.TEN_THOUSAND_FULL() != null) {
       return 10E9D;
     } else if (ctx.TWENTY_FIVEG_FULL() != null) {
       return 25E9D;
+    } else if (ctx.TWO_HUNDREDG_2() != null) {
+      return 200E9D;
     } else {
       throw convError(Double.class, ctx);
     }

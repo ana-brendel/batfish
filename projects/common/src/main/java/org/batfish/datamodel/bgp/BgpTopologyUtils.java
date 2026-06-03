@@ -1,9 +1,9 @@
 package org.batfish.datamodel.bgp;
 
+import static com.google.common.base.MoreObjects.firstNonNull;
 import static com.google.common.base.Preconditions.checkArgument;
 
 import com.google.common.base.MoreObjects;
-import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.ImmutableSet;
 import com.google.common.collect.ImmutableSetMultimap;
@@ -50,48 +50,9 @@ import org.batfish.datamodel.collections.NodeInterfacePair;
 import org.batfish.datamodel.flow.FirewallSessionTraceInfo;
 import org.batfish.datamodel.flow.Hop;
 import org.batfish.datamodel.flow.Trace;
-import org.batfish.datamodel.flow.TraceAndReverseFlow;
 
 /** Utility functions for computing BGP topology */
 public final class BgpTopologyUtils {
-
-  /**
-   * Result of initiating a BGP session by an active peer. Captures the flow used and forward and
-   * reverse traces.
-   *
-   * <p>If the list reverse traces is empty, that implies session initiation failed in the forward
-   * direction.
-   */
-  public static final class BgpSessionInitiationResult {
-    private final @Nonnull Flow _flow;
-    private final @Nonnull List<Trace> _forwardTraces;
-    private final @Nonnull List<Trace> _reverseTraces;
-    private final boolean _successful;
-
-    public BgpSessionInitiationResult(
-        Flow flow, List<Trace> forwardTraces, List<Trace> reverseTraces, boolean successful) {
-      _flow = flow;
-      _forwardTraces = ImmutableList.copyOf(forwardTraces);
-      _reverseTraces = ImmutableList.copyOf(reverseTraces);
-      _successful = successful;
-    }
-
-    public boolean isSuccessful() {
-      return _successful;
-    }
-
-    public @Nonnull Flow getFlow() {
-      return _flow;
-    }
-
-    public @Nonnull List<Trace> getForwardTraces() {
-      return _forwardTraces;
-    }
-
-    public @Nonnull List<Trace> getReverseTraces() {
-      return _reverseTraces;
-    }
-  }
 
   /**
    * Compute the BGP topology -- a network of {@link BgpPeerConfig}s connected by {@link
@@ -192,9 +153,20 @@ public final class BgpTopologyUtils {
             localIpsBuilder.put(neighborId, config.getLocalIp());
           } else {
             // No explicitly configured local IP. Check for dynamically resolvable local IPs.
-            localIpsBuilder.putAll(
-                neighborId,
-                vrf.getSourceIpInference().getPotentialSourceIps(peerAddress, fib, node));
+            // If sessionVrf is set, resolve from that VRF's FIB instead.
+            String sourceVrfName = firstNonNull(config.getSessionVrf(), vrfName);
+            Vrf sourceVrf = sourceVrfName.equals(vrfName) ? vrf : node.getVrfs().get(sourceVrfName);
+            Fib sourceFib =
+                sourceVrfName.equals(vrfName)
+                    ? fib
+                    : fibs.getOrDefault(hostname, ImmutableMap.of()).get(sourceVrfName);
+            if (sourceVrf != null && sourceFib != null) {
+              localIpsBuilder.putAll(
+                  neighborId,
+                  sourceVrf
+                      .getSourceIpInference()
+                      .getPotentialSourceIps(peerAddress, sourceFib, node));
+            }
           }
         }
         // Dynamic peers: map of prefix to BgpPassivePeerConfig
@@ -225,9 +197,16 @@ public final class BgpTopologyUtils {
         // Unnumbered configs only form sessions with each other
         continue;
       }
-      Multimap<String, BgpPeerConfigId> vrf =
+      Multimap<String, BgpPeerConfigId> hostReceivers =
           receivers.computeIfAbsent(peer.getHostname(), name -> LinkedListMultimap.create());
-      vrf.put(peer.getVrfName(), peer);
+      // Register under sessionVrf if set (the VRF where the TCP session lives), otherwise
+      // the peer's own VRF.
+      BgpPeerConfig peerConfig = networkConfigurations.getBgpPeerConfig(peer);
+      String receiverVrf =
+          peerConfig != null
+              ? firstNonNull(peerConfig.getSessionVrf(), peer.getVrfName())
+              : peer.getVrfName();
+      hostReceivers.put(receiverVrf, peer);
     }
     SetMultimap<BgpPeerConfigId, Ip> localIps = localIpsBuilder.build();
 
@@ -303,7 +282,7 @@ public final class BgpTopologyUtils {
                                     // same vrf as initiator
                                     BgpPeerConfig candidate = nc.getBgpPeerConfig(candidateId);
                                     if (!bgpCandidatePassesSanityChecks(
-                                        neighborId, neighbor, candidateId, candidate)) {
+                                        neighborId, neighbor, candidateId, candidate, nc)) {
                                       return Stream.of();
                                     }
                                     assert candidate
@@ -399,9 +378,11 @@ public final class BgpTopologyUtils {
             p1.getLocalAs(),
             p1.getConfederationAsn(),
             p1.getRemoteAsns(),
+            getConfedMembers(id1, networkConfigurations),
             remotePeer.getLocalAs(),
             remotePeer.getConfederationAsn(),
-            remotePeer.getRemoteAsns());
+            remotePeer.getRemoteAsns(),
+            getConfedMembers(id2, networkConfigurations));
     assert asPair != null;
     return Stream.of(
         new BgpEdge(
@@ -449,9 +430,10 @@ public final class BgpTopologyUtils {
     }
 
     Ip localIp = config.getLocalIp();
+    String sourceVrf = firstNonNull(config.getSessionVrf(), vrfName);
     return localIp == null
         || (ipOwners.containsKey(localIp)
-            && ipOwners.get(localIp).getOrDefault(hostname, ImmutableSet.of()).contains(vrfName));
+            && ipOwners.get(localIp).getOrDefault(hostname, ImmutableSet.of()).contains(sourceVrf));
   }
 
   /**
@@ -466,7 +448,8 @@ public final class BgpTopologyUtils {
       @Nonnull BgpPeerConfigId neighborId,
       @Nonnull BgpActivePeerConfig neighbor,
       @Nonnull BgpPeerConfigId candidateId,
-      @Nullable BgpPeerConfig candidate) {
+      @Nullable BgpPeerConfig candidate,
+      @Nonnull NetworkConfigurations nc) {
     if (neighborId.getHostname().equals(candidateId.getHostname())
         && neighborId.getVrfName().equals(candidateId.getVrfName())) {
       // Do not let the same node/VRF peer with itself.
@@ -476,22 +459,15 @@ public final class BgpTopologyUtils {
     if (candidate == null) {
       return false;
     }
-    return bgpCandidateHasCompatibleAs(neighbor, candidate);
-  }
-
-  /**
-   * Returns if the given candidate BGP peer has a compatible AS configuration to the given active
-   * BGP peer
-   */
-  public static boolean bgpCandidateHasCompatibleAs(
-      BgpPeerConfig neighbor, BgpPeerConfig candidate) {
     return computeAsPair(
             neighbor.getLocalAs(),
             neighbor.getConfederationAsn(),
             neighbor.getRemoteAsns(),
+            getConfedMembers(neighborId, nc),
             candidate.getLocalAs(),
             candidate.getConfederationAsn(),
-            candidate.getRemoteAsns())
+            candidate.getRemoteAsns(),
+            getConfedMembers(candidateId, nc))
         != null;
   }
 
@@ -540,7 +516,16 @@ public final class BgpTopologyUtils {
     }
     BgpPeerConfig candidate = nc.getBgpPeerConfig(candidateId);
     return candidate instanceof BgpUnnumberedPeerConfig
-        && bgpCandidateHasCompatibleAs(neighbor, candidate);
+        && computeAsPair(
+                neighbor.getLocalAs(),
+                neighbor.getConfederationAsn(),
+                neighbor.getRemoteAsns(),
+                getConfedMembers(neighborId, nc),
+                candidate.getLocalAs(),
+                candidate.getConfederationAsn(),
+                candidate.getRemoteAsns(),
+                getConfedMembers(candidateId, nc))
+            != null;
   }
 
   private static final class ReverseFlowAndFirewallSessions {
@@ -606,7 +591,7 @@ public final class BgpTopologyUtils {
             .setIpProtocol(IpProtocol.TCP)
             .setTcpFlagsSyn(true)
             .setIngressNode(initiatorId.getHostname())
-            .setIngressVrf(initiatorId.getVrfName())
+            .setIngressVrf(firstNonNull(initiator.getSessionVrf(), initiatorId.getVrfName()))
             .setSrcIp(initiatorLocalIp)
             .setDstIp(initiator.getPeerAddress())
             .setSrcPort(NamedPort.EPHEMERAL_LOWEST.number())
@@ -636,8 +621,10 @@ public final class BgpTopologyUtils {
               Flow reverseFlow = traceAndReverseFlow.getReverseFlow();
               assert traceAndReverseFlow.getReverseFlow() != null; // success implies return flow
               assert reverseFlow.getIngressVrf() != null; // accepted
+              String listenerSessionVrf =
+                  firstNonNull(listener.getSessionVrf(), listenerId.getVrfName());
               if (!reverseFlow.getIngressNode().equals(listenerId.getHostname())
-                  || !reverseFlow.getIngressVrf().equals(listenerId.getVrfName())) {
+                  || !reverseFlow.getIngressVrf().equals(listenerSessionVrf)) {
                 // This trace is success at the wrong device or in the wrong VRF.
                 return false;
               } else if (listener.getCheckLocalIpOnAccept() && listener.getLocalIp() != null) {
@@ -683,115 +670,25 @@ public final class BgpTopologyUtils {
                         }));
   }
 
-  /**
-   * Attempts to initiate a TCP connection from the active BGP peer represented by {@code
-   * initiatorId} to its counterpart BGP peer represented by {@code listenerId}.
-   *
-   * <p><b>Warning:</b> Notion of directionality is important here, we are assuming {@code
-   * initiator} is initiating the connection according to its local configuration.
-   *
-   * <p>Assumes {@code initiator}'s peer address have already been confirmed nonnull. {@code
-   * initiatorFeasibleLocalIps} is a set of IP addresses that the initiator may use as its local IP
-   * for initation.
-   *
-   * @return The results of session initiations for each feasible local IP as a list of {@link
-   *     BgpSessionInitiationResult}.
-   */
-  public static List<BgpSessionInitiationResult> initiateBgpSessions(
-      @Nonnull BgpPeerConfigId initiatorId,
-      @Nonnull BgpPeerConfigId listenerId,
-      @Nonnull BgpActivePeerConfig initiator,
-      @Nonnull Set<Ip> initiatorFeasibleLocalIps,
-      @Nonnull TracerouteEngine tracerouteEngine) {
-    assert initiatorId.getType() == BgpPeerConfigType.ACTIVE;
-    ImmutableList.Builder<BgpSessionInitiationResult> initiationResults = ImmutableList.builder();
-    for (Ip potentialLocalIp : initiatorFeasibleLocalIps) {
-      Flow flowFromSrc =
-          Flow.builder()
-              .setIpProtocol(IpProtocol.TCP)
-              .setTcpFlagsSyn(true)
-              .setIngressNode(initiatorId.getHostname())
-              .setIngressVrf(initiatorId.getVrfName())
-              .setSrcIp(potentialLocalIp)
-              .setDstIp(initiator.getPeerAddress())
-              .setSrcPort(NamedPort.EPHEMERAL_LOWEST.number())
-              .setDstPort(NamedPort.BGP.number())
-              .build();
-
-      List<TraceAndReverseFlow> forwardTracesAndReverseFlows =
-          tracerouteEngine
-              .computeTracesAndReverseFlows(ImmutableSet.of(flowFromSrc), false)
-              .get(flowFromSrc);
-
-      // TODO Session should be eBGP single-hop if either initiator or listener is eBGP single-hop
-      boolean bgpSingleHop =
-          BgpSessionProperties.getSessionType(initiator) == SessionType.EBGP_SINGLEHOP;
-
-      List<TraceAndReverseFlow> reverseTraces =
-          forwardTracesAndReverseFlows.stream()
-              .filter(
-                  traceAndReverseFlow -> {
-                    Trace forwardTrace = traceAndReverseFlow.getTrace();
-                    return forwardTrace.getDisposition() == FlowDisposition.ACCEPTED
-                        && (!bgpSingleHop || forwardTrace.getHops().size() <= 2);
-                  })
-              .filter(
-                  traceAndReverseFlow ->
-                      traceAndReverseFlow.getReverseFlow() != null
-                          && traceAndReverseFlow
-                              .getReverseFlow()
-                              .getIngressNode()
-                              .equals(listenerId.getHostname())
-                          && traceAndReverseFlow
-                              .getReverseFlow()
-                              .getIngressVrf()
-                              .equals(listenerId.getVrfName()))
-              .flatMap(
-                  traceAndReverseFlow ->
-                      tracerouteEngine
-                          .computeTracesAndReverseFlows(
-                              ImmutableSet.of(traceAndReverseFlow.getReverseFlow()),
-                              traceAndReverseFlow.getNewFirewallSessions(),
-                              false)
-                          .get(traceAndReverseFlow.getReverseFlow())
-                          .stream())
-              .collect(ImmutableList.toImmutableList());
-
-      boolean successful =
-          reverseTraces.stream()
-              .anyMatch(
-                  traceAndReverseFlow -> {
-                    Trace reverseTrace = traceAndReverseFlow.getTrace();
-                    List<Hop> hops = reverseTrace.getHops();
-                    return !hops.isEmpty()
-                        && hops.get(hops.size() - 1)
-                            .getNode()
-                            .getName()
-                            .equals(initiatorId.getHostname())
-                        && reverseTrace.getDisposition() == FlowDisposition.ACCEPTED;
-                  });
-
-      initiationResults.add(
-          new BgpSessionInitiationResult(
-              flowFromSrc,
-              forwardTracesAndReverseFlows.stream()
-                  .map(TraceAndReverseFlow::getTrace)
-                  .collect(ImmutableList.toImmutableList()),
-              reverseTraces.stream()
-                  .map(TraceAndReverseFlow::getTrace)
-                  .collect(ImmutableList.toImmutableList()),
-              successful));
-    }
-    return initiationResults.build();
+  /** Returns the confederation members for the BGP process associated with the given peer. */
+  private static @Nullable LongSpace getConfedMembers(
+      BgpPeerConfigId id, NetworkConfigurations nc) {
+    return nc.getVrf(id.getHostname(), id.getVrfName())
+        .map(Vrf::getBgpProcess)
+        .map(BgpProcess::getConfederation)
+        .map(BgpConfederation::getMembers)
+        .orElse(null);
   }
 
   public static @Nullable AsPair computeAsPair(
       @Nullable Long initiatorLocalAs,
       @Nullable Long initiatorConfed,
       @Nonnull LongSpace initiatorRemoteAsns,
+      @Nullable LongSpace initiatorConfedMembers,
       @Nullable Long listenerLocalAs,
       @Nullable Long listenerConfed,
-      @Nonnull LongSpace listenerRemoteAsns) {
+      @Nonnull LongSpace listenerRemoteAsns,
+      @Nullable LongSpace listenerConfedMembers) {
     if (initiatorLocalAs == null || listenerLocalAs == null) {
       return null; // This is plainly a misconfiguration. No session.
     }
@@ -828,6 +725,12 @@ public final class BgpTopologyUtils {
     }
     // Initiator is inside a confederation, but listener is not
     if (initiatorConfed != null) {
+      // If the listener's local AS is one of the initiator's confederation members, the initiator
+      // would treat this as a confed-eBGP session and send its member-AS in the OPEN message. The
+      // listener expects the confederation ID, so this is an AS mismatch. No session.
+      if (initiatorConfedMembers != null && initiatorConfedMembers.contains(listenerLocalAs)) {
+        return null;
+      }
       // Listener is not in a confederation, so this is across the confederation border if the
       // listener is configured to peer with the initiator's confederation ID. Both peers must
       // agree on the AS numbers: the initiator uses its confederation ID externally, and the
@@ -839,7 +742,13 @@ public final class BgpTopologyUtils {
         return null;
       }
     } else {
-      // Listener is inside a confederation, but initiator is not
+      // Listener is inside a confederation, but initiator is not.
+      // Same check as above in reverse: if the initiator's local AS is in the listener's
+      // confederation members, the listener would treat this as confed-eBGP and send its member-AS.
+      // The initiator expects the confederation ID. AS mismatch, no session.
+      if (listenerConfedMembers != null && listenerConfedMembers.contains(initiatorLocalAs)) {
+        return null;
+      }
       // Similar to above: initiator must be configured to peer with listener's confederation ID
       if (listenerRemoteAsns.contains(initiatorLocalAs)
           && initiatorRemoteAsns.contains(listenerConfed)) {

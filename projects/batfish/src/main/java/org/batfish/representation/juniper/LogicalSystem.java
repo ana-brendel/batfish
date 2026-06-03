@@ -6,6 +6,7 @@ import java.util.HashMap;
 import java.util.Map;
 import java.util.NavigableMap;
 import java.util.NavigableSet;
+import java.util.Set;
 import java.util.TreeMap;
 import java.util.TreeSet;
 import javax.annotation.Nonnull;
@@ -118,8 +119,11 @@ public class LogicalSystem implements Serializable {
   private Map<String, TunnelAttribute> _tunnelAttributes;
 
   private final Map<String, Vlan> _namedVlans;
+  private final Map<Integer, VniOptions> _vniOptions;
 
   private @Nullable SwitchOptions _switchOptions;
+
+  private final Set<String> _xstpInterfaceNames;
 
   private final Map<String, Zone> _zones;
 
@@ -171,7 +175,9 @@ public class LogicalSystem implements Serializable {
     _tacplusServers = new TreeSet<>();
     _tunnelAttributes = new TreeMap<>();
     _namedVlans = new TreeMap<>();
+    _vniOptions = new TreeMap<>();
     _switchOptions = new SwitchOptions();
+    _xstpInterfaceNames = new TreeSet<>();
     _zones = new TreeMap<>();
   }
 
@@ -447,8 +453,16 @@ public class LogicalSystem implements Serializable {
     return _namedVlans;
   }
 
+  public Map<Integer, VniOptions> getVniOptions() {
+    return _vniOptions;
+  }
+
   public SwitchOptions getSwitchOptions() {
     return _switchOptions;
+  }
+
+  public @Nonnull Set<String> getXstpInterfaceNames() {
+    return _xstpInterfaceNames;
   }
 
   public Map<String, Zone> getZones() {

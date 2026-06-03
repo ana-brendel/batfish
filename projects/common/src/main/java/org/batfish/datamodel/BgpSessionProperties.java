@@ -344,7 +344,7 @@ public final class BgpSessionProperties {
       long listenerLocalAs,
       ConfedSessionType confedSessionType) {
     Ip listenerIp = listener.getLocalIp();
-    if (listenerIp == null || Ip.AUTO.equals(listenerIp)) {
+    if (listenerIp == null) {
       // Determine listener's IP from initiator.
       // Listener must be active or dynamic, because unnumbered peers always have localIP defined.
       // Therefore initiator must be active since unnumbered peers only peer with each other.
@@ -400,9 +400,11 @@ public final class BgpSessionProperties {
                 initiatorLocalAs,
                 initiator.getConfederationAsn(),
                 initiator.getRemoteAsns(),
+                null,
                 listenerLocalAs,
                 listener.getConfederationAsn(),
-                listener.getRemoteAsns()));
+                listener.getRemoteAsns(),
+                null));
     return from(
         initiator,
         initiatorLocalIp,

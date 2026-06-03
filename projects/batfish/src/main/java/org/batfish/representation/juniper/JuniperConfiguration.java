@@ -7,12 +7,13 @@ import static org.batfish.datamodel.BumTransportMethod.UNICAST_FLOOD_GROUP;
 import static org.batfish.datamodel.Names.escapeNameIfNeeded;
 import static org.batfish.datamodel.Names.generatedBgpPeerExportPolicyName;
 import static org.batfish.datamodel.Names.generatedBgpPeerImportPolicyName;
+import static org.batfish.datamodel.Names.generatedFibExportPolicyName;
 import static org.batfish.datamodel.Names.zoneToZoneFilter;
 import static org.batfish.datamodel.acl.AclLineMatchExprs.and;
 import static org.batfish.datamodel.acl.AclLineMatchExprs.matchSrcInterface;
 import static org.batfish.datamodel.acl.AclLineMatchExprs.or;
-import static org.batfish.datamodel.bgp.AllowRemoteAsOutMode.ALWAYS;
 import static org.batfish.datamodel.bgp.AllowRemoteAsOutMode.EXCEPT_FIRST;
+import static org.batfish.datamodel.bgp.AllowRemoteAsOutMode.EXCEPT_RECEIVED_FROM;
 import static org.batfish.datamodel.bgp.LocalOriginationTypeTieBreaker.NO_PREFERENCE;
 import static org.batfish.datamodel.bgp.NextHopIpTieBreaker.HIGHEST_NEXT_HOP_IP;
 import static org.batfish.datamodel.routing_policy.statement.Statements.ReturnFalse;
@@ -74,11 +75,13 @@ import org.batfish.datamodel.BgpAuthenticationSettings;
 import org.batfish.datamodel.BgpPassivePeerConfig;
 import org.batfish.datamodel.BgpPeerConfig.Builder;
 import org.batfish.datamodel.BgpProcess;
+import org.batfish.datamodel.Bgpv4ToEvpnVrfLeakConfig;
 import org.batfish.datamodel.ConcreteInterfaceAddress;
 import org.batfish.datamodel.Configuration;
 import org.batfish.datamodel.ConfigurationFormat;
 import org.batfish.datamodel.ConnectedRouteMetadata;
 import org.batfish.datamodel.DeviceModel;
+import org.batfish.datamodel.EvpnToBgpv4VrfLeakConfig;
 import org.batfish.datamodel.ExprAclLine;
 import org.batfish.datamodel.FirewallSessionInterfaceInfo;
 import org.batfish.datamodel.FirewallSessionInterfaceInfo.Action;
@@ -129,8 +132,12 @@ import org.batfish.datamodel.acl.PermittedByAcl;
 import org.batfish.datamodel.acl.TrueExpr;
 import org.batfish.datamodel.bgp.AddressFamilyCapabilities;
 import org.batfish.datamodel.bgp.BgpConfederation;
+import org.batfish.datamodel.bgp.EvpnAddressFamily;
 import org.batfish.datamodel.bgp.Ipv4UnicastAddressFamily;
+import org.batfish.datamodel.bgp.Layer3VniConfig;
+import org.batfish.datamodel.bgp.RouteDistinguisher;
 import org.batfish.datamodel.bgp.community.Community;
+import org.batfish.datamodel.bgp.community.ExtendedCommunity;
 import org.batfish.datamodel.dataplane.rib.RibId;
 import org.batfish.datamodel.isis.IsisInterfaceMode;
 import org.batfish.datamodel.isis.IsisLevel;
@@ -160,7 +167,9 @@ import org.batfish.datamodel.routing_policy.communities.CommunitySetMatchAll;
 import org.batfish.datamodel.routing_policy.communities.CommunitySetMatchExpr;
 import org.batfish.datamodel.routing_policy.communities.CommunitySetNot;
 import org.batfish.datamodel.routing_policy.communities.HasCommunity;
+import org.batfish.datamodel.routing_policy.communities.InputCommunities;
 import org.batfish.datamodel.routing_policy.communities.LiteralCommunitySet;
+import org.batfish.datamodel.routing_policy.communities.MatchCommunities;
 import org.batfish.datamodel.routing_policy.communities.SetCommunities;
 import org.batfish.datamodel.routing_policy.expr.BooleanExpr;
 import org.batfish.datamodel.routing_policy.expr.BooleanExprs;
@@ -700,7 +709,8 @@ public final class JuniperConfiguration extends VendorConfiguration {
       if (advertisePeerAs == null) {
         advertisePeerAs = false;
       }
-      ipv4AfSettingsBuilder.setAllowRemoteAsOut(advertisePeerAs ? ALWAYS : EXCEPT_FIRST);
+      ipv4AfSettingsBuilder.setAllowRemoteAsOut(
+          advertisePeerAs ? EXCEPT_RECEIVED_FROM : EXCEPT_FIRST);
       Boolean advertiseExternal = ig.getAdvertiseExternal();
       if (advertiseExternal == null) {
         advertiseExternal = false;
@@ -852,9 +862,46 @@ public final class JuniperConfiguration extends VendorConfiguration {
 
       // inherit update-source
       neighbor.setLocalIp(ig.getLocalAddress());
+      // forwarding-context: resolve the VRF from which the BGP TCP session is sourced
+      String forwardingContext = ig.getForwardingContext();
+      if (forwardingContext != null) {
+        neighbor.setSessionVrf(
+            forwardingContext.equals(DEFAULT_ROUTING_INSTANCE_NAME)
+                ? Configuration.DEFAULT_VRF_NAME
+                : forwardingContext);
+      }
       neighbor.setBgpProcess(proc);
       neighbor.setIpv4UnicastAddressFamily(
           ipv4AfBuilder.setAddressFamilyCapabilities(ipv4AfSettingsBuilder.build()).build());
+
+      // EVPN address family — set when 'family evpn signaling' is configured on the group
+      if (Boolean.TRUE.equals(ig.getEvpnAf())) {
+        EvpnAddressFamily.Builder evpnAfBuilder =
+            EvpnAddressFamily.builder()
+                .setPropagateUnmatched(true)
+                .setAddressFamilyCapabilities(
+                    AddressFamilyCapabilities.builder()
+                        .setSendCommunity(true)
+                        .setSendExtendedCommunity(true)
+                        .build())
+                .setL2Vnis(convertL2VniConfigs())
+                .setL3Vnis(convertL3VniConfigs())
+                .setExportPolicy(peerExportPolicyName)
+                .setRouteReflectorClient(
+                    firstNonNull(ig.getClusterId(), routingInstance.getRouterId()) != null
+                        && ig.getClusterId() != null);
+        // NVE IP from vtep-source-interface
+        SwitchOptions so = _masterLogicalSystem.getSwitchOptions();
+        if (so != null && so.getVtepSourceInterface() != null) {
+          org.batfish.datamodel.Interface viIface =
+              _c.getAllInterfaces().get(so.getVtepSourceInterface());
+          if (viIface != null && viIface.getConcreteAddress() != null) {
+            evpnAfBuilder.setNveIp(viIface.getConcreteAddress().getIp());
+          }
+        }
+        neighbor.setEvpnAddressFamily(evpnAfBuilder.build());
+      }
+
       neighbor.build();
     }
     proc.setMultipathEbgp(multipathEbgp);
@@ -1400,9 +1447,7 @@ public final class JuniperConfiguration extends VendorConfiguration {
             e -> {
               String summaryFilterName =
                   "~OSPF_SUMMARY_FILTER:" + vrfName + ":" + e.getValue().getName() + "~";
-              RouteFilterList summaryFilter = new RouteFilterList(summaryFilterName);
-              _c.getRouteFilterLists().put(summaryFilterName, summaryFilter);
-              return toOspfAreaBuilder(e.getValue(), summaryFilter);
+              return toOspfAreaBuilder(e.getValue(), summaryFilterName);
             });
     // place interfaces into areas
     for (Entry<String, Interface> e : routingInstance.getInterfaces().entrySet()) {
@@ -1524,7 +1569,7 @@ public final class JuniperConfiguration extends VendorConfiguration {
   }
 
   private org.batfish.datamodel.ospf.OspfArea.Builder toOspfAreaBuilder(
-      OspfArea area, RouteFilterList summaryFilter) {
+      OspfArea area, String summaryFilterName) {
     org.batfish.datamodel.ospf.OspfArea.Builder newAreaBuilder =
         org.batfish.datamodel.ospf.OspfArea.builder();
     newAreaBuilder.setNumber(area.getName());
@@ -1536,6 +1581,8 @@ public final class JuniperConfiguration extends VendorConfiguration {
     newAreaBuilder.setMetricOfDefaultRoute(area.getMetricOfDefaultRoute());
 
     // Add summary filters for each area summary
+    ImmutableList.Builder<org.batfish.datamodel.RouteFilterLine> summaryLines =
+        ImmutableList.builder();
     for (Entry<Prefix, OspfAreaSummary> e2 : area.getSummaries().entrySet()) {
       Prefix prefix = e2.getKey();
       OspfAreaSummary summary = e2.getValue();
@@ -1544,18 +1591,20 @@ public final class JuniperConfiguration extends VendorConfiguration {
           summary.isAdvertised()
               ? Math.min(Prefix.MAX_PREFIX_LENGTH, prefixLength + 1)
               : prefixLength;
-      summaryFilter.addLine(
+      summaryLines.add(
           new org.batfish.datamodel.RouteFilterLine(
               LineAction.DENY,
               IpWildcard.create(prefix),
               new SubRange(filterMinPrefixLength, Prefix.MAX_PREFIX_LENGTH)));
     }
-    summaryFilter.addLine(
+    summaryLines.add(
         new org.batfish.datamodel.RouteFilterLine(
             LineAction.PERMIT,
             IpWildcard.create(Prefix.ZERO),
             new SubRange(0, Prefix.MAX_PREFIX_LENGTH)));
-    newAreaBuilder.setSummaryFilter(summaryFilter.getName());
+    RouteFilterList summaryFilter = new RouteFilterList(summaryFilterName, summaryLines.build());
+    _c.getRouteFilterLists().put(summaryFilterName, summaryFilter);
+    newAreaBuilder.setSummaryFilter(summaryFilterName);
     return newAreaBuilder;
   }
 
@@ -1753,12 +1802,14 @@ public final class JuniperConfiguration extends VendorConfiguration {
     String rflName = computeContributorRouteFilterListName(prefix);
     MatchPrefixSet isContributingRoute =
         new MatchPrefixSet(DestinationNetwork.instance(), new NamedPrefixSet(rflName));
-    RouteFilterList rfList = new RouteFilterList(rflName);
-    rfList.addLine(
-        new org.batfish.datamodel.RouteFilterLine(
-            LineAction.PERMIT,
-            prefix,
-            new SubRange(prefix.getPrefixLength() + 1, Prefix.MAX_PREFIX_LENGTH)));
+    RouteFilterList rfList =
+        new RouteFilterList(
+            rflName,
+            ImmutableList.of(
+                new org.batfish.datamodel.RouteFilterLine(
+                    LineAction.PERMIT,
+                    prefix,
+                    new SubRange(prefix.getPrefixLength() + 1, Prefix.MAX_PREFIX_LENGTH))));
     _c.getRouteFilterLists().put(rflName, rfList);
 
     // contributor check that exits for non-contributing routes
@@ -2118,43 +2169,30 @@ public final class JuniperConfiguration extends VendorConfiguration {
       if (vxlan.getVniId() == null) {
         continue;
       }
-      String l3Interface = vxlan.getL3Interface();
-      if (l3Interface == null) {
-        if (vxlan.getVlanId() == null) {
-          continue;
-        }
-        // Should be a l2vni
-        Layer2Vni vniSettings =
-            Layer2Vni.builder()
-                .setVni(vxlan.getVniId())
-                .setVlan(vxlan.getVlanId())
-                .setUdpPort(Vni.DEFAULT_UDP_PORT)
-                .setBumTransportMethod(UNICAST_FLOOD_GROUP)
-                .setSrcVrf(_masterLogicalSystem.getDefaultRoutingInstance().getName())
-                .build();
-        _c.getDefaultVrf().addLayer2Vni(vniSettings);
-      } else {
-        String vtepSource = _masterLogicalSystem.getSwitchOptions().getVtepSourceInterface();
-        if (vtepSource == null) {
-          continue;
-        }
-        Interface iface =
-            _masterLogicalSystem.getDefaultRoutingInstance().getInterfaces().get(l3Interface);
-        if (iface == null) {
-          continue;
-        }
-        if (iface.getPrimaryAddress() == null) {
-          continue;
-        }
-        Layer3Vni vniSettings =
-            Layer3Vni.builder()
-                .setVni(vxlan.getVniId())
-                .setSourceAddress(iface.getPrimaryAddress().getIp())
-                .setUdpPort(Vni.DEFAULT_UDP_PORT)
-                .setSrcVrf(iface.getRoutingInstance().getName())
-                .build();
-        _c.getAllInterfaces().get(l3Interface).getVrf().addLayer3Vni(vniSettings);
+      if (vxlan.getVlanId() == null) {
+        continue;
       }
+      String vtepSource = _masterLogicalSystem.getSwitchOptions().getVtepSourceInterface();
+      if (vtepSource == null) {
+        continue;
+      }
+      Interface iface =
+          _masterLogicalSystem.getDefaultRoutingInstance().getInterfaces().get(vtepSource);
+      if (iface == null) {
+        continue;
+      }
+
+      // Should be a l2vni
+      Layer2Vni vniSettings =
+          Layer2Vni.builder()
+              .setVni(vxlan.getVniId())
+              .setVlan(vxlan.getVlanId())
+              .setUdpPort(Vni.DEFAULT_UDP_PORT)
+              .setBumTransportMethod(UNICAST_FLOOD_GROUP)
+              .setSrcVrf(_masterLogicalSystem.getDefaultRoutingInstance().getName())
+              .setSourceAddress(iface.getPrimaryAddress().getIp())
+              .build();
+      _c.getDefaultVrf().addLayer2Vni(vniSettings);
     }
   }
 
@@ -2831,7 +2869,7 @@ public final class JuniperConfiguration extends VendorConfiguration {
     } else if (externalIface != null && externalIface.getPrimaryAddress() != null) {
       localAddress = externalIface.getPrimaryAddress().getIp();
     }
-    if (localAddress == null || !localAddress.valid()) {
+    if (localAddress == null) {
       _w.redFlagf(
           "External interface %s configured on IKE Gateway %s does not have any IP",
           externalIfaceName, ikeGateway.getName());
@@ -3109,6 +3147,7 @@ public final class JuniperConfiguration extends VendorConfiguration {
   @VisibleForTesting
   RoutingPolicy toRoutingPolicy(PolicyStatement ps) {
     detectMisplacedTerminalActions(ps);
+    detectCommunityActionOverlaps(ps);
 
     // Ensure map of VRFs referenced in routing policies is initialized
     if (_vrfReferencesInPolicies == null) {
@@ -3143,8 +3182,8 @@ public final class JuniperConfiguration extends VendorConfiguration {
             }
             if (!line.getThens().isEmpty()) {
               String lineListName = name + "_ACTION_LINE_" + actionLineCounter;
-              RouteFilterList lineSpecificList = new RouteFilterList(lineListName);
-              ((Route4FilterLine) line).applyTo(lineSpecificList);
+              RouteFilterList lineSpecificList =
+                  new RouteFilterList(lineListName, ((Route4FilterLine) line).toRouteFilterLines());
               actionLineCounter++;
               _c.getRouteFilterLists().put(lineListName, lineSpecificList);
               If lineSpecificIfStatement = new If();
@@ -3266,6 +3305,9 @@ public final class JuniperConfiguration extends VendorConfiguration {
     if (!froms.getFromTags().isEmpty()) {
       conj.getConjuncts().add(new Disjunction(toBooleanExprs(froms.getFromTags())));
     }
+    if (froms.getFromValidationDatabase() != null) {
+      conj.getConjuncts().add(froms.getFromValidationDatabase().toBooleanExpr(this, _c, _w));
+    }
 
     if (!subroutines.isEmpty()) {
       ConjunctionChain chain = new ConjunctionChain(subroutines);
@@ -3288,11 +3330,22 @@ public final class JuniperConfiguration extends VendorConfiguration {
         || then instanceof PsThenNextPolicy;
   }
 
-  private List<Statement> toStatements(Set<PsThen> thens) {
+  private List<Statement> toStatements(List<PsThen> thens) {
+    // If `next term` or `next policy` is present, it suppresses any `accept`/`reject` in the
+    // same term: both lines are retained at commit, but at runtime the `accept`/`reject` does
+    // not fire. default-action is unaffected.
+    boolean hasNextTermOrPolicy =
+        thens.stream().anyMatch(t -> t instanceof PsThenNextTerm || t instanceof PsThenNextPolicy);
+    Stream<PsThen> filtered =
+        hasNextTermOrPolicy
+            ? thens.stream()
+                .filter(t -> !(t instanceof PsThenAccept) && !(t instanceof PsThenReject))
+            : thens.stream();
+    List<PsThen> all = filtered.collect(ImmutableList.toImmutableList());
     List<Statement> thenStatements = new ArrayList<>();
     Stream.concat(
-            thens.stream().filter(then -> !isFinalThen(then)),
-            thens.stream().filter(JuniperConfiguration::isFinalThen))
+            all.stream().filter(then -> !isFinalThen(then)),
+            all.stream().filter(JuniperConfiguration::isFinalThen))
         .forEach(then -> then.applyTo(thenStatements, this, _c, _w));
     return thenStatements;
   }
@@ -3370,7 +3423,12 @@ public final class JuniperConfiguration extends VendorConfiguration {
         viStaticRoutes.add(rBuilder.setNextHop(NextHopInterface.of(nhInt)).build());
       }
       for (Ip nhIp : route.getNextHopIp()) {
-        viStaticRoutes.add(rBuilder.setNextHop(NextHopIp.of(nhIp)).build());
+        if (nhIp.equals(Ip.ZERO)) {
+          // next-hop 0.0.0.0 is not a valid next-hop IP, treat as discard.
+          viStaticRoutes.add(rBuilder.setNextHop(NextHopDiscard.instance()).build());
+        } else {
+          viStaticRoutes.add(rBuilder.setNextHop(NextHopIp.of(nhIp)).build());
+        }
       }
     }
 
@@ -3610,12 +3668,13 @@ public final class JuniperConfiguration extends VendorConfiguration {
       String name = e.getKey();
       RouteFilter rf = e.getValue();
       if (rf.getIpv4()) {
-        RouteFilterList rfl = new RouteFilterList(name);
-        for (RouteFilterLine line : rf.getLines()) {
-          if (line instanceof Route4FilterLine && line.getThens().isEmpty()) {
-            ((Route4FilterLine) line).applyTo(rfl);
-          }
-        }
+        RouteFilterList rfl =
+            new RouteFilterList(
+                name,
+                rf.getLines().stream()
+                    .filter(line -> line instanceof Route4FilterLine && line.getThens().isEmpty())
+                    .flatMap(line -> ((Route4FilterLine) line).toRouteFilterLines().stream())
+                    .collect(ImmutableList.toImmutableList()));
         _c.getRouteFilterLists().put(name, rfl);
       }
     }
@@ -3624,6 +3683,9 @@ public final class JuniperConfiguration extends VendorConfiguration {
 
     // convert interfaces. Before policies because some policies depend on interfaces
     convertInterfaces();
+
+    // validate xSTP interface references have family ethernet-switching
+    validateXstpInterfaces();
 
     // convert conditions to TrackMethod objects
     _masterLogicalSystem
@@ -3739,6 +3801,7 @@ public final class JuniperConfiguration extends VendorConfiguration {
       String riName = e.getKey();
       RoutingInstance ri = e.getValue();
       Vrf vrf = _c.getVrfs().get(riName);
+      vrf.setRouteDistinguisher(ri.getRouteDistinguisher());
 
       // dhcp relay
       for (Entry<String, DhcpRelayGroup> e2 : ri.getDhcpRelayGroups().entrySet()) {
@@ -3882,6 +3945,7 @@ public final class JuniperConfiguration extends VendorConfiguration {
             .ifPresent(ip -> vrf.setSourceIpInference(UseConstantIp.create(ip)));
       }
       convertResolution(ri);
+      convertForwardingTableExport(ri);
     }
 
     // static nats
@@ -3899,6 +3963,9 @@ public final class JuniperConfiguration extends VendorConfiguration {
 
     // convert vxlan.
     convertVxlan();
+
+    // convert EVPN Type-5 VRF leaking (after VRFs and policies exist)
+    convertEvpnVrfLeaking();
 
     return _c;
   }
@@ -3987,6 +4054,285 @@ public final class JuniperConfiguration extends VendorConfiguration {
     }.visit(vlanId);
   }
 
+  /**
+   * Converts EVPN ip-prefix-routes configuration into EVPN VRF leaking on the VI model. For each RI
+   * with ip-prefix-routes and a VNI, creates: (1) Bgpv4ToEvpnVrfLeakConfig on the default VRF
+   * (exports from tenant VRF's BGP into EVPN), (2) EvpnToBgpv4VrfLeakConfig on each importing
+   * tenant VRF, (3) Layer3Vni on the tenant VRF, and (4) a BGP process with redistribution policy
+   * on tenant VRFs that lack one.
+   */
+  @VisibleForTesting
+  void convertEvpnVrfLeaking() {
+    Vrf defaultVrf = _c.getVrfs().get(Configuration.DEFAULT_VRF_NAME);
+    if (defaultVrf == null) {
+      // Can this be an assert? Is defaultVrf always created in the Junos config builder?
+      return;
+    }
+    RoutingInstance defaultRi = _masterLogicalSystem.getDefaultRoutingInstance();
+    Ip vtepSourceIp = null;
+    SwitchOptions so = _masterLogicalSystem.getSwitchOptions();
+    if (so != null && so.getVtepSourceInterface() != null) {
+      org.batfish.datamodel.Interface viIface =
+          _c.getAllInterfaces().get(so.getVtepSourceInterface());
+      if (viIface != null && viIface.getConcreteAddress() != null) {
+        vtepSourceIp = viIface.getConcreteAddress().getIp();
+      }
+    }
+
+    for (Entry<String, RoutingInstance> e : _masterLogicalSystem.getRoutingInstances().entrySet()) {
+      String riName = e.getKey();
+      RoutingInstance ri = e.getValue();
+      if (riName.equals(Configuration.DEFAULT_VRF_NAME)) {
+        continue;
+      }
+      EvpnIpPrefixRoutes ipr = ri.getEvpnIpPrefixRoutes();
+      if (ipr == null) {
+        continue;
+      }
+
+      boolean iprMalformed = false;
+      if (ipr.getVni() == null) {
+        _w.redFlagf(
+            "IP-VRF not created for routing-instance %s: missing \"ip-prefix-routes vni\"", riName);
+        iprMalformed = true;
+      }
+      if (ipr.getAdvertise() == null) {
+        _w.redFlagf(
+            "IP-VRF not created for routing-instance %s: missing \"ip-prefix-routes advertise\"",
+            riName);
+        iprMalformed = true;
+      }
+      if (ipr.getEncapsulation() == null) {
+        _w.redFlagf(
+            "IP-VRF not created for routing-instance %s: missing \"ip-prefix-routes"
+                + " encapsulation\"",
+            riName);
+        iprMalformed = true;
+      }
+      // Resolve route-distinguisher
+      RouteDistinguisher rd = ri.getRouteDistinguisher();
+      if (rd == null) {
+        _w.redFlagf(
+            "IP-VRF not created for routing-instance %s: missing \"route-distinguisher\"", riName);
+        iprMalformed = true;
+      }
+      if (iprMalformed) {
+        continue;
+      }
+
+      Vrf tenantVrf = _c.getVrfs().get(riName);
+
+      if (tenantVrf == null) {
+        // Can this be an assert as well? Currently, toVendorIndependentConfiguration creates 1:1
+        // VRF:RI
+        continue;
+      }
+
+      // Phase 1: For each RI with ip-prefix-routes and VNI, create export config and Layer3Vni
+      // Create Layer3Vni on tenant VRF
+      Layer3Vni l3vni =
+          Layer3Vni.builder()
+              .setVni(ipr.getVni())
+              .setSourceAddress(vtepSourceIp)
+              .setUdpPort(Vni.DEFAULT_UDP_PORT)
+              .setSrcVrf(Configuration.DEFAULT_VRF_NAME)
+              .build();
+      tenantVrf.addLayer3Vni(l3vni);
+
+      boolean import_or_export_resolved = false;
+
+      // Create BGP process on tenant VRF if needed (for redistribution)
+      if (tenantVrf.getBgpProcess() == null) {
+        Ip routerId = Optional.ofNullable(ri.getRouterId()).orElse(defaultRi.getRouterId());
+        Long localAs = Optional.ofNullable(ri.getAs()).orElse(defaultRi.getAs());
+        if (routerId == null) {
+          _w.redFlagf("IP-VRF not created for routing-instance %s: missing \"router-id\"", riName);
+          continue;
+        }
+        if (localAs == null) {
+          _w.redFlagf(
+              "IP-VRF not created for routing-instance %s: missing \"autonomous-system\"", riName);
+          continue;
+        }
+        BgpProcess bgpProc = bgpProcessBuilder().setRouterId(routerId).build();
+        tenantVrf.setBgpProcess(bgpProc);
+      }
+
+      // Export policy setup
+      ExtendedCommunity exportRt =
+          Optional.ofNullable(ri.getVrfTargetExport()).orElse(ri.getVrfTargetCommunity());
+      if (exportRt == null) {
+        // Unusual configuration
+        _w.pedantic("IP-VRF missing vrf-target or vrf-target export in routing-instance " + riName);
+      } else {
+        // Create Bgpv4ToEvpnVrfLeakConfig on default VRF
+        getOrInitVrfLeakConfig(defaultVrf)
+            .addBgpv4ToEvpnVrfLeakConfig(
+                Bgpv4ToEvpnVrfLeakConfig.builder()
+                    .setImportFromVrf(riName)
+                    .setSrcVrfRouteDistinguisher(rd)
+                    .setAttachRouteTargets(ImmutableSet.of(exportRt))
+                    .build());
+
+        // Create redistribution policy on tenant VRF
+        String redistPolicyName = generatedEvpnIprRedistPolicyName(riName);
+        if (ipr.getExportPolicy() != null
+            && _c.getRoutingPolicies().containsKey(ipr.getExportPolicy())) {
+          // Use the configured export policy
+          RoutingPolicy redistPolicy =
+              RoutingPolicy.builder()
+                  .setOwner(_c)
+                  .setName(redistPolicyName)
+                  .addStatement(
+                      new If(
+                          new CallExpr(ipr.getExportPolicy()),
+                          ImmutableList.of(Statements.ReturnTrue.toStaticStatement())))
+                  .addStatement(Statements.ReturnFalse.toStaticStatement())
+                  .build();
+          _c.getRoutingPolicies().put(redistPolicyName, redistPolicy);
+        } else {
+          // Default: redistribute connected and static
+          RoutingPolicy redistPolicy =
+              RoutingPolicy.builder()
+                  .setOwner(_c)
+                  .setName(redistPolicyName)
+                  .addStatement(
+                      new If(
+                          new MatchProtocol(RoutingProtocol.CONNECTED, RoutingProtocol.STATIC),
+                          ImmutableList.of(Statements.ReturnTrue.toStaticStatement())))
+                  .addStatement(Statements.ReturnFalse.toStaticStatement())
+                  .build();
+          _c.getRoutingPolicies().put(redistPolicyName, redistPolicy);
+        }
+        tenantVrf.getBgpProcess().setRedistributionPolicy(redistPolicyName);
+        import_or_export_resolved = true;
+      }
+
+      // Phase 2: For each RI with an import RT matching an exported RT, create import config
+      String importPolicyName = null;
+      // Resolve export, import policies or communities
+
+      String vrfImport = ri.getVrfImportPolicy();
+      String iprImport = ipr.getImportPolicy();
+      ExtendedCommunity importRt =
+          Optional.ofNullable(ri.getVrfTargetImport()).orElse(ri.getVrfTargetCommunity());
+      if (vrfImport != null) {
+        if (iprImport != null) {
+          importPolicyName = generatedEvpnToBgpv4VrfLeakPolicyName(riName);
+          RoutingPolicy importPolicy =
+              RoutingPolicy.builder()
+                  .setOwner(_c)
+                  .setName(importPolicyName)
+                  .addStatement(
+                      new If(
+                          new CallExpr(vrfImport),
+                          ImmutableList.of(),
+                          ImmutableList.of(Statements.ReturnFalse.toStaticStatement())))
+                  .addStatement(
+                      new If(
+                          new CallExpr(iprImport),
+                          ImmutableList.of(Statements.ReturnTrue.toStaticStatement()),
+                          ImmutableList.of(Statements.ReturnFalse.toStaticStatement())))
+                  .build();
+          _c.getRoutingPolicies().put(importPolicyName, importPolicy);
+        } else {
+          importPolicyName = vrfImport;
+        }
+      } else if (iprImport != null) {
+        importPolicyName = iprImport;
+      } else if (importRt != null) {
+        // Create import policy matching the RT community
+        importPolicyName = generatedEvpnToBgpv4VrfLeakPolicyName(riName);
+        RoutingPolicy importPolicy =
+            RoutingPolicy.builder()
+                .setOwner(_c)
+                .setName(importPolicyName)
+                .addStatement(
+                    new If(
+                        new MatchCommunities(
+                            InputCommunities.instance(),
+                            new HasCommunity(new CommunityIs(importRt))),
+                        ImmutableList.of(Statements.ReturnTrue.toStaticStatement())))
+                .addStatement(Statements.ReturnFalse.toStaticStatement())
+                .build();
+        _c.getRoutingPolicies().put(importPolicyName, importPolicy);
+      }
+
+      if (importPolicyName != null) {
+        getOrInitVrfLeakConfig(tenantVrf)
+            .addEvpnToBgpv4VrfLeakConfig(
+                EvpnToBgpv4VrfLeakConfig.builder()
+                    .setImportFromVrf(Configuration.DEFAULT_VRF_NAME)
+                    .setImportPolicy(importPolicyName)
+                    .build());
+        import_or_export_resolved = true;
+      } else {
+        _w.pedantic("IP-VRF missing import policy or vrf-target in routing-instance " + riName);
+      }
+
+      if (!import_or_export_resolved) {
+        _w.redFlagf("IP-VRF missing import or export policy in routing-instance %s", riName);
+      }
+    }
+  }
+
+  private static String generatedEvpnIprRedistPolicyName(String vrfName) {
+    return "~EVPN_IPR_REDIST_POLICY:" + vrfName + "~";
+  }
+
+  private static String generatedEvpnToBgpv4VrfLeakPolicyName(String vrfName) {
+    return "~EVPN_TO_BGPV4_VRF_LEAK_POLICY:" + vrfName + "~";
+  }
+
+  /** Build L3 VNI configs for the EVPN address family on BGP peers. */
+  private ImmutableSortedSet<Layer3VniConfig> convertL3VniConfigs() {
+    ImmutableSortedSet.Builder<Layer3VniConfig> l3vnis = ImmutableSortedSet.naturalOrder();
+    for (Entry<String, RoutingInstance> e : _masterLogicalSystem.getRoutingInstances().entrySet()) {
+      String riName = e.getKey();
+      RoutingInstance ri = e.getValue();
+      if (riName.equals(Configuration.DEFAULT_VRF_NAME)) {
+        continue;
+      }
+      EvpnIpPrefixRoutes ipr = ri.getEvpnIpPrefixRoutes();
+      if (ipr == null || ipr.getVni() == null) {
+        continue;
+      }
+      RouteDistinguisher rd = ri.getRouteDistinguisher();
+      if (rd == null) {
+        continue;
+      }
+      ExtendedCommunity exportRt = ri.getVrfTargetExport();
+      if (exportRt == null) {
+        exportRt = ri.getVrfTargetCommunity();
+      }
+      if (exportRt == null) {
+        continue;
+      }
+      ExtendedCommunity importRt = ri.getVrfTargetImport();
+      if (importRt == null) {
+        importRt = ri.getVrfTargetCommunity();
+      }
+      // importRouteTarget is a regex pattern matching route targets
+      String importRtPattern = importRt != null ? "^" + importRt.matchString() + "$" : ".*";
+      l3vnis.add(
+          Layer3VniConfig.builder()
+              .setVni(ipr.getVni())
+              .setVrf(riName)
+              .setRouteDistinguisher(rd)
+              .setRouteTarget(exportRt)
+              .setImportRouteTarget(importRtPattern)
+              .setAdvertiseV4Unicast(true)
+              .build());
+    }
+    return l3vnis.build();
+  }
+
+  /** Build L2 VNI configs for the EVPN address family on BGP peers. */
+  private ImmutableSortedSet<org.batfish.datamodel.bgp.Layer2VniConfig> convertL2VniConfigs() {
+    // L2 VNI support is not the focus of Type-5 but needed for EVPN AF completeness
+    return ImmutableSortedSet.of();
+  }
+
   private static @Nonnull VrfLeakConfig getOrInitVrfLeakConfig(Vrf vrf) {
     if (vrf.getVrfLeakConfig() == null) {
       vrf.setVrfLeakConfig(new VrfLeakConfig(false));
@@ -4029,6 +4375,67 @@ public final class JuniperConfiguration extends VendorConfiguration {
                     ImmutableList.of(ReturnFalse.toStaticStatement()))))
         .build();
     _c.getVrfs().get(ri.getName()).setResolutionPolicy(policyName);
+  }
+
+  private void convertForwardingTableExport(RoutingInstance ri) {
+    String policyName = ri.getForwardingTableExportPolicy();
+    if (policyName == null) {
+      return;
+    }
+    if (!_c.getRoutingPolicies().containsKey(policyName)) {
+      return;
+    }
+    // Wrap the user's policy in a generated policy that sets the default action to accept. On
+    // Junos, routes not explicitly rejected by the forwarding-table export policy are installed in
+    // the FIB (the default forwarding-table behavior is accept-all).
+    String generatedName = generatedFibExportPolicyName(ri.getName());
+    RoutingPolicy.builder()
+        .setOwner(_c)
+        .setName(generatedName)
+        .addStatement(Statements.SetDefaultActionAccept.toStaticStatement())
+        .addStatement(
+            new If(
+                new CallExpr(policyName),
+                ImmutableList.of(Statements.ExitAccept.toStaticStatement()),
+                ImmutableList.of(Statements.ExitReject.toStaticStatement())))
+        .build();
+    _c.getVrfs().get(ri.getName()).setFibExportPolicy(generatedName);
+    warnForwardingTableExportActions(policyName);
+  }
+
+  /**
+   * Emit warnings for policy actions that have no effect in the forwarding-table export context. On
+   * Junos, only accept/reject and load-balance/source-class are meaningful; all other attribute
+   * mutations (metric, next-hop, community, etc.) are no-ops.
+   */
+  private void warnForwardingTableExportActions(String policyName) {
+    PolicyStatement ps = _masterLogicalSystem.getPolicyStatements().get(policyName);
+    if (ps == null) {
+      return;
+    }
+    for (PsTerm term : ps.getTerms().values()) {
+      warnForwardingTableExportTermActions(policyName, term);
+    }
+    warnForwardingTableExportTermActions(policyName, ps.getDefaultTerm());
+  }
+
+  private void warnForwardingTableExportTermActions(String policyName, PsTerm term) {
+    for (PsThen then : term.getThens().getAllThens()) {
+      if (then instanceof PsThenAccept
+          || then instanceof PsThenReject
+          || then instanceof PsThenDefaultActionAccept
+          || then instanceof PsThenDefaultActionReject
+          || then instanceof PsThenNextPolicy
+          || then instanceof PsThenNextTerm
+          || then instanceof PsThenLoadBalance) {
+        // Control flow or forwarding-table-specific actions — no warning.
+        continue;
+      }
+      _w.riskyRedFlag(
+          "forwarding-table export %s term %s: %s has no effect"
+              + " (only accept/reject affects forwarding-table export)",
+          policyName, term.getName(), then.getClass().getSimpleName());
+    }
   }
 
   private void convertFirewallFiltersToIpAccessLists() {
@@ -4169,6 +4576,18 @@ public final class JuniperConfiguration extends VendorConfiguration {
       }
     }
     return Optional.empty();
+  }
+
+  private void validateXstpInterfaces() {
+    for (String ifaceName : _masterLogicalSystem.getXstpInterfaceNames()) {
+      Optional<Interface> optIface = getInterfaceOrUnitByName(ifaceName);
+      if (optIface.isEmpty()) {
+        continue;
+      }
+      if (optIface.get().getEthernetSwitching() == null) {
+        _w.fatalRedFlag("XSTP : Interface %s is not enabled for Ethernet Switching", ifaceName);
+      }
+    }
   }
 
   private void convertInterfaces() {
@@ -4415,6 +4834,10 @@ public final class JuniperConfiguration extends VendorConfiguration {
       FirewallFilter inboundInterfaceFilter = e.getValue();
       String inboundInterfaceFilterName = inboundInterfaceFilter.getName();
       org.batfish.datamodel.Interface newIface = _c.getAllInterfaces().get(inboundInterfaceName);
+      if (newIface == null) {
+        // undefined reference to inboundInterfaceName
+        continue;
+      }
       newZone.getInboundInterfaceFiltersNames().put(newIface.getName(), inboundInterfaceFilterName);
     }
 
@@ -4503,7 +4926,7 @@ public final class JuniperConfiguration extends VendorConfiguration {
               if (nextTerminalAction.isPresent()) {
                 // Check that the terminal action is the ONLY action.
                 // If there are multiple thens, some are likely mutating actions that are skipped
-                Set<PsThen> allThens = nextTerm.getThens().getAllThens();
+                List<PsThen> allThens = nextTerm.getThens().getAllThens();
                 if (allThens.size() == 1) {
                   return;
                 }
@@ -4540,7 +4963,16 @@ public final class JuniperConfiguration extends VendorConfiguration {
       return Optional.empty();
     }
 
-    return term.getThens().getAllThens().stream()
+    List<PsThen> allThens = term.getThens().getAllThens();
+    // `next term` overrides any accept/reject in the same term: at runtime the route falls
+    // through to the next term, so this term is not terminal. (`next term` and `next policy`
+    // share a last-wins slot in PsThens, so at most one is present here.)
+    if (allThens.stream().anyMatch(t -> t instanceof PsThenNextTerm)) {
+      return Optional.empty();
+    }
+    // `next policy` similarly suppresses accept/reject at runtime, but it does terminate
+    // policy evaluation (returning the route to BGP processing), so it is the terminal action.
+    return allThens.stream()
         .filter(
             then ->
                 then instanceof PsThenAccept
@@ -4560,6 +4992,61 @@ public final class JuniperConfiguration extends VendorConfiguration {
     } else {
       throw new IllegalArgumentException(
           "Unknown terminal action type: " + terminalAction.getClass().getSimpleName());
+    }
+  }
+
+  /**
+   * Detects {@code then community add/set X; then community delete Y} same-term sequences where
+   * {@code X} and {@code Y} can match overlapping communities, so the just-added community is
+   * silently removed by the later delete.
+   */
+  private void detectCommunityActionOverlaps(PolicyStatement policy) {
+    Map<String, NamedCommunity> namedCommunities = _masterLogicalSystem.getNamedCommunities();
+    for (PsTerm term : policy.getTerms().values()) {
+      if (term.getThens() == null) {
+        continue;
+      }
+      List<PsThen> thens = term.getThens().getAllThens();
+      for (int i = 0; i < thens.size(); i++) {
+        PsThen earlier = thens.get(i);
+        if (!(earlier instanceof PsThenCommunityAdd || earlier instanceof PsThenCommunitySet)) {
+          continue;
+        }
+        String addName =
+            earlier instanceof PsThenCommunityAdd
+                ? ((PsThenCommunityAdd) earlier).getName()
+                : ((PsThenCommunitySet) earlier).getName();
+        NamedCommunity addCommunity = namedCommunities.get(addName);
+        if (addCommunity == null) {
+          continue;
+        }
+        String addVerb = earlier instanceof PsThenCommunityAdd ? "add" : "set";
+        for (int j = i + 1; j < thens.size(); j++) {
+          PsThen later = thens.get(j);
+          if (!(later instanceof PsThenCommunityDelete)) {
+            continue;
+          }
+          String delName = ((PsThenCommunityDelete) later).getName();
+          NamedCommunity delCommunity = namedCommunities.get(delName);
+          if (delCommunity == null) {
+            continue;
+          }
+          List<String> overlap =
+              CommunityActionOverlap.overlappingCommunities(addCommunity, delCommunity);
+          if (overlap.isEmpty()) {
+            continue;
+          }
+          _w.riskyRedFlag(
+              "'policy-statement %s term %s': then community %s %s adds %s, which is also matched"
+                  + " by then community delete %s in the same term, so it is removed",
+              policy.getName(),
+              term.getName(),
+              addVerb,
+              addName,
+              String.join(", ", overlap),
+              delName);
+        }
+      }
     }
   }
 

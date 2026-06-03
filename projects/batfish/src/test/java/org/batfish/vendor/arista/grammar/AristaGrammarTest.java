@@ -5,12 +5,13 @@ import static java.nio.charset.StandardCharsets.UTF_8;
 import static org.batfish.common.matchers.ParseWarningMatchers.hasComment;
 import static org.batfish.common.matchers.ParseWarningMatchers.hasText;
 import static org.batfish.common.util.Resources.readResource;
+import static org.batfish.datamodel.BgpRoute.DEFAULT_LOCAL_PREFERENCE;
+import static org.batfish.datamodel.BgpRoute.DEFAULT_LOCAL_WEIGHT;
 import static org.batfish.datamodel.ConfigurationFormat.ARISTA;
 import static org.batfish.datamodel.Names.bgpNeighborStructureName;
 import static org.batfish.datamodel.Names.generatedBgpPeerEvpnExportPolicyName;
 import static org.batfish.datamodel.Names.generatedBgpPeerExportPolicyName;
 import static org.batfish.datamodel.Names.generatedBgpRedistributionPolicyName;
-import static org.batfish.datamodel.Route.UNSET_ROUTE_NEXT_HOP_IP;
 import static org.batfish.datamodel.acl.AclLineMatchExprs.and;
 import static org.batfish.datamodel.acl.AclLineMatchExprs.matchDst;
 import static org.batfish.datamodel.acl.AclLineMatchExprs.matchSrc;
@@ -34,18 +35,18 @@ import static org.batfish.datamodel.matchers.ConfigurationMatchers.hasDefaultVrf
 import static org.batfish.datamodel.matchers.ConfigurationMatchers.hasInterface;
 import static org.batfish.datamodel.matchers.ConfigurationMatchers.hasIpAccessList;
 import static org.batfish.datamodel.matchers.ConfigurationMatchers.hasMlagConfig;
-import static org.batfish.datamodel.matchers.DataModelMatchers.hasBandwidth;
-import static org.batfish.datamodel.matchers.DataModelMatchers.hasDefinedStructureWithDefinitionLines;
-import static org.batfish.datamodel.matchers.DataModelMatchers.hasNoUndefinedReferences;
-import static org.batfish.datamodel.matchers.DataModelMatchers.hasNumReferrers;
-import static org.batfish.datamodel.matchers.DataModelMatchers.hasRedFlagWarning;
-import static org.batfish.datamodel.matchers.DataModelMatchers.hasUndefinedReference;
+import static org.batfish.datamodel.matchers.ConvertConfigurationAnswerElementMatchers.hasDefinedStructureWithDefinitionLines;
+import static org.batfish.datamodel.matchers.ConvertConfigurationAnswerElementMatchers.hasNoUndefinedReferences;
+import static org.batfish.datamodel.matchers.ConvertConfigurationAnswerElementMatchers.hasNumReferrers;
+import static org.batfish.datamodel.matchers.ConvertConfigurationAnswerElementMatchers.hasRedFlagWarning;
+import static org.batfish.datamodel.matchers.ConvertConfigurationAnswerElementMatchers.hasUndefinedReference;
 import static org.batfish.datamodel.matchers.FlowMatchers.hasDstIp;
 import static org.batfish.datamodel.matchers.FlowMatchers.hasSrcIp;
 import static org.batfish.datamodel.matchers.InterfaceMatchers.hasAccessVlan;
 import static org.batfish.datamodel.matchers.InterfaceMatchers.hasAddressMetadata;
 import static org.batfish.datamodel.matchers.InterfaceMatchers.hasAllAddresses;
 import static org.batfish.datamodel.matchers.InterfaceMatchers.hasAllowedVlans;
+import static org.batfish.datamodel.matchers.InterfaceMatchers.hasBandwidth;
 import static org.batfish.datamodel.matchers.InterfaceMatchers.hasDescription;
 import static org.batfish.datamodel.matchers.InterfaceMatchers.hasEncapsulationVlan;
 import static org.batfish.datamodel.matchers.InterfaceMatchers.hasInterfaceType;
@@ -76,10 +77,10 @@ import static org.batfish.datamodel.transformation.TransformationStep.assignDest
 import static org.batfish.datamodel.transformation.TransformationStep.assignSourceIp;
 import static org.batfish.main.BatfishTestUtils.DUMMY_SNAPSHOT_1;
 import static org.batfish.main.BatfishTestUtils.configureBatfishTestSettings;
-import static org.batfish.vendor.arista.representation.AristaConfiguration.DEFAULT_LOCAL_BGP_WEIGHT;
 import static org.batfish.vendor.arista.representation.AristaConfiguration.aclLineStructureName;
 import static org.batfish.vendor.arista.representation.AristaStructureType.BGP_LISTEN_RANGE;
 import static org.batfish.vendor.arista.representation.AristaStructureType.BGP_NEIGHBOR;
+import static org.batfish.vendor.arista.representation.AristaStructureType.BGP_PEER_GROUP;
 import static org.batfish.vendor.arista.representation.AristaStructureType.INTERFACE;
 import static org.batfish.vendor.arista.representation.AristaStructureType.MAC_ACCESS_LIST;
 import static org.batfish.vendor.arista.representation.AristaStructureType.POLICY_MAP;
@@ -154,6 +155,7 @@ import org.batfish.datamodel.BgpProcess;
 import org.batfish.datamodel.BgpSessionProperties;
 import org.batfish.datamodel.BgpSessionProperties.SessionType;
 import org.batfish.datamodel.BgpTieBreaker;
+import org.batfish.datamodel.BgpUnnumberedPeerConfig;
 import org.batfish.datamodel.Bgpv4Route;
 import org.batfish.datamodel.Bgpv4Route.Builder;
 import org.batfish.datamodel.BumTransportMethod;
@@ -191,6 +193,7 @@ import org.batfish.datamodel.SnmpCommunity;
 import org.batfish.datamodel.SnmpServer;
 import org.batfish.datamodel.SwitchportEncapsulationType;
 import org.batfish.datamodel.SwitchportMode;
+import org.batfish.datamodel.UnnumberedAddress;
 import org.batfish.datamodel.Vrf;
 import org.batfish.datamodel.VrrpGroup;
 import org.batfish.datamodel.acl.AclLineMatchExprs;
@@ -239,6 +242,7 @@ import org.batfish.vendor.arista.representation.IpAsPathAccessListLine;
 import org.batfish.vendor.arista.representation.MlagConfiguration;
 import org.batfish.vendor.arista.representation.NatProtocol;
 import org.batfish.vendor.arista.representation.OspfNetwork;
+import org.batfish.vendor.arista.representation.OspfProcess;
 import org.batfish.vendor.arista.representation.PrefixList;
 import org.batfish.vendor.arista.representation.PrefixListLine;
 import org.batfish.vendor.arista.representation.RouteMap;
@@ -513,6 +517,134 @@ public class AristaGrammarTest {
   }
 
   @Test
+  public void testBgpNeighborInterfaceExtraction() {
+    AristaConfiguration config = parseVendorConfig("arista_bgp_neighbor_interface");
+    AristaBgpVrf vrf = config.getAristaBgp().getDefaultVrf();
+    // Et99 was removed by `no neighbor interface`; Et50-51 added then removed by range;
+    // Et2-3,Et5 expands the comma-separated range.
+    assertThat(
+        vrf.getInterfaceNeighbors().keySet(),
+        containsInAnyOrder(
+            "Ethernet1",
+            "Ethernet2",
+            "Ethernet3",
+            "Ethernet5",
+            "Ethernet6",
+            "Ethernet8",
+            "Ethernet9",
+            "Ethernet3/1/1",
+            "Ethernet4/1/1",
+            "Ethernet5/1/1",
+            "Ethernet100"));
+    assertThat(vrf.getInterfaceNeighbors().get("Ethernet1").getPeerGroup(), equalTo("LEAVES"));
+    assertThat(vrf.getInterfaceNeighbors().get("Ethernet1").getPeerFilter(), equalTo("PF_LEAVES"));
+    assertThat(vrf.getInterfaceNeighbors().get("Ethernet1").getRemoteAs(), nullValue());
+    assertThat(vrf.getInterfaceNeighbors().get("Ethernet2").getPeerGroup(), equalTo("LEAVES"));
+    assertThat(vrf.getInterfaceNeighbors().get("Ethernet2").getPeerFilter(), nullValue());
+    assertThat(vrf.getInterfaceNeighbors().get("Ethernet2").getRemoteAs(), equalTo(65999L));
+    assertThat(vrf.getInterfaceNeighbors().get("Ethernet3").getRemoteAs(), equalTo(65999L));
+    assertThat(vrf.getInterfaceNeighbors().get("Ethernet5").getRemoteAs(), equalTo(65999L));
+    // elided-prefix comma list: prefix carries forward
+    assertThat(vrf.getInterfaceNeighbors().get("Ethernet4/1/1").getRemoteAs(), equalTo(65999L));
+    assertThat(vrf.getInterfaceNeighbors().get("Ethernet5/1/1").getPeerGroup(), equalTo("LEAVES"));
+    assertThat(vrf.getInterfaceNeighbors().get("Ethernet6").getPeerGroup(), equalTo("SHUT"));
+
+    AristaBgpVrf tenant = config.getAristaBgp().getVrfs().get("TENANT");
+    assertThat(tenant.getInterfaceNeighbors().keySet(), containsInAnyOrder("Ethernet10"));
+
+    // Parse-time warnings for bad prefix (`Xy1`) and too-large range (`Et200-2000`).
+    assertThat(
+        config.getWarnings().getParseWarnings(),
+        hasItems(
+            hasComment("Unrecognized interface name: Invalid interface name prefix: 'Xy'"),
+            hasComment(
+                "Interface range Ethernet[200,2000] exceeds 1000 entries; skipping this"
+                    + " range.")));
+  }
+
+  @Test
+  public void testBgpNeighborInterfaceConversion() throws IOException {
+    String hostname = "arista_bgp_neighbor_interface";
+    Batfish batfish = getBatfishForConfigurationNames(hostname);
+    ConvertConfigurationAnswerElement ccae =
+        batfish.loadConvertConfigurationAnswerElementOrReparse(batfish.getSnapshot());
+    Configuration c = parseConfig(hostname);
+    Map<String, BgpUnnumberedPeerConfig> neighbors =
+        c.getDefaultVrf().getBgpProcess().getInterfaceNeighbors();
+    // Dropped: Et6 (inherits shutdown from SHUT), Et99 (removed by `no`),
+    // Et100 (non-existent interface), Et9 (peer-group ISOLATED has no active AF
+    // under `no bgp default ipv4-unicast`).
+    assertThat(
+        neighbors.keySet(),
+        containsInAnyOrder(
+            "Ethernet1",
+            "Ethernet2",
+            "Ethernet3",
+            "Ethernet5",
+            "Ethernet8",
+            "Ethernet3/1/1",
+            "Ethernet4/1/1",
+            "Ethernet5/1/1"));
+    BgpUnnumberedPeerConfig et1 = neighbors.get("Ethernet1");
+    assertThat(et1.getPeerInterface(), equalTo("Ethernet1"));
+    assertThat(et1.getLocalAs(), equalTo(65001L));
+    assertThat(et1.getRemoteAsns(), equalTo(LongSpace.of(Range.closed(65100L, 65199L))));
+    assertThat(et1.getGroup(), equalTo("LEAVES"));
+    // `no bgp default ipv4-unicast` means v4 AF is null
+    assertThat(et1.getIpv4UnicastAddressFamily(), nullValue());
+    // EVPN inherited from peer-group LEAVES activate, send-community inherited too
+    assertThat(et1.getEvpnAddressFamily(), notNullValue());
+    assertThat(
+        et1.getEvpnAddressFamily().getAddressFamilyCapabilities().getSendCommunity(),
+        equalTo(true));
+    BgpUnnumberedPeerConfig et2 = neighbors.get("Ethernet2");
+    assertThat(et2.getRemoteAsns(), equalTo(LongSpace.of(65999L)));
+    // Et8 has no remote-as and no peer-filter
+    assertThat(neighbors.get("Ethernet8").getRemoteAsns(), equalTo(LongSpace.EMPTY));
+
+    Map<String, BgpUnnumberedPeerConfig> tenantNeighbors =
+        c.getVrfs().get("TENANT").getBgpProcess().getInterfaceNeighbors();
+    assertThat(tenantNeighbors.keySet(), containsInAnyOrder("Ethernet10"));
+
+    // Conversion-time warnings: non-existent interface (Et100) and no acceptable remote-as (Et8).
+    assertThat(
+        ccae,
+        hasRedFlagWarning(
+            hostname,
+            containsString(
+                "BGP interface neighbor Ethernet100 refers to a non-existent interface")));
+    assertThat(
+        ccae,
+        hasRedFlagWarning(
+            hostname,
+            containsString(
+                "No acceptable remote-as for BGP neighbor interface Ethernet8 in vrf default")));
+  }
+
+  @Test
+  public void testBgpNeighborInterfaceReferences() throws IOException {
+    String hostname = "arista_bgp_neighbor_interface";
+    String filename = "configs/" + hostname;
+    Batfish batfish = getBatfishForConfigurationNames(hostname);
+    ConvertConfigurationAnswerElement ccae =
+        batfish.loadConvertConfigurationAnswerElementOrReparse(batfish.getSnapshot());
+    assertThat(ccae, hasNumReferrers(filename, BGP_PEER_GROUP, "LEAVES", 11));
+    assertThat(ccae, hasNumReferrers(filename, BGP_PEER_GROUP, "SHUT", 1));
+  }
+
+  @Test
+  public void testBgpNeighborPrefixListIpv6AddressFamily() throws IOException {
+    String hostname = "arista_bgp_neighbor_prefix_list_ipv6_af";
+    AristaConfiguration vc = parseVendorConfig(hostname);
+    assertThat(vc.getWarnings().getParseWarnings(), empty());
+
+    Batfish batfish = getBatfishForConfigurationNames(hostname);
+    ConvertConfigurationAnswerElement ccae =
+        batfish.loadConvertConfigurationAnswerElementOrReparse(batfish.getSnapshot());
+    assertThat(ccae, hasNoUndefinedReferences());
+  }
+
+  @Test
   public void testAristaOspfReferenceBandwidth() throws IOException {
     Configuration manual = parseConfig("aristaOspfCost");
     assertThat(
@@ -522,6 +654,33 @@ public class AristaGrammarTest {
     assertThat(
         defaults.getDefaultVrf().getOspfProcesses().get("1").getReferenceBandwidth(),
         equalTo(getReferenceOspfBandwidth()));
+  }
+
+  @Test
+  public void testAristaOspfDefaultInterfaceCost() throws IOException {
+    // When auto-cost reference-bandwidth is not configured, EOS uses a flat default cost of 10
+    // for all interfaces, including loopbacks.
+    Configuration c = parseConfig("arista_ospf_default_cost");
+    assertThat(
+        c.getAllInterfaces().get("Loopback0").getOspfSettings().getCost(),
+        equalTo(OspfProcess.DEFAULT_INTERFACE_OSPF_COST));
+    assertThat(
+        c.getAllInterfaces().get("Ethernet1").getOspfSettings().getCost(),
+        equalTo(OspfProcess.DEFAULT_INTERFACE_OSPF_COST));
+    assertThat(c.getAllInterfaces().get("Ethernet2").getOspfSettings().getCost(), equalTo(42));
+  }
+
+  @Test
+  public void testAristaOspfAutoCostInterfaceCost() throws IOException {
+    // When auto-cost reference-bandwidth is configured, cost is computed from reference bandwidth.
+    Configuration c = parseConfig("arista_ospf_auto_cost");
+    assertThat(
+        c.getDefaultVrf().getOspfProcesses().get("1").getReferenceBandwidth(), equalTo(100e6d));
+    assertThat(
+        c.getAllInterfaces().get("Loopback0").getOspfSettings().getCost(),
+        equalTo(OspfProcess.DEFAULT_LOOPBACK_OSPF_COST));
+    // auto-cost 100 (100 Mbps) / 1 Gbps Ethernet = cost 1 (computed by initInterfaceCosts)
+    assertThat(c.getAllInterfaces().get("Ethernet1").getOspfSettings().getCost(), equalTo(1));
   }
 
   @Test
@@ -782,7 +941,7 @@ public class AristaGrammarTest {
             .setNetwork(connectedPrefix)
             .setNonRouting(true)
             .setAdmin(bgpAdmin)
-            .setLocalPreference(0)
+            .setLocalPreference(DEFAULT_LOCAL_PREFERENCE)
             .setNextHop(NextHopDiscard.instance())
             .setOriginType(OriginType.IGP)
             .setOriginMechanism(OriginMechanism.REDISTRIBUTE)
@@ -790,7 +949,6 @@ public class AristaGrammarTest {
             .setProtocol(RoutingProtocol.BGP)
             .setReceivedFrom(ReceivedFromSelf.instance()) // indicates local origination
             .setSrcProtocol(RoutingProtocol.CONNECTED)
-            .setWeight(DEFAULT_LOCAL_BGP_WEIGHT)
             .build();
     Bgpv4Route bgpRouteVrf1 =
         bgpRouteDefaultVrf.toBuilder()
@@ -1002,6 +1160,56 @@ public class AristaGrammarTest {
     assertThat(e4DefaultRouted, hasSwitchPortMode(SwitchportMode.TRUNK));
     assertThat(p0DefaultRouted, isSwitchport(false));
     assertThat(p0DefaultRouted, hasSwitchPortMode(SwitchportMode.NONE));
+  }
+
+  @Test
+  public void testIpAddressBeforeNoSwitchport() throws IOException {
+    // IP address should be accepted on interfaces that ultimately have `no switchport`,
+    // regardless of whether ip address appears before or after `no switchport` in the config.
+    String hostname = "eos_ip_before_no_switchport";
+    Batfish batfish = getBatfishForConfigurationNames(hostname);
+    ConvertConfigurationAnswerElement ccae =
+        batfish.loadConvertConfigurationAnswerElementOrReparse(batfish.getSnapshot());
+    Configuration c = parseConfig(hostname);
+
+    // Ethernet0/0: ip address BEFORE no switchport — should still get the address
+    assertThat(c, hasInterface("Ethernet0/0", isSwitchport(false)));
+    assertThat(c, hasInterface("Ethernet0/0", hasSwitchPortMode(SwitchportMode.NONE)));
+    assertThat(
+        c,
+        hasInterface(
+            "Ethernet0/0",
+            hasAllAddresses(containsInAnyOrder(ConcreteInterfaceAddress.parse("10.0.0.0/31")))));
+
+    // Ethernet0/1: no switchport BEFORE ip address — the normal order, should work
+    assertThat(c, hasInterface("Ethernet0/1", isSwitchport(false)));
+    assertThat(c, hasInterface("Ethernet0/1", hasSwitchPortMode(SwitchportMode.NONE)));
+    assertThat(
+        c,
+        hasInterface(
+            "Ethernet0/1",
+            hasAllAddresses(containsInAnyOrder(ConcreteInterfaceAddress.parse("10.0.1.0/31")))));
+
+    // Ethernet0/2: ip address + secondary BEFORE no switchport — both should be assigned
+    assertThat(c, hasInterface("Ethernet0/2", isSwitchport(false)));
+    assertThat(c, hasInterface("Ethernet0/2", hasSwitchPortMode(SwitchportMode.NONE)));
+    assertThat(
+        c,
+        hasInterface(
+            "Ethernet0/2",
+            hasAllAddresses(
+                containsInAnyOrder(
+                    ConcreteInterfaceAddress.parse("10.0.2.0/31"),
+                    ConcreteInterfaceAddress.parse("10.0.2.2/31")))));
+
+    // Ethernet0/3: switchport stays (no `no switchport`) — ip address should NOT be assigned
+    assertThat(c, hasInterface("Ethernet0/3", isSwitchport(true)));
+    assertThat(c, hasInterface("Ethernet0/3", hasSwitchPortMode(SwitchportMode.ACCESS)));
+    assertThat(c, hasInterface("Ethernet0/3", hasAllAddresses(empty())));
+    assertThat(
+        ccae,
+        hasRedFlagWarning(
+            hostname, containsString("Ignoring IP address for switchport interface Ethernet0/3")));
   }
 
   @Test
@@ -1392,18 +1600,22 @@ public class AristaGrammarTest {
                 Prefix.parse("1.2.33.0/24"),
                 SUMMARY_ONLY_SUPPRESSION_POLICY_NAME,
                 null,
-                "ATTR_MAP")));
+                "~BGP_AGGREGATE_ATTRIBUTE_MAP:ATTR_MAP~")));
     assertThat(
         defaultVrfAggs,
         hasEntry(
             Prefix.parse("1.2.44.0/24"),
             BgpAggregate.of(
-                Prefix.parse("1.2.44.0/24"), SUMMARY_ONLY_SUPPRESSION_POLICY_NAME, null, null)));
+                Prefix.parse("1.2.44.0/24"),
+                SUMMARY_ONLY_SUPPRESSION_POLICY_NAME,
+                null,
+                "~BGP_AGGREGATE_ATTRIBUTE_MAP:null~")));
     assertThat(
         defaultVrfAggs,
         hasEntry(
             Prefix.parse("1.2.55.0/24"),
-            BgpAggregate.of(Prefix.parse("1.2.55.0/24"), null, null, null)));
+            BgpAggregate.of(
+                Prefix.parse("1.2.55.0/24"), null, null, "~BGP_AGGREGATE_ATTRIBUTE_MAP:null~")));
 
     // vrf FOO
     Map<Prefix, BgpAggregate> vrfFooAggs = c.getVrfs().get("FOO").getBgpProcess().getAggregates();
@@ -1413,7 +1625,8 @@ public class AristaGrammarTest {
         hasEntry(
             Prefix.parse("5.6.7.0/24"),
             // TODO Support as-set
-            BgpAggregate.of(Prefix.parse("5.6.7.0/24"), null, null, null)));
+            BgpAggregate.of(
+                Prefix.parse("5.6.7.0/24"), null, null, "~BGP_AGGREGATE_ATTRIBUTE_MAP:null~")));
   }
 
   @Test
@@ -1508,7 +1721,7 @@ public class AristaGrammarTest {
             .setNetwork(staticPrefix1)
             .setNonRouting(true)
             .setAdmin(localAdmin)
-            .setLocalPreference(0)
+            .setLocalPreference(DEFAULT_LOCAL_PREFERENCE)
             .setNextHop(NextHopDiscard.instance())
             .setOriginatorIp(routerId)
             .setOriginMechanism(OriginMechanism.REDISTRIBUTE)
@@ -1516,13 +1729,16 @@ public class AristaGrammarTest {
             .setProtocol(RoutingProtocol.BGP)
             .setReceivedFrom(ReceivedFromSelf.instance()) // indicates local origination
             .setSrcProtocol(RoutingProtocol.STATIC)
-            .setWeight(DEFAULT_LOCAL_BGP_WEIGHT)
             .setTag(0) // TODO: should redistribute static preserve tag?
             .build();
     Bgpv4Route localRoute2 = localRoute1.toBuilder().setNetwork(staticPrefix2).build();
     Bgpv4Route localRoute3 = localRoute1.toBuilder().setNetwork(staticPrefix3).build();
     Bgpv4Route localRoute4 = localRoute1.toBuilder().setNetwork(staticPrefix4).build();
     Bgpv4Route localRoute5 = localRoute1.toBuilder().setNetwork(staticPrefix5).build();
+    // TODO: aggregate routes still use the shared BgpRoute.DEFAULT_LOCAL_WEIGHT
+    // (32768) via BgpProtocolHelper.toBgpv4Route. Arista actually uses 0, but
+    // fixing that requires a vendor-specific code path in BgpProtocolHelper;
+    // out of scope for the Arista-local-weight fix. See lab-validation#152.
     Bgpv4Route aggRoute1 =
         Bgpv4Route.builder()
             .setNetwork(aggPrefix1)
@@ -1531,11 +1747,11 @@ public class AristaGrammarTest {
             .setNextHop(NextHopDiscard.instance())
             .setOriginatorIp(routerId)
             .setOriginMechanism(OriginMechanism.GENERATED)
-            .setOriginType(OriginType.IGP)
+            .setOriginType(OriginType.INCOMPLETE)
             .setProtocol(RoutingProtocol.AGGREGATE)
             .setReceivedFrom(ReceivedFromSelf.instance()) // indicates local origination
             .setSrcProtocol(RoutingProtocol.AGGREGATE)
-            .setWeight(DEFAULT_LOCAL_BGP_WEIGHT)
+            .setWeight(DEFAULT_LOCAL_WEIGHT)
             .build();
     Bgpv4Route aggRoute2 = aggRoute1.toBuilder().setNetwork(aggPrefix2).build();
     Bgpv4Route aggRoute4General = aggRoute1.toBuilder().setNetwork(aggPrefix4General).build();
@@ -1606,11 +1822,11 @@ public class AristaGrammarTest {
               .setNextHop(NextHopDiscard.instance())
               .setOriginatorIp(Ip.parse("2.2.2.2"))
               .setOriginMechanism(OriginMechanism.GENERATED)
-              .setOriginType(OriginType.IGP)
+              .setOriginType(OriginType.INCOMPLETE)
               .setProtocol(RoutingProtocol.AGGREGATE)
               .setReceivedFrom(ReceivedFromSelf.instance()) // indicates local origination
               .setSrcProtocol(RoutingProtocol.AGGREGATE)
-              .setWeight(DEFAULT_LOCAL_BGP_WEIGHT)
+              .setWeight(DEFAULT_LOCAL_WEIGHT) // TODO(lab-validation#152): Arista should be 0
               .build();
       Bgpv4Route aggRoute2 = aggRoute1.toBuilder().setNetwork(aggPrefix2).build();
       assertThat(
@@ -1817,6 +2033,27 @@ public class AristaGrammarTest {
                     neighborWithRemoteAs,
                     hasIpv4UnicastAddressFamily(
                         hasAddressFamilyCapabilites(hasAllowRemoteAsOut(ALWAYS)))))));
+  }
+
+  @Test
+  public void testEosInterfaceSpeedBreakout() throws IOException {
+    Configuration c = parseConfig("arista_interface_speed_breakout");
+    assertThat(c, hasInterface("Ethernet1/1", hasSpeed(400E9D)));
+    assertThat(c, hasInterface("Ethernet1/1", hasBandwidth(400E9D)));
+    assertThat(c, hasInterface("Ethernet2/1", hasSpeed(100E9D)));
+    assertThat(c, hasInterface("Ethernet2/1", hasBandwidth(100E9D)));
+    assertThat(c, hasInterface("Ethernet3/1", hasSpeed(10E9D)));
+    assertThat(c, hasInterface("Ethernet3/1", hasBandwidth(10E9D)));
+    assertThat(c, hasInterface("Ethernet4/1", hasSpeed(50E9D)));
+    assertThat(c, hasInterface("Ethernet4/1", hasBandwidth(50E9D)));
+    assertThat(c, hasInterface("Ethernet5/1", hasSpeed(400E9D)));
+    assertThat(c, hasInterface("Ethernet5/1", hasBandwidth(400E9D)));
+    assertThat(c, hasInterface("Ethernet6/1", hasSpeed(200E9D)));
+    assertThat(c, hasInterface("Ethernet6/1", hasBandwidth(200E9D)));
+    assertThat(c, hasInterface("Ethernet7/1", hasSpeed(400E9D)));
+    assertThat(c, hasInterface("Ethernet7/1", hasBandwidth(400E9D)));
+    assertThat(c, hasInterface("Ethernet8/1", hasSpeed(40E9D)));
+    assertThat(c, hasInterface("Ethernet8/1", hasBandwidth(40E9D)));
   }
 
   @Test
@@ -2651,6 +2888,50 @@ public class AristaGrammarTest {
   }
 
   @Test
+  public void testInterfaceIpUnnumberedExtraction() {
+    AristaConfiguration config = parseVendorConfig("arista_interface_ip_unnumbered");
+    org.batfish.vendor.arista.representation.Interface eth1 =
+        config.getInterfaces().get("Ethernet1");
+    assertThat(eth1.getUnnumberedSourceInterface(), equalTo("Loopback0"));
+    assertThat(eth1.getAddress(), nullValue());
+    org.batfish.vendor.arista.representation.Interface eth2 =
+        config.getInterfaces().get("Ethernet2");
+    assertThat(eth2.getUnnumberedSourceInterface(), equalTo("Loopback0"));
+    org.batfish.vendor.arista.representation.Interface lo0 =
+        config.getInterfaces().get("Loopback0");
+    assertThat(lo0.getUnnumberedSourceInterface(), nullValue());
+  }
+
+  @Test
+  public void testInterfaceIpUnnumberedConversion() {
+    Configuration c = parseConfig("arista_interface_ip_unnumbered", true);
+    ConcreteInterfaceAddress loopbackAddr = ConcreteInterfaceAddress.parse("10.0.0.1/32");
+    UnnumberedAddress unnumberedAddr = UnnumberedAddress.of("Loopback0", Ip.parse("10.0.0.1"));
+    // Loopback0 has its own concrete address
+    assertThat(c, hasInterface("Loopback0", hasAllAddresses(contains(loopbackAddr))));
+    // Unnumbered interfaces get UnnumberedAddress, not ConcreteInterfaceAddress
+    Interface eth1 = c.getAllInterfaces().get("Ethernet1");
+    assertThat(eth1.getAddress(), equalTo(unnumberedAddr));
+    assertThat(eth1.getAllAddresses(), contains(unnumberedAddr));
+    assertThat(eth1.getAllConcreteAddresses(), empty());
+    assertThat(eth1.getAddressMetadata(), anEmptyMap());
+    // OSPF addresses set for neighbor formation
+    assertThat(eth1.getOspfSettings(), notNullValue());
+    assertThat(eth1.getOspfSettings().getOspfAddresses().getAddresses(), contains(loopbackAddr));
+  }
+
+  @Test
+  public void testInterfaceIpUnnumberedReferences() throws IOException {
+    String hostname = "arista_interface_ip_unnumbered";
+    String filename = "configs/" + hostname;
+    Batfish batfish = getBatfishForConfigurationNames(hostname);
+    ConvertConfigurationAnswerElement ccae =
+        batfish.loadConvertConfigurationAnswerElementOrReparse(batfish.getSnapshot());
+    // Loopback0 is referenced by two unnumbered interfaces + its own self-ref
+    assertThat(ccae, hasNumReferrers(filename, INTERFACE, "Loopback0", 3));
+  }
+
+  @Test
   public void testMacAccessList() throws IOException {
     String hostname = "arista_mac_access_list";
     String filename = "configs/" + hostname;
@@ -3456,7 +3737,7 @@ public class AristaGrammarTest {
             .setOriginType(OriginType.EGP)
             .setProtocol(RoutingProtocol.BGP);
     Bgpv4Route.Builder outputRouteBuilder =
-        Bgpv4Route.testBuilder().setNextHopIp(UNSET_ROUTE_NEXT_HOP_IP);
+        Bgpv4Route.testBuilder().setNextHop(NextHopDiscard.instance());
 
     Ip sessionPropsHeadIp = Ip.parse("1.1.1.1");
     BgpSessionProperties.Builder sessionProps =
@@ -3567,7 +3848,7 @@ public class AristaGrammarTest {
           c.getRoutingPolicies().get(generatedBgpPeerExportPolicyName(DEFAULT_VRF, "8.8.8.8"));
       Builder builder = Bgpv4Route.testBuilder();
       policy.processBgpRoute(originalRoute, builder, session, Direction.OUT, null);
-      assertThat(builder.getNextHopIp(), equalTo(UNSET_ROUTE_NEXT_HOP_IP));
+      assertThat(builder.getNextHopIp(), nullValue());
     }
     {
       // 8.8.8.8 for EVPN
@@ -3583,7 +3864,7 @@ public class AristaGrammarTest {
           c.getRoutingPolicies().get(generatedBgpPeerExportPolicyName(DEFAULT_VRF, "7.7.7.7"));
       Builder builder = Bgpv4Route.testBuilder();
       policy.processBgpRoute(originalRoute, builder, session, Direction.OUT, null);
-      assertThat(builder.getNextHopIp(), equalTo(UNSET_ROUTE_NEXT_HOP_IP));
+      assertThat(builder.getNextHopIp(), nullValue());
     }
     {
       // 2.2.2.2 for IPv4
@@ -3615,7 +3896,7 @@ public class AristaGrammarTest {
           c.getRoutingPolicies().get(generatedBgpPeerExportPolicyName("vrf3", "3.3.3.33"));
       Builder builder = Bgpv4Route.testBuilder();
       policy.processBgpRoute(originalRoute, builder, session, Direction.OUT, null);
-      assertThat(builder.getNextHopIp(), equalTo(UNSET_ROUTE_NEXT_HOP_IP));
+      assertThat(builder.getNextHopIp(), nullValue());
     }
   }
 

@@ -386,7 +386,8 @@
             "                (seikp_pre_shared_key",
             "                  PRE_SHARED_KEY:'pre-shared-key'",
             "                  ASCII_TEXT:'ascii-text'",
-            "                  key = DOUBLE_QUOTED_STRING:'\"$9$/E6g9tO1IcSrvfTCu1hKv-VwgJD\"')))))))",
+            "                  (secret_string*",
+            "                    SECRET_STRING:'\"$9$/E6g9tO1IcSrvfTCu1hKv-VwgJD\"'  <== mode:M_SecretString))))))))",
             "    NEWLINE:'\\n')",
             "  (set_line*",
             "    SET:'set'",
@@ -2443,10 +2444,9 @@
             "                (pops_then*",
             "                  THEN:'then'",
             "                  (popst_common*",
-            "                    (popst_null*",
+            "                    (popst_load_balance",
             "                      LOAD_BALANCE:'load-balance'",
-            "                      (null_filler*",
-            "                        PER_PACKET:'per-packet'))))))))))",
+            "                      PER_PACKET:'per-packet')))))))))",
             "    NEWLINE:'\\n\\n')",
             "  EOF:<EOF>)"
           ]
@@ -2813,7 +2813,8 @@
             "                (seikp_pre_shared_key",
             "                  PRE_SHARED_KEY:'pre-shared-key'",
             "                  ASCII_TEXT:'ascii-text'",
-            "                  key = DOUBLE_QUOTED_STRING:'\"$9$Sr8yeWLX-db20BrvLNY2DikPQn\"')))))))",
+            "                  (secret_string*",
+            "                    SECRET_STRING:'\"$9$Sr8yeWLX-db20BrvLNY2DikPQn\"'  <== mode:M_SecretString))))))))",
             "    NEWLINE:'\\n')",
             "  (set_line*",
             "    SET:'set'",
@@ -4750,7 +4751,8 @@
             "                (seikp_pre_shared_key",
             "                  PRE_SHARED_KEY:'pre-shared-key'",
             "                  ASCII_TEXT:'ascii-text'",
-            "                  key = DOUBLE_QUOTED_STRING:'\"$9$Sr8yeWLX-db20BrvLNY2DikPQn\"')))))))",
+            "                  (secret_string*",
+            "                    SECRET_STRING:'\"$9$Sr8yeWLX-db20BrvLNY2DikPQn\"'  <== mode:M_SecretString))))))))",
             "    NEWLINE:'\\n')",
             "  (set_line*",
             "    SET:'set'",
@@ -6162,12 +6164,6 @@
               "Line" : 47,
               "Parser_Context" : "[sesot_land seso_tcp ses_ids_option se_screen s_security s_common statement set_line_tail set_line flat_juniper_configuration]",
               "Text" : "land"
-            },
-            {
-              "Comment" : "This feature is not currently supported",
-              "Line" : 104,
-              "Parser_Context" : "[rof_export ro_forwarding_table s_routing_options s_common statement set_line_tail set_line flat_juniper_configuration]",
-              "Text" : "export loadbal"
             }
           ]
         },

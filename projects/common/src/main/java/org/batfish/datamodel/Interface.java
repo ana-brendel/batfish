@@ -713,10 +713,13 @@ public final class Interface extends ComparableStructure<String> {
   private @Nonnull SortedMap<ConcreteInterfaceAddress, ConnectedRouteMetadata> _addressMetadata;
 
   /** Cache of all concrete addresses */
-  private @Nullable transient Set<ConcreteInterfaceAddress> _allConcreteAddresses;
+  private transient @Nullable Set<ConcreteInterfaceAddress> _allConcreteAddresses;
 
   /** Cache of all link-local addresses */
-  private @Nullable transient Set<LinkLocalAddress> _allLinkLocalAddresses;
+  private transient @Nullable Set<LinkLocalAddress> _allLinkLocalAddresses;
+
+  /** Cache of all unnumbered addresses */
+  private transient @Nullable Set<UnnumberedAddress> _allUnnumberedAddresses;
 
   private boolean _autoState;
   private @Nullable Double _bandwidth;
@@ -984,6 +987,18 @@ public final class Interface extends ComparableStructure<String> {
               .collect(ImmutableSet.toImmutableSet());
     }
     return _allLinkLocalAddresses;
+  }
+
+  @JsonIgnore
+  public Set<UnnumberedAddress> getAllUnnumberedAddresses() {
+    if (_allUnnumberedAddresses == null) {
+      _allUnnumberedAddresses =
+          _allAddresses.stream()
+              .filter(a -> a instanceof UnnumberedAddress)
+              .map(a -> (UnnumberedAddress) a)
+              .collect(ImmutableSet.toImmutableSet());
+    }
+    return _allUnnumberedAddresses;
   }
 
   public @Nonnull Set<InterfaceAddress> getAllAddresses() {
@@ -1425,6 +1440,7 @@ public final class Interface extends ComparableStructure<String> {
     // Clear cached values
     _allLinkLocalAddresses = null;
     _allConcreteAddresses = null;
+    _allUnnumberedAddresses = null;
   }
 
   @JsonProperty(PROP_AUTOSTATE)
@@ -1966,6 +1982,25 @@ public final class Interface extends ComparableStructure<String> {
       _lineUp = true;
       _blacklisted = false;
     }
+  }
+
+  /**
+   * Reactivate this interface after it was deactivated by autostate (no active VLAN members).
+   *
+   * <p>Callers must verify preconditions before calling: the interface must be inactive with {@link
+   * InactiveReason#AUTOSTATE_FAILURE}.
+   *
+   * @throws IllegalStateException if this interface is active or was deactivated for a different
+   *     reason.
+   */
+  public void reactivateForAutostate() {
+    checkState(!_active, "Cannot reactivate an active interface");
+    checkState(
+        _inactiveReason == InactiveReason.AUTOSTATE_FAILURE,
+        "Can only reactivate AUTOSTATE_FAILURE interfaces, not %s",
+        _inactiveReason);
+    _active = true;
+    _inactiveReason = null;
   }
 
   /** Helper to get an IpAccessList object given its name. */

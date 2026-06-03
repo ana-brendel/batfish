@@ -20,6 +20,7 @@ import java.util.SortedMap;
 import org.batfish.datamodel.AbstractRoute;
 import org.batfish.datamodel.AnnotatedRoute;
 import org.batfish.datamodel.AsPath;
+import org.batfish.datamodel.BgpRoute;
 import org.batfish.datamodel.Bgpv4Route;
 import org.batfish.datamodel.ConnectedRoute;
 import org.batfish.datamodel.EvpnRoute;
@@ -39,7 +40,6 @@ import org.batfish.datamodel.routing_policy.communities.CommunitySet;
 import org.batfish.dataplane.ibdp.IncrementalDataPlane;
 import org.batfish.main.Batfish;
 import org.batfish.main.BatfishTestUtils;
-import org.batfish.vendor.arista.representation.AristaConfiguration;
 import org.junit.Rule;
 import org.junit.Test;
 import org.junit.rules.TemporaryFolder;
@@ -107,7 +107,7 @@ public class EvpnType5AristaTest {
             .setSrcProtocol(RoutingProtocol.CONNECTED)
             .setReceivedFrom(ReceivedFromSelf.instance())
             .setOriginatorIp(originatorIp)
-            .setWeight(AristaConfiguration.DEFAULT_LOCAL_BGP_WEIGHT)
+            .setLocalPreference(BgpRoute.DEFAULT_LOCAL_PREFERENCE)
             .build();
     assertThat(vrf2BgpRoute, equalTo(expectedVrf2BgpRoute));
 
@@ -132,7 +132,7 @@ public class EvpnType5AristaTest {
             .setReceivedFrom(ReceivedFromSelf.instance())
             .setOriginatorIp(originatorIp)
             .setVni(15004)
-            .setWeight(AristaConfiguration.DEFAULT_LOCAL_BGP_WEIGHT)
+            .setLocalPreference(BgpRoute.DEFAULT_LOCAL_PREFERENCE)
             .build();
     assertThat(exportedEvpnRoute, equalTo(expectedEvpnRoute));
   }

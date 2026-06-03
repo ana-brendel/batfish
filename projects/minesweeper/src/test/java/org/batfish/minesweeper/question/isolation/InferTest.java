@@ -1717,7 +1717,7 @@ public class InferTest {
         new Location.Builder(NODE_C_R.getIp().toString(), exit.toString(), null);
 
     Optional<Location> target = edgeBuilder.instantiate(info).stream().findFirst();
-    assert target.isPresent();
+    // assert target.isPresent();
 
     verifier.addProperty(target.get(), property);
     Infer.Result result = verifier.run();

@@ -142,9 +142,8 @@ public class InterferenceCheck {
           BDD updatedBDD = existing.getBDDCopy().or(wp.getBDDCopy());
           // we maintain an invariant that the edge invariants represent the routes
           // from the sender's perspective; the call to preImport converts from the
-          // receiver's perspective to the sender's perspective
-          Invariant updated = new Invariant(context.tbdd(), updatedBDD).preImport();
-          updatedBDD.free();
+          // receiver's perspective to the sender's perspective (preImport consumes updatedBDD)
+          Invariant updated = new Invariant(context.tbdd(), updatedBDD).preImport(edge.isEBGP());
           inferred.put(edge, updated);
           if (!existing.equals(updated) && !working.contains(edge)) {
             working.add(edge);

@@ -300,7 +300,7 @@ public class Path {
         }
         // we need to account for the export transformations that BGP does, to
         // convert curr to an invariant on the routes that the importer will receive
-        curr = curr.postExport();
+        curr = curr.postExport(edge.isEBGP());
       }
       RoutingPolicy importPolicy = context.imports.get(edge);
       if (importPolicy != null) {

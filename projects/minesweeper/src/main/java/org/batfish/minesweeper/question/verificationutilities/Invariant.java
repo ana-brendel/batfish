@@ -693,39 +693,52 @@ public class Invariant {
   // Returns a version of the current invariant that represents what must hold on export
   // from the neighbor in order for this invariant to hold on import.  In other words,
   // it represents the transformations that BGP performs when it exports a route.
-  public Invariant preImport() {
-    // for now the only transformations that we handle are for the weight and
+  // Consumes this.bdd
+  public Invariant preImport(boolean isEBGP) {
+    // for now the only transformations that we handle are for the weight and (if EBGP)
     // local preference, which are reset to default (0 and 100 respectively) on export
 
-    // first restrict the current bdd to only those routes that have weight 0 and local preference
-    // 100
     MutableBDDInteger weight = tbdd.getOriginalRoute().getWeight();
-    BDD weight0 = weight.value(0L);
     MutableBDDInteger localPref = tbdd.getOriginalRoute().getLocalPref();
-    BDD localPref100 = localPref.value(100L);
-    BDD restricted = weight0.andWith(localPref100).andEq(this.bdd);
 
-    // then quantify out the weight and local preference variables, since the sent route can have
-    // any value for them
-    BDD support = weight.support().andWith(localPref.support());
-    Invariant i = new Invariant(tbdd, restricted.existEq(support));
-    support.free();
-    return i;
+    // first restrict the current bdd to only those routes that have default values
+    BDD weight0 = weight.value(0L);
+    BDD restricted = bdd.andWith(weight0);
+    if (isEBGP) {
+      BDD localPref100 = localPref.value(100L);
+      restricted.andWith(localPref100);
+    }
+
+    // then quantify out the weight and (if EBGP) local pref variables, since the sent route can
+    // have any value for them
+    BDD wsupport = weight.support();
+    restricted.existEq(wsupport);
+    wsupport.free();
+    if (isEBGP) {
+      BDD lsupport = localPref.support();
+      restricted.existEq(lsupport);
+      lsupport.free();
+    }
+    return new Invariant(tbdd, restricted);
   }
 
   // Like preImport above, but in the reverse direction (for use in a strongest postcondition
   // computation)
-  public Invariant postExport() {
-    // for now the only transformations are to reset the weight and local preference to default (0
-    // and 100 respectively) on export
+  // Consumes this.bdd
+  public Invariant postExport(boolean isEBGP) {
+    // for now the only transformations are to reset the weight and (if EBGP) local preference
+    // to default (0 and 100 respectively) on export
     MutableBDDInteger weight = tbdd.getOriginalRoute().getWeight();
-    MutableBDDInteger localPref = tbdd.getOriginalRoute().getLocalPref();
-    BDD support = weight.support().andWith(localPref.support());
-    Invariant i =
-        new Invariant(
-            tbdd, bdd.exist(support).andWith(weight.value(0L)).andWith(localPref.value(100L)));
-    support.free();
-    return i;
+    BDD wsupport = weight.support();
+    BDD result = bdd.existEq(wsupport).andWith(weight.value(0L));
+    wsupport.free();
+    if (isEBGP) {
+      MutableBDDInteger localPref = tbdd.getOriginalRoute().getLocalPref();
+      BDD lsupport = localPref.support();
+      result = result.existEq(lsupport).andWith(localPref.value(100L));
+      lsupport.free();
+    }
+    return new Invariant(tbdd, result);
   }
 
   /**

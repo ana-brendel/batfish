@@ -204,9 +204,12 @@ public class ReachabilityAnswerer extends Answerer {
       // Right now, this checks all the constraints hold at the same time to limit queries,
       assert paths.getKey() != null;
 
-      Path weakenedPathConstraints = paths.getKey();
+      Path goodPath = paths.getKey();
+      Map<Node, Invariant> reachableGood = goodPath.reachableRoutes();
+      Path weakenedPathConstraints = goodPath;
       Infer inference = info.toInfer();
       inference.addPrefixToAssumptions(prefix);
+      inference.addPreferenceRestrictions(reachableGood);
 
       /// IN PROGRESS: commented out code attempts to weaken the reachability constraints
       // Pair<Path, Map<Location, BDD>> temp =
@@ -217,7 +220,7 @@ public class ReachabilityAnswerer extends Answerer {
       // enforce that all reachability conditions hold (no interference)
       for (Map.Entry<Location, Invariant> entry :
           weakenedPathConstraints.getConstraints().entrySet()) {
-        if (entry.getKey() instanceof Node) {
+        if (entry.getKey() instanceof Node node) {
           BDD bdd = entry.getValue().getBDDCopy();
           // if (auxiliaryRequirements.containsKey(entry.getKey())) {
           //  bdd.orWith(bdd);
@@ -226,7 +229,7 @@ public class ReachabilityAnswerer extends Answerer {
               new Invariant(
                   info.tbdd,
                   bdd.existEq(info.tbdd.getOriginalRoute().getProtocolHistory().support()));
-          inference.addProperty(entry.getKey(), removeProtocolHistory);
+          inference.addProperty(node, removeProtocolHistory);
         }
       }
 

@@ -119,6 +119,13 @@ public class PathExploration {
       } else {
         properties[i] = post.weakestPrecondition(policy, false, computedPathsCache);
       }
+      if (curr instanceof Edge incoming) {
+        // the constraint on an edge is stated from the sender's point of view: it constrains the
+        // route as the sender's export policy produced it, before BGP's own export
+        // transformations.  This matches how Infer stores edge invariants and how checked
+        // assumptions on edges are interpreted.
+        properties[i] = properties[i].preImport(incoming.isEBGP());
+      }
     }
     return properties;
   }
@@ -277,7 +284,8 @@ public class PathExploration {
         weakened[i] = new Invariant(context.tbdd(), constraint);
       } else {
         assert steps[i] instanceof Edge && steps[i - 1] instanceof Node : "Invalid Path";
-        weakened[i] = wp;
+        // as in getPathConstraints, an edge constraint is from the sender's point of view
+        weakened[i] = wp.preImport(((Edge) steps[i]).isEBGP());
       }
     }
     return Pair.of(Path.create(steps, weakened, context, prefix), auxiliaryRequirements);

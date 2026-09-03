@@ -14,7 +14,6 @@ import org.batfish.minesweeper.bdd.TransferReturn;
 import org.batfish.minesweeper.question.reachability.Path;
 import org.batfish.minesweeper.question.verificationutilities.Edge;
 import org.batfish.minesweeper.question.verificationutilities.Invariant;
-import org.batfish.minesweeper.question.verificationutilities.Lightyear;
 import org.batfish.minesweeper.question.verificationutilities.Location;
 import org.batfish.minesweeper.question.verificationutilities.Node;
 
@@ -29,6 +28,7 @@ import java.util.Set;
 
 import static com.google.common.base.Preconditions.checkArgument;
 import static org.batfish.minesweeper.bdd.TransferBDD.isRelevantForDestination;
+import static org.batfish.minesweeper.bdd.TransferBDDUtils.lessPreferredThanBgp;
 import static org.batfish.minesweeper.question.verificationutilities.Invariant.strongestCommonImplicant;
 import static org.batfish.minesweeper.question.verificationutilities.NetworkInfo.getRouteExample;
 
@@ -45,6 +45,7 @@ public class Infer {
   private final Map<Location, Invariant> targets = new HashMap<>();
   private final Map<Location, Invariant> checkedAssumptions;
   private final Map<Location, Invariant> enforcedAssumptions;
+  private final Map<Node, BDD> lessPreferredByNode = new HashMap<>();
   private final Queue<Location> working = new LinkedList<>();
   // private final InferenceLoopQueue working = new InferenceLoopQueue();
   private final Map<Location, Invariant> inferred = new HashMap<>();
@@ -102,6 +103,25 @@ public class Infer {
     return this.targets;
   }
 
+  public void addPreferenceRestrictions(@Nonnull Map<Node, Invariant> reachableGood) {
+    lessPreferredByNode.clear();
+    reachableGood.forEach(
+        (node, inv) -> lessPreferredByNode.put(node, lessPreferredThanBgp(inv.getBDD(), tbdd)));
+  }
+
+  /// An invariant at a node only has to hold for routes that could actually be selected there,
+  /// so it can be weakened to allow anything that is less preferred than the good route.
+  private Invariant relaxByPreference(Location loc, Invariant inv) {
+    if (!(loc instanceof Node node)) {
+      return inv;
+    }
+    BDD lessPreferred = lessPreferredByNode.get(node);
+    if (lessPreferred == null) {
+      return inv;
+    }
+    return new Invariant(tbdd, inv.getBDDCopy().orWith(lessPreferred.id()));
+  }
+
   /**
    * Add a property to be verified at provided location. If provided a node, this will add the node
    * that we've created which includes all IP addresses that may be associated with it.
@@ -127,7 +147,11 @@ public class Infer {
           : "Infer.addProperty() - Node provided "
               + node
               + " not within network. We cannot verify a property on a node that is not within our network.";
-      targets.put(node, inv);
+      Invariant relaxed = relaxByPreference(node, inv);
+      if (relaxed != inv) {
+        inv.free();
+      }
+      targets.put(node, relaxed);
     }
     return this;
   }
@@ -184,6 +208,11 @@ public class Infer {
               inferred.getOrDefault(
                   src, enforcedAssumptions.getOrDefault(src, new Invariant(tbdd)));
           Invariant updated = strongestCommonImplicant(existing, wp);
+          Invariant relaxed = relaxByPreference(src, updated);
+          if (relaxed != updated) {
+            updated.free();
+          }
+          updated = relaxed;
           wp.free();
           inferred.put(src, updated);
           // a node will never be a checked assumption
@@ -203,6 +232,7 @@ public class Infer {
           } else {
             RoutingPolicy importPolicy = imports.get(edge);
             Invariant wp = this.getWeakestPrecondition(property, importPolicy);
+            wp = wp.preImport(edge.isEBGP());
             boolean firstVisit = !inferred.containsKey(edge);
             // get inferred if present, otherwise get enforced assumption, otherwise default is true
             Invariant existing =
@@ -277,10 +307,14 @@ public class Infer {
     LOGGER.info("Inference loop terminated.");
     Map<Location, Bgpv4Route> checks = verificationAssumptionCheck();
 
+    // TODO - this can only be re-enabled if the Lightyear checks also account for the
+    // export transformations that the preImport function handles during our analysis
     // Lightyear style check to only run during testing
+    /*
     assert counter.isPresent()
             || (new Lightyear(this.imports, this.exports)).check(inferred).isEmpty()
         : "Checks that all invariants are sufficient as preconditions to imply the following postcondition";
+     */
 
     return new Result(counter.isEmpty() && checks.isEmpty(), inferred, counter, checks);
   }

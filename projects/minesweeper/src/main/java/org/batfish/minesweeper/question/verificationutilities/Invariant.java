@@ -1,5 +1,6 @@
 package org.batfish.minesweeper.question.verificationutilities;
 
+import static com.google.common.base.Preconditions.checkArgument;
 import static org.apache.commons.lang3.ObjectUtils.firstNonNull;
 import static org.batfish.minesweeper.bdd.TransferBDD.isRelevantForDestination;
 import static org.batfish.minesweeper.bdd.TransferBDDUtils.makeRoutePairing;
@@ -101,8 +102,7 @@ public class Invariant {
     } else {
       String returned =
           Objects.requireNonNullElseGet(this.str, () -> BDDString.get(this.tbdd, this.bdd));
-      assert !returned.trim().isEmpty();
-      return returned;
+      return returned.trim().isEmpty() ? "LIMIT (Complex BDD)" : returned;
     }
   }
 
@@ -388,7 +388,20 @@ public class Invariant {
         clauseBDD.andWith(asPathToBDD(_asPath, tbdd.getConfigAtomicPredicates(), base));
       }
       if (_asPathLength != null) {
-        clauseBDD.andWith(tbdd.getOriginalRoute().getAsPathLength().value(_asPathLength));
+        MutableBDDInteger asPathLength = tbdd.getOriginalRoute().getAsPathLength();
+        long maxLength = (1L << asPathLength.size()) - 1;
+        // The AS-path length is modeled with a fixed-width integer whose top value saturates (see
+        // shiftAsPathLength), so that value means "maxLength or more" rather than exactly
+        // maxLength.  A constraint naming it would therefore not mean what it says, so reject it
+        // rather than silently answering a different question.
+        checkArgument(
+            _asPathLength < maxLength,
+            "AS-path length constraint of %s is at the modeled maximum, where lengths saturate and"
+                + " so mean \"%s or more\".  Use a smaller length, or widen the AS-path length"
+                + " field in BDDRoute.",
+            _asPathLength,
+            maxLength);
+        clauseBDD.andWith(asPathLength.value(_asPathLength));
       }
       return clauseBDD;
     }
@@ -695,8 +708,9 @@ public class Invariant {
   // it represents the transformations that BGP performs when it exports a route.
   // Consumes this.bdd
   public Invariant preImport(boolean isEBGP) {
-    // for now the only transformations that we handle are for the weight and (if EBGP)
-    // local preference, which are reset to default (0 and 100 respectively) on export
+    // for now the only transformations that we handle are the weight and (if EBGP) local
+    // preference, which are reset to default (0 and 100 respectively), and (if EBGP) the
+    // AS path, to which the sender prepends its own ASN
 
     MutableBDDInteger weight = tbdd.getOriginalRoute().getWeight();
     MutableBDDInteger localPref = tbdd.getOriginalRoute().getLocalPref();
@@ -718,8 +732,53 @@ public class Invariant {
       BDD lsupport = localPref.support();
       restricted.existEq(lsupport);
       lsupport.free();
+      // the length the importer sees is one more than the length the exporter sent
+      BDD beforePrepend = shiftAsPathLength(restricted, false);
+      restricted.free();
+      restricted = beforePrepend;
     }
     return new Invariant(tbdd, restricted);
+  }
+
+  /**
+   * Relates the AS-path length before and after the sender prepends its own ASN on an EBGP export.
+   * When {@code exporting} the given constraint describes the route being sent and the result
+   * describes it as received; otherwise the direction is reversed, so the result is the constraint
+   * that the sender must satisfy. Does not consume the given bdd.
+   *
+   * <p>The length is modeled as a fixed-width integer, so the increment saturates at the maximum
+   * representable length rather than overflowing. Unlike the clipping used for local preference,
+   * this is not a router behaviour -- an AS path is just a count -- it is a widening that makes the
+   * fixed-width field sound: the top value means "that many or more". Saturation therefore makes
+   * the increment non-injective, and the reverse direction is genuinely a relation rather than a
+   * decrement, since a route received at the top length may have been sent at either of the top
+   * two lengths.
+   *
+   * <p>TODO: nothing reports when a length actually saturates. Constraints written by the user are
+   * rejected at the maximum (see ClauseBuilder), but a length computed by the analysis can still
+   * reach the ceiling, after which every result about it is really a statement about "15 or more".
+   * That is sound, but it is silent: a good path may be reported whose real AS path is longer than
+   * the one shown. Either surface a warning when a computed length saturates, or widen the field
+   * far enough that real networks cannot reach it.
+   */
+  private BDD shiftAsPathLength(BDD constraint, boolean exporting) {
+    MutableBDDInteger asPathLength = tbdd.getOriginalRoute().getAsPathLength();
+    // derived from the field width so that this stays correct if BDDRoute ever widens the field
+    long maxLength = (1L << asPathLength.size()) - 1;
+    BDD support = asPathLength.support();
+    BDD result = tbdd.getFactory().zero();
+    for (long sent = 0; sent <= maxLength; sent++) {
+      long received = Math.min(sent + 1, maxLength);
+      // restrict the constraint to the length it talks about on one side of the export, then
+      // rewrite that length to the corresponding length on the other side
+      BDD from = asPathLength.value(exporting ? sent : received);
+      BDD restricted = constraint.and(from);
+      from.free();
+      restricted.existEq(support);
+      result.orWith(restricted.andWith(asPathLength.value(exporting ? received : sent)));
+    }
+    support.free();
+    return result;
   }
 
   // Like preImport above, but in the reverse direction (for use in a strongest postcondition
@@ -727,7 +786,8 @@ public class Invariant {
   // Consumes this.bdd
   public Invariant postExport(boolean isEBGP) {
     // for now the only transformations are to reset the weight and (if EBGP) local preference
-    // to default (0 and 100 respectively) on export
+    // to default (0 and 100 respectively), and (if EBGP) to prepend the sender's ASN to the AS
+    // path -- all of which BGP does after the export policy has run
     MutableBDDInteger weight = tbdd.getOriginalRoute().getWeight();
     BDD wsupport = weight.support();
     BDD result = bdd.existEq(wsupport).andWith(weight.value(0L));
@@ -737,6 +797,9 @@ public class Invariant {
       BDD lsupport = localPref.support();
       result = result.existEq(lsupport).andWith(localPref.value(100L));
       lsupport.free();
+      BDD prepended = shiftAsPathLength(result, true);
+      result.free();
+      result = prepended;
     }
     return new Invariant(tbdd, result);
   }
@@ -769,9 +832,7 @@ public class Invariant {
    * @param policy gets the strongest postcondition for this policy
    * @return invariant corresponding to the strongest postcondition
    */
-  public Invariant strongestPostcondition(@Nonnull RoutingPolicy policy) {
-    return strongestPostcondition(policy, false);
-  }
+
 
   /**
    * Synthesizes the strongest postcondition which will hold after any route satisfying this
@@ -779,11 +840,9 @@ public class Invariant {
    * permitted passed this policy, then the postcondition returned is false.
    *
    * @param policy gets the strongest postcondition for this policy
-   * @param eBGP true if the policy being analyzed is an eBGP export policy, false otherwise (iBGP
-   *     or import)
    * @return invariant corresponding to the strongest postcondition
    */
-  public Invariant strongestPostcondition(@Nonnull RoutingPolicy policy, boolean eBGP) {
+  public Invariant strongestPostcondition(@Nonnull RoutingPolicy policy) {
     List<TransferReturn> paths = null;
     if (policy.getStatements().isEmpty()) {
       if (policy.getOwner() == null
@@ -808,15 +867,6 @@ public class Invariant {
         throw new BatfishException(
             "Unexpected error analyzing policy " + policy.getName() + " in node " + name, e);
       }
-    }
-    if (eBGP) {
-      // add one to the AS-path lengths in the output route of each path, to account for the sender
-      // prepending its own ASN
-      MutableBDDInteger one = MutableBDDInteger.makeFromValue(tbdd.getFactory(), 4, 1);
-      paths.forEach(
-          p ->
-              p.getOutputRoute()
-                  .setAsPathLength(p.getOutputRoute().getAsPathLength().addClipping(one)));
     }
     BDD strongest =
         TransferBDDUtils.strongestPostcondition(paths, this.getBDD(), tbdd, Function.identity());

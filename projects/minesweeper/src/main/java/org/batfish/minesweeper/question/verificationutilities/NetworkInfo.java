@@ -518,7 +518,12 @@ public class NetworkInfo {
   }
 
   /// Used to add an assumption pertaining to traffic at provided location, we assume incoming edges
-  /// are checked and internal locations/outgoing edges are enforced
+  /// are checked and internal locations/outgoing edges are enforced.
+  ///
+  /// Note that an assumption on an edge and an invariant at a node describe a route at different
+  /// points: an edge assumption constrains the route as the neighbor sent it, before the export
+  /// transformations that BGP itself performs (see Invariant.preImport), whereas an invariant at a
+  /// node constrains the route as that node sees it once its import policy has run.
   public void addAssumption(@Nonnull Location location, @Nonnull Invariant assumption) {
     // we only want to add assumptions within network or connecting to external neighbor
     if (this.validLocation(location)) {

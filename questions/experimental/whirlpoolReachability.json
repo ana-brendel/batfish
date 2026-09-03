@@ -36,7 +36,7 @@
         "displayName": "Prefix for Liveness Property"
       },
       "target": {
-        "description": "Liveness property to verify",
+        "description": "Liveness property to verify. A target constrains the route as the given location sees it: at a node, that is after the node's import policy has run. Contrast the assumptions below, which constrain routes as a neighbor sent them.",
         "type": "string",
         "optional": true,
         "displayName": "Target Property"
@@ -54,13 +54,13 @@
         "displayName": "Locations for Assumptions"
       },
       "assumptions": {
-        "description": "Assumptions made about traffic, should be one-to-one with assumption_locations",
+        "description": "Assumptions made about traffic, should be one-to-one with assumption_locations. An assumption on an edge constrains the route as the neighbor sent it, before BGP's own export transformations: BGP resets the weight, and on an EBGP session also resets the local preference to 100 and prepends the neighbor's ASN. So an assumed AS-path length of N arrives as N+1, and an assumed local preference is ignored on an EBGP session.",
         "type": "string",
         "optional": true,
         "displayName": "Assumptions"
       },
       "default_assumption": {
-        "description": "Default assumption on incoming edges, if not specified",
+        "description": "Default assumption on incoming edges, if not specified. As with assumptions, this constrains the route as the neighbor sent it, before BGP's own export transformations.",
         "type": "string",
         "optional": true,
         "displayName": "Default Incoming Assumptions"

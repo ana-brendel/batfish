@@ -1,10 +1,8 @@
 package org.batfish.minesweeper.question.liveness;
 
 import net.sf.javabdd.BDD;
-import net.sf.javabdd.BDDPairing;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
-import org.batfish.common.bdd.MutableBDDInteger;
 import org.batfish.datamodel.Bgpv4Route;
 import org.batfish.datamodel.PrefixSpace;
 import org.batfish.datamodel.routing_policy.RoutingPolicy;
@@ -74,21 +72,8 @@ public class InterferenceCheck {
           continue;
         }
         assert edge.getSrcNode() != null;
-        if (edge.isEBGP()) {
-          // Symbolically undo the effect of prepending the source node's ASN to the AS-path
-          // on the property by replacing all references to the AS-path length (call it x) with
-          // (x + 1). Then when we do the WP computation below we'll get the right precondition
-          // for the source node.
-          MutableBDDInteger origAsPathLength = context.tbdd().getOriginalRoute().getAsPathLength();
-          MutableBDDInteger asPathLengthPlusOne =
-              origAsPathLength.addClipping(
-                  MutableBDDInteger.makeFromValue(context.tbdd().getFactory(), 4, 1));
-          BDDPairing pairing = context.tbdd().getFactory().makePair();
-          asPathLengthPlusOne.augmentPairing(origAsPathLength, pairing);
-          BDD old = property.getBDD();
-          BDD updated = old.veccompose(pairing);
-          property = new Invariant(context.tbdd(), updated);
-        }
+        // the prepending of the source node's ASN to the AS-path on an EBGP session is undone by
+        // the preImport that produced this edge's invariant
         RoutingPolicy exportPolicy = context.exports().get(edge);
         Invariant wp =
             exportPolicy == null
@@ -139,17 +124,19 @@ public class InterferenceCheck {
                   context.enforcedAssumptions().containsKey(edge)
                       ? context.enforcedAssumptions().get(edge).negate()
                       : Invariant.getFalse(context.tbdd()));
-          BDD updatedBDD = existing.getBDDCopy().or(wp.getBDDCopy());
           // we maintain an invariant that the edge invariants represent the routes
           // from the sender's perspective; the call to preImport converts from the
-          // receiver's perspective to the sender's perspective (preImport consumes updatedBDD)
-          Invariant updated = new Invariant(context.tbdd(), updatedBDD).preImport(edge.isEBGP());
+          // receiver's perspective to the sender's perspective.  The existing invariant is
+          // already from the sender's perspective, so it must not be converted again.
+          Invariant fromSender = wp.preImport(edge.isEBGP()); // consumes wp
+          Invariant updated =
+              new Invariant(context.tbdd(), existing.getBDDCopy().orWith(fromSender.getBDDCopy()));
           inferred.put(edge, updated);
           if (!existing.equals(updated) && !working.contains(edge)) {
             working.add(edge);
           }
           existing.free(); // can be freed because the updated invariant has replaced
-          wp.free();
+          fromSender.free();
         }
       }
     }

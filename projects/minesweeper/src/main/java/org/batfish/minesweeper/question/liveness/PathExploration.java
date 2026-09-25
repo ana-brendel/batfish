@@ -98,9 +98,17 @@ public class PathExploration {
         throw new BatfishException("Path is poorly constructed.");
       }
       if (policy == null || post.isFalse()) {
-        properties[i] = post;
+        // copy, since the preImport below consumes the constraint it is applied to
+        properties[i] = post.copy();
       } else {
         properties[i] = post.weakestPrecondition(policy, false, computedPathsCache);
+      }
+      if (curr instanceof Edge incoming) {
+        // the constraint on an edge is stated from the sender's point of view: it constrains the
+        // route as the sender's export policy produced it, before BGP's own export
+        // transformations.  This matches how Inference stores edge invariants and how checked
+        // assumptions on edges are interpreted.
+        properties[i] = properties[i].preImport(incoming.isEBGP());
       }
     }
     return properties;

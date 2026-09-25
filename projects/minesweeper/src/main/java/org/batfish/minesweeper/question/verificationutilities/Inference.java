@@ -11,6 +11,7 @@ import org.batfish.minesweeper.bdd.BDDRoute;
 import org.batfish.minesweeper.bdd.TransferBDD;
 import org.batfish.minesweeper.bdd.TransferReturn;
 
+import javax.annotation.Nonnull;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.LinkedList;
@@ -21,6 +22,7 @@ import java.util.Queue;
 import java.util.Set;
 
 import static org.batfish.minesweeper.bdd.TransferBDD.isRelevantForDestination;
+import static org.batfish.minesweeper.bdd.TransferBDDUtils.lessPreferredThanBgp;
 import static org.batfish.minesweeper.question.verificationutilities.NetworkInfo.getRouteExample;
 
 public class Inference {
@@ -37,6 +39,10 @@ public class Inference {
   private final Map<Location, Invariant> inferred = new HashMap<>();
 
   private final Set<Location> originsForExistence = new HashSet<>();
+
+  /// For each node on the good path, the routes that are less preferred than every good route that
+  /// can reach it (see addPreferenceRestrictions)
+  private final Map<Node, BDD> lessPreferredByNode = new HashMap<>();
 
   private final Map<RoutingPolicy, List<TransferReturn>> computedPathsCache = new HashMap<>();
 
@@ -65,6 +71,39 @@ public class Inference {
     this.originsForExistence.addAll(origins);
   }
 
+  /// Records the routes that can reach each node along the good path, so that subsequent runs
+  /// account for route preference: a route that is less preferred than every one of them is never
+  /// selected at that node.
+  public void addPreferenceRestrictions(@Nonnull Map<Node, Invariant> reachableGood) {
+    lessPreferredByNode.values().forEach(BDD::free);
+    lessPreferredByNode.clear();
+    reachableGood.forEach(
+        (node, good) -> {
+          // if no good route reaches the node then there is nothing for other routes to lose to
+          if (!good.isFalse()) {
+            lessPreferredByNode.put(node, lessPreferredThanBgp(good.getBDD(), tbdd));
+          }
+        });
+  }
+
+  /// A route that is less preferred than the good route at a node is never selected there, so it
+  /// does not matter what happens to it: a universal invariant can allow it, and an existential
+  /// one (e.g., the routes that could interfere) can leave it out.  Does not consume inv.
+  private Invariant accountForPreference(Location location, Invariant inv, boolean isUniversal) {
+    if (!(location instanceof Node node)) {
+      return inv;
+    }
+    BDD lessPreferred = lessPreferredByNode.get(node);
+    if (lessPreferred == null) {
+      return inv;
+    }
+    return new Invariant(
+        tbdd,
+        isUniversal
+            ? inv.getBDDCopy().orWith(lessPreferred.id())
+            : inv.getBDDCopy().diffWith(lessPreferred.id()));
+  }
+
   private boolean checksFalseAssumption(Location location) {
     return checkedAssumptions.containsKey(location) && checkedAssumptions.get(location).isFalse();
   }
@@ -83,6 +122,12 @@ public class Inference {
   private Invariant mergeInvariants(
       RoutingPolicy policy, Invariant post, Location location, boolean isUniversal) {
     Invariant wp = this.getWeakestPrecondition(post, isUniversal, policy);
+    if (location instanceof Edge edge) {
+      // an edge invariant is stated from the sender's point of view: it constrains the route as
+      // the sender's export policy produced it, before BGP's own export transformations.  This
+      // matches how checked assumptions on edges are interpreted.
+      wp = wp.preImport(edge.isEBGP());
+    }
     // get inferred if present, otherwise get enforced assumption, otherwise default is true
     Invariant existing =
         inferred.getOrDefault(
@@ -94,7 +139,13 @@ public class Inference {
             ? new Invariant(tbdd, existing.getBDDCopy().and(wp.getBDDCopy()))
             : new Invariant(tbdd, existing.getBDDCopy().or(wp.getBDDCopy()));
     wp.free();
-    return updated;
+    // this must be done on every update, not just to the targets: otherwise an update that comes
+    // back around a cycle would undo it
+    Invariant adjusted = accountForPreference(location, updated, isUniversal);
+    if (adjusted != updated) {
+      updated.free();
+    }
+    return adjusted;
   }
 
   private Optional<Location> inferenceLoop(boolean isUniversal) {
@@ -220,7 +271,7 @@ public class Inference {
     boolean isUniversal = check == Check.SAFETY;
     inferred.clear();
     working.clear();
-    inferred.putAll(targets);
+    targets.forEach((loc, inv) -> inferred.put(loc, accountForPreference(loc, inv, isUniversal)));
     working.addAll(targets.keySet());
     Optional<Location> cex = this.inferenceLoop(isUniversal);
     if (cex.isPresent()) {

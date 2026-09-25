@@ -252,6 +252,9 @@ public class LivenessAnswerer extends Answerer {
         }
       }
       LOGGER.info("Checking for interference...");
+      // a route that is less preferred than the good route at a node on the good path is never
+      // selected there, so it cannot interfere
+      infer.addPreferenceRestrictions(paths.getKey().reachableRoutes());
       // check for interference
       Invariant interferenceCondition =
           new Invariant(info.tbdd, target.negate().getBDD().and(infer.prefixSpaceToBDD(prefix)));

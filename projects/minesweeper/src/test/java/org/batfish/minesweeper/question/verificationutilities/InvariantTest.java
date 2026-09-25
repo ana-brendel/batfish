@@ -62,6 +62,7 @@ import static org.batfish.datamodel.LineAction.PERMIT;
 import static org.batfish.minesweeper.bdd.TransferBDD.isRelevantForDestination;
 import static org.batfish.minesweeper.question.verificationutilities.TestConfigConstructionUtils.getBgpActivePeerConfig;
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertNotSame;
 import static org.junit.Assert.assertTrue;
 
 public class InvariantTest {
@@ -578,6 +579,33 @@ public class InvariantTest {
     Invariant wp_beta_alpha = alphaNode.weakestPrecondition(imports.get(ALPHANODE));
     assertTrue(wp_beta_alpha.isTrue());
     assertEquals(wp_beta_alpha, beta_alpha);
+  }
+
+  @Test
+  public void weakestPreconditionOfEmptyPolicyTest() {
+    Configuration owner =
+        nf.configurationBuilder()
+            .setHostname("emptyNode")
+            .setConfigurationFormat(ConfigurationFormat.CISCO_IOS)
+            .setDefaultInboundAction(PERMIT)
+            .build();
+    RoutingPolicy empty =
+        nf.routingPolicyBuilder()
+            .setOwner(owner)
+            .setName(EXPORT_POLICY_NAME)
+            .setStatements(ImmutableList.of())
+            .build();
+    Invariant post =
+        new Invariant(tbdd, Invariant.clauseBuilder().avoidPrefix(PREFIX).build(tbdd, null));
+    Invariant expected = post.copy();
+
+    // the policy permits every route unchanged, so the precondition is the postcondition, but it
+    // must be a separate BDD: callers free or consume the precondition they get back
+    Invariant wp = post.weakestPrecondition(empty);
+    assertEquals(expected, wp);
+    assertNotSame(post.getBDD(), wp.getBDD());
+    wp.free();
+    assertEquals(expected, post);
   }
 
   @Test

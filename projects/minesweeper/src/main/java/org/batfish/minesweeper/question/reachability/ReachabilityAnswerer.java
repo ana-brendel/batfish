@@ -136,6 +136,7 @@ public class ReachabilityAnswerer extends Answerer {
                   // removed the originate outside network requirement (!edge.hasSrcNode())
                   if (loc instanceof Edge edge) {
                     origins.add(edge);
+                    info.addAssumptionAtOrigin(edge);
                   } else {
                     throw new BatfishException(
                         "Only considers traffic coming in on an edge (not originating at a node).");

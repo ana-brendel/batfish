@@ -537,6 +537,12 @@ public class NetworkInfo {
     }
   }
 
+  public void addAssumptionAtOrigin(Edge origin) {
+    if (enforcedAssumptions.containsKey(origin)) {
+      checkedAssumptions.put(origin,enforcedAssumptions.get(origin));
+    }
+  }
+
   /// Used to add an assumption pertaining to traffic at provided location, need to build location
   /// and invariant in the context of this network
   public Set<Location> addAssumption(

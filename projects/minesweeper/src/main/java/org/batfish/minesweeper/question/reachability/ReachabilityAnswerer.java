@@ -22,6 +22,7 @@ import org.batfish.minesweeper.question.verificationutilities.Location;
 import org.batfish.minesweeper.question.verificationutilities.NetworkInfo;
 import org.batfish.minesweeper.question.verificationutilities.Node;
 import org.batfish.minesweeper.question.verificationutilities.Setup;
+import org.batfish.minesweeper.utils.Tuple;
 
 import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
@@ -154,7 +155,7 @@ public class ReachabilityAnswerer extends Answerer {
       Invariant target,
       Set<Edge> ingress) {
     LOGGER.info("Searching for a good path (via checking shortest path from ingresses)...");
-    Map<RoutingPolicy, List<TransferReturn>> computedPathsCache = new HashMap<>();
+    Map<Tuple<String,RoutingPolicy>, List<TransferReturn>> computedPathsCache = new HashMap<>();
     PathExploration exploration =
         info.toPathExploration(prefix, location, target, ingress, computedPathsCache);
     Pair<Path, Set<Path>> paths = exploration.run();

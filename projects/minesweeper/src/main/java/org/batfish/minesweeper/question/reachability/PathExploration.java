@@ -10,6 +10,7 @@ import org.batfish.minesweeper.question.verificationutilities.Edge;
 import org.batfish.minesweeper.question.verificationutilities.Invariant;
 import org.batfish.minesweeper.question.verificationutilities.Location;
 import org.batfish.minesweeper.question.verificationutilities.Node;
+import org.batfish.minesweeper.utils.Tuple;
 
 import java.util.HashMap;
 import java.util.HashSet;
@@ -29,7 +30,7 @@ public class PathExploration {
 
   private final Set<Location> origins = new HashSet<>();
 
-  private final Map<RoutingPolicy, List<TransferReturn>> computedPathsCache;
+  private final Map<Tuple<String,RoutingPolicy>, List<TransferReturn>> computedPathsCache;
 
   public PathExploration(
       Path.Context context,
@@ -37,7 +38,7 @@ public class PathExploration {
       Location location,
       Invariant target,
       Set<Edge> ingress,
-      Map<RoutingPolicy, List<TransferReturn>> computedPathsCache) {
+      Map<Tuple<String,RoutingPolicy>, List<TransferReturn>> computedPathsCache) {
     this.context = context;
     this.prefix = prefix;
     this.location = location;

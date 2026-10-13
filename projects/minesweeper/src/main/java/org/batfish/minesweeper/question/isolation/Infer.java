@@ -17,6 +17,7 @@ import org.batfish.minesweeper.question.verificationutilities.Invariant;
 import org.batfish.minesweeper.question.verificationutilities.Lightyear;
 import org.batfish.minesweeper.question.verificationutilities.Location;
 import org.batfish.minesweeper.question.verificationutilities.Node;
+import org.batfish.minesweeper.utils.Tuple;
 
 import javax.annotation.Nonnull;
 import java.util.HashMap;
@@ -49,7 +50,7 @@ public class Infer {
   // private final InferenceLoopQueue working = new InferenceLoopQueue();
   private final Map<Location, Invariant> inferred = new HashMap<>();
 
-  private final Map<RoutingPolicy, List<TransferReturn>> computedPathsCache = new HashMap<>();
+  private final Map<Tuple<String,RoutingPolicy>, List<TransferReturn>> computedPathsCache = new HashMap<>();
 
   /// Inference counterexample, used for when we infer false within the network
   public record CounterExample(Location location, Invariant post, Location cause) {}

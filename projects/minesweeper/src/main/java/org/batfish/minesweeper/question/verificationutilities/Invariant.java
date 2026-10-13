@@ -41,6 +41,7 @@ import org.batfish.minesweeper.bdd.TransferBDDUtils;
 import org.batfish.minesweeper.bdd.TransferReturn;
 import org.batfish.minesweeper.question.searchroutepolicies.RegexConstraint;
 import org.batfish.minesweeper.question.searchroutepolicies.RegexConstraints;
+import org.batfish.minesweeper.utils.Tuple;
 
 public class Invariant {
   private final TransferBDD tbdd;
@@ -620,7 +621,7 @@ public class Invariant {
   public Invariant weakestPrecondition(
       @Nonnull RoutingPolicy policy,
       boolean includeDenied,
-      Map<RoutingPolicy, List<TransferReturn>> cache) {
+      Map<Tuple<String,RoutingPolicy>, List<TransferReturn>> cache) {
     if (policy.getStatements().isEmpty()) {
       if (policy.getOwner() == null
           || policy.getOwner().getDefaultInboundAction() == LineAction.PERMIT) {
@@ -631,13 +632,14 @@ public class Invariant {
     } else {
       TransferBDD.Context context = TransferBDD.Context.forPolicy(policy);
       List<TransferReturn> paths;
-      if (cache != null && cache.containsKey(policy)) {
-        paths = cache.get(policy);
+      Tuple<String,RoutingPolicy> key = new Tuple<>(policy.getOwner().getHostname(),policy);
+      if (cache != null && cache.containsKey(key)) {
+        paths = cache.get(key);
       } else {
         try {
           paths = tbdd.computePaths(policy.getStatements(), context, false);
           if (cache != null) {
-            cache.put(policy, paths);
+            cache.put(key, paths);
           }
         } catch (Exception e) {
           String name =

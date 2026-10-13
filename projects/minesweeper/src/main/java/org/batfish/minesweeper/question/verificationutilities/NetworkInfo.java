@@ -26,6 +26,7 @@ import org.batfish.minesweeper.question.reachability.Path;
 import org.batfish.minesweeper.question.reachability.PathExploration;
 import org.batfish.minesweeper.question.isolation.Infer;
 import org.batfish.minesweeper.question.searchroutepolicies.RegexConstraint;
+import org.batfish.minesweeper.utils.Tuple;
 import org.batfish.question.bgpsessionstatus.BgpSessionAnswererUtils;
 import org.batfish.question.bgpsessionstatus.BgpSessionCompatibilityAnswerer;
 import org.batfish.question.bgpsessionstatus.BgpSessionCompatibilityQuestion;
@@ -583,7 +584,7 @@ public class NetworkInfo {
       Location location,
       Invariant target,
       Set<Edge> ingress,
-      Map<RoutingPolicy, List<TransferReturn>> computedPathsCache) {
+      Map<Tuple<String,RoutingPolicy>, List<TransferReturn>> computedPathsCache) {
     Path.Context context =
         new Path.Context(
             this.tbdd,

@@ -2526,4 +2526,174 @@ public class ReachabilityAnswererTest {
     assertTrue(goodPath);
     assertFalse(hasInterference);
   }*/
+
+  /**
+   * Two nodes for exercising BGP loop prevention, which the analysis does not model.  aNode
+   * receives the prefix from an external EBGP neighbor, tags it with 1:1 and sets local-pref 200;
+   * bNode is the target and requires 1:1.  The route may come back from bNode to aNode, and
+   * bNode's export to aNode strips all communities when stripOnReturn is set.
+   *
+   * <p>In real BGP that copy is never sent back.  When aNode and bNode are in the same AS (sameAs),
+   * bNode does not advertise a route learned over iBGP to another iBGP peer.  Otherwise they are
+   * EBGP peers and aNode rejects the copy because its own AS is in the AS path; in that case aNode's
+   * import from bNode also sets local-pref 200, so that the copy ties with the good route on
+   * local-pref.
+   */
+  private TestConfigConstructionUtils.Networkv2 loopBackExample(
+      NodeRecord ANODE,
+      NodeRecord BNODE,
+      Ip externalIncoming,
+      String prefixString,
+      boolean sameAs,
+      boolean stripOnReturn) {
+    Map<NodeRecord, Configuration> configs = new HashMap<>();
+
+    String community1 = "1:1";
+    String regex_community1 = "^" + community1 + "$";
+
+    String externalImport = "incomingFromOutside";
+    String importFromB = "importFromB";
+    String exportToA = "exportToA";
+    String permitAll = "permitAll";
+    long aAs = 65001L;
+    long bAs = sameAs ? aAs : 65002L;
+
+    String PREFIX_LABEL = "prefixMatch";
+    RouteFilterList prefixMatch =
+        new RouteFilterList(
+            PREFIX_LABEL,
+            ImmutableList.of(
+                new RouteFilterLine(PERMIT, PrefixRange.fromPrefix(Prefix.parse(prefixString)))));
+
+    setUpConfigs(configs, ANODE, BNODE);
+    includeCommunities(configs.get(ANODE), regex_community1);
+    includeCommunities(configs.get(BNODE), regex_community1);
+    configs.get(ANODE).setRouteFilterLists(ImmutableMap.of(PREFIX_LABEL, prefixMatch));
+
+    Map<NodeRecord, BgpProcess> processes = getBgpProcesses(configs, ANODE, BNODE);
+    processes
+        .get(ANODE)
+        .setNeighbors(
+            ImmutableSortedMap.of(
+                externalIncoming,
+                getPeerConfigWithAs("external", externalImport, permitAll, aAs, 65101L),
+                BNODE.getIp(),
+                getPeerConfigWithAs("internal", importFromB, permitAll, aAs, bAs)));
+    processes
+        .get(BNODE)
+        .setNeighbors(
+            ImmutableSortedMap.of(
+                ANODE.getIp(), getPeerConfigWithAs("internal", permitAll, exportToA, bAs, aAs)));
+
+    List<Statement> externalImportStatements =
+        new java.util.ArrayList<>(
+            ifStatement(
+                checkForPrefixListMatch(PREFIX_LABEL),
+                addToCommunities(community1),
+                permitRoute(true)));
+    externalImportStatements.add(0, new SetLocalPreference(new LiteralLong(200L)));
+    RoutingPolicy template =
+        makePolicy(configs.get(ANODE), externalImport, externalImportStatements);
+    makePolicy(configs.get(ANODE), permitAll, permitRoute(true));
+    List<Statement> importFromBStatements = new java.util.ArrayList<>(permitRoute(true));
+    if (!sameAs) {
+      importFromBStatements.add(0, new SetLocalPreference(new LiteralLong(200L)));
+    }
+    makePolicy(configs.get(ANODE), importFromB, importFromBStatements);
+
+    makePolicy(configs.get(BNODE), permitAll, permitRoute(true));
+    makePolicy(
+        configs.get(BNODE), exportToA, stripOnReturn ? clearCommunities() : permitRoute(true));
+
+    Set<RegexConstraint> communityRegexes =
+        ImmutableSet.<RegexConstraint>builder().add(RegexConstraint.parse(community1)).build();
+    ConfigAtomicPredicates configAPs =
+        getConfigAtomicPredicates(communityRegexes, Set.of(), configs.values());
+    TransferBDD tbdd = new TransferBDD(configAPs);
+
+    return new TestConfigConstructionUtils.Networkv2(tbdd, configs, template, List.of());
+  }
+
+  /// Runs the liveness check on loopBackExample with target 1:1 at bNode, optionally assuming the
+  /// AS-path length of the routes the external neighbor sends; returns (good path, interference)
+  private Pair<Boolean, Boolean> runLoopBackExample(
+      boolean sameAs, boolean stripOnReturn, Integer externalAsPathLength) {
+    NodeRecord ANODE_R = new NodeRecord("10.0.0.1", "aNode");
+    NodeRecord BNODE_R = new NodeRecord("10.0.0.2", "bNode");
+    Ip externalIncoming = Ip.parse("100.0.0.10");
+    String prefixStr = "2.4.8.0/24";
+
+    PrefixSpace TARGET_PREFIX = new PrefixSpace(PrefixRange.fromString(prefixStr));
+
+    TestConfigConstructionUtils.Networkv2 net =
+        loopBackExample(ANODE_R, BNODE_R, externalIncoming, prefixStr, sameAs, stripOnReturn);
+    NetworkInfo info = net.getInfo(TARGET_PREFIX);
+
+    Node ANODE = ANODE_R.instantiate(info);
+    Node BNODE = BNODE_R.instantiate(info);
+
+    if (externalAsPathLength != null) {
+      Location loc = info.checkForEdgeViaIps(externalIncoming, ANODE.getSingleIp()).get();
+      info.addAssumption(
+          loc,
+          new Invariant(
+              net.tbdd(),
+              Invariant.clauseBuilder()
+                  .setAsPathLength(externalAsPathLength)
+                  .build(net.tbdd(), net.template())));
+    }
+
+    RegexConstraints comm = new RegexConstraints(List.of(RegexConstraint.parse("1:1")));
+    Invariant target =
+        new Invariant(
+            net.tbdd(),
+            Invariant.clauseBuilder().setCommunities(comm).build(net.tbdd(), net.template()));
+
+    TableAnswerElement result =
+        ReachabilityAnswerer.run(info, TARGET_PREFIX, BNODE, target, Set.of());
+    return processResultRows(result.getRowsList());
+  }
+
+  @Test
+  public void ibgpLoopBackNoInterferenceTest() {
+    Pair<Boolean, Boolean> checks = runLoopBackExample(true, true, null);
+    assertTrue(checks.getLeft());
+    // TODO iBGP loop prevention is not modeled, so interference is currently reported: the analysis
+    // lets bNode send the good route back to aNode over iBGP with 1:1 stripped, and that copy ties
+    // with the good route on every attribute we compare, so route preference cannot excuse it
+    // assertFalse(checks.getRight());
+  }
+
+  @Test
+  public void ibgpLoopBackUnchangedNoInterferenceTest() {
+    Pair<Boolean, Boolean> checks = runLoopBackExample(true, false, null);
+    assertTrue(checks.getLeft());
+    assertFalse(checks.getRight());
+  }
+
+  @Test
+  public void ebgpLoopBackNoInterferenceTest() {
+    Pair<Boolean, Boolean> checks = runLoopBackExample(false, true, null);
+    assertTrue(checks.getLeft());
+    // TODO AS-path loop detection is not modeled, so interference is currently reported: aNode
+    // accepts the copy of the good route that comes back from bNode with 1:1 stripped.  The copy's
+    // AS path is two hops longer, but with no assumption on the external AS-path length the good
+    // route's length is unbounded, so route preference cannot excuse it (compare
+    // ebgpLoopBackAsPathLengthAssumedNoInterferenceTest)
+    // assertFalse(checks.getRight());
+  }
+
+  @Test
+  public void ebgpLoopBackAsPathLengthAssumedNoInterferenceTest() {
+    Pair<Boolean, Boolean> checks = runLoopBackExample(false, true, 1);
+    assertTrue(checks.getLeft());
+    assertFalse(checks.getRight());
+  }
+
+  @Test
+  public void ebgpLoopBackUnchangedNoInterferenceTest() {
+    Pair<Boolean, Boolean> checks = runLoopBackExample(false, false, null);
+    assertTrue(checks.getLeft());
+    assertFalse(checks.getRight());
+  }
 }

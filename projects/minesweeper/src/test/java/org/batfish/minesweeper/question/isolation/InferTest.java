@@ -4,6 +4,7 @@ import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.ImmutableSet;
 import com.google.common.collect.ImmutableSortedMap;
+import net.sf.javabdd.BDD;
 import org.batfish.datamodel.BgpProcess;
 import org.batfish.datamodel.Configuration;
 import org.batfish.datamodel.ConfigurationFormat;
@@ -34,8 +35,10 @@ import org.junit.Test;
 
 import java.util.AbstractMap;
 import java.util.Collection;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.IdentityHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -1725,5 +1728,188 @@ public class InferTest {
     assertTrue(result.verified);
     assertTrue(result.inferredTrue());
     assertTrue(result.counter.isEmpty());
+  }
+
+  private static RouteFilterList prefixList(String prefix) {
+    return new RouteFilterList(
+        PREFIX_MATCH,
+        ImmutableList.of(new RouteFilterLine(PERMIT, PrefixRange.fromPrefix(Prefix.parse(prefix)))));
+  }
+
+  /**
+   * A and B each export to C through a policy with the same name and the same statements, which
+   * rejects routes matching a prefix list. The prefix list has the same name on both nodes too, but
+   * only A's list contains the prefix that the property at C forbids.
+   */
+  private TestConfigConstructionUtils.Network samePolicyNameNetwork(
+      Ip entryA, Ip entryB, NodeRecord NODE_A, NodeRecord NODE_B, NodeRecord NODE_C) {
+    Map<NodeRecord, Configuration> configs = new HashMap<>();
+    Map<NodeRecord, RoutingPolicy> imports = new HashMap<>();
+    Map<NodeRecord, RoutingPolicy> exports = new HashMap<>();
+
+    setUpConfigs(configs, NODE_A, NODE_B, NODE_C);
+    configs.get(NODE_A).setRouteFilterLists(ImmutableMap.of(PREFIX_MATCH, prefixList(prefixStr)));
+    configs
+        .get(NODE_B)
+        .setRouteFilterLists(ImmutableMap.of(PREFIX_MATCH, prefixList("99.99.0.0/16")));
+
+    Map<NodeRecord, BgpProcess> processes = getBgpProcesses(configs, NODE_A, NODE_B, NODE_C);
+    processes
+        .get(NODE_A)
+        .setNeighbors(
+            ImmutableSortedMap.of(
+                entryA,
+                getBgpActivePeerConfig(NEXT_DOOR, IMPORT_POLICY_NAME, EXPORT_POLICY_NAME),
+                NODE_C.getIp(),
+                getBgpActivePeerConfig(NEXT_DOOR, IMPORT_POLICY_NAME, EXPORT_POLICY_NAME)));
+    processes
+        .get(NODE_B)
+        .setNeighbors(
+            ImmutableSortedMap.of(
+                entryB,
+                getBgpActivePeerConfig(NEXT_DOOR, IMPORT_POLICY_NAME, EXPORT_POLICY_NAME),
+                NODE_C.getIp(),
+                getBgpActivePeerConfig(NEXT_DOOR, IMPORT_POLICY_NAME, EXPORT_POLICY_NAME)));
+    processes
+        .get(NODE_C)
+        .setNeighbors(
+            ImmutableSortedMap.of(
+                NODE_A.getIp(),
+                getBgpActivePeerConfig(NEXT_DOOR, IMPORT_POLICY_NAME, EXPORT_POLICY_NAME),
+                NODE_B.getIp(),
+                getBgpActivePeerConfig(NEXT_DOOR, IMPORT_POLICY_NAME, EXPORT_POLICY_NAME)));
+
+    for (NodeRecord node : List.of(NODE_A, NODE_B)) {
+      imports.put(node, makePolicy(configs.get(node), IMPORT_POLICY_NAME, permitRoute(true)));
+      exports.put(
+          node,
+          makePolicy(
+              configs.get(node),
+              EXPORT_POLICY_NAME,
+              ifStatement(
+                  checkForPrefixListMatch(PREFIX_MATCH), permitRoute(false), permitRoute(true))));
+    }
+    imports.put(NODE_C, makePolicy(configs.get(NODE_C), IMPORT_POLICY_NAME, permitRoute(true)));
+    exports.put(NODE_C, makePolicy(configs.get(NODE_C), EXPORT_POLICY_NAME, permitRoute(true)));
+
+    TransferBDD tbdd =
+        new TransferBDD(getConfigAtomicPredicates(configs.values(), ImmutableSet.of()));
+    return new TestConfigConstructionUtils.Network(tbdd, configs, imports, exports);
+  }
+
+  @Test
+  public void samePolicyNameOnDifferentNodesTest() {
+    Ip entryA = Ip.parse("10.20.0.0");
+    Ip entryB = Ip.parse("10.20.10.0");
+    NodeRecord NODE_A_R = new NodeRecord("10.20.0.1", "node_A");
+    NodeRecord NODE_B_R = new NodeRecord("10.20.0.2", "node_B");
+    NodeRecord NODE_C_R = new NodeRecord("10.20.0.3", "node_C");
+
+    TestConfigConstructionUtils.Network net =
+        samePolicyNameNetwork(entryA, entryB, NODE_A_R, NODE_B_R, NODE_C_R);
+    // the two export policies are equal as RoutingPolicy objects even though they behave
+    // differently, so the analysis must not treat one as a stand-in for the other
+    assertEquals(net.exports().get(NODE_A_R), net.exports().get(NODE_B_R));
+
+    NetworkInfo info = net.getInfo();
+    Node NODE_A = NODE_A_R.instantiate(info);
+    Node NODE_B = NODE_B_R.instantiate(info);
+    Node NODE_C = NODE_C_R.instantiate(info);
+
+    Infer verifier = info.toInfer();
+    Invariant notPrefix =
+        new Invariant(net.tbdd(), Invariant.clauseBuilder().avoidPrefix(PREFIX).build(net.tbdd(), null));
+    verifier.addProperty(NODE_C, notPrefix.copy());
+    Infer.Result result = verifier.run();
+
+    // A rejects the forbidden prefix on export, so A may hold any route
+    assertTrue(result.invariants.get(NODE_A).isTrue());
+    // B's list does not contain the forbidden prefix, so B must not hold it
+    assertEquals(notPrefix, result.invariants.get(NODE_B));
+    // so a violating route can only come in at B
+    Edge intoB = info.checkForEdgeViaIps(entryB, NODE_B.getSingleIp()).get();
+    assertFalse(result.verified);
+    assertEquals(ImmutableSet.of(intoB), result.checks.keySet());
+  }
+
+  /**
+   * A route enters at A, which rejects the forbidden prefix on import, and A passes it on to B. A's
+   * export policy and both of B's policies have no statements, so they fall through to the default
+   * action, which is permit.
+   */
+  private TestConfigConstructionUtils.Network emptyPolicyNetwork(
+      Ip entry, NodeRecord NODE_A, NodeRecord NODE_B) {
+    Map<NodeRecord, Configuration> configs = new HashMap<>();
+    Map<NodeRecord, RoutingPolicy> imports = new HashMap<>();
+    Map<NodeRecord, RoutingPolicy> exports = new HashMap<>();
+
+    setUpConfigs(configs, NODE_A, NODE_B);
+    configs.get(NODE_A).setRouteFilterLists(ImmutableMap.of(PREFIX_MATCH, prefixList(prefixStr)));
+
+    Map<NodeRecord, BgpProcess> processes = getBgpProcesses(configs, NODE_A, NODE_B);
+    processes
+        .get(NODE_A)
+        .setNeighbors(
+            ImmutableSortedMap.of(
+                entry,
+                getBgpActivePeerConfig(NEXT_DOOR, IMPORT_POLICY_NAME, EXPORT_POLICY_NAME),
+                NODE_B.getIp(),
+                getBgpActivePeerConfig(NEXT_DOOR, IMPORT_POLICY_NAME, EXPORT_POLICY_NAME)));
+    processes
+        .get(NODE_B)
+        .setNeighbors(
+            ImmutableSortedMap.of(
+                NODE_A.getIp(),
+                getBgpActivePeerConfig(NEXT_DOOR, IMPORT_POLICY_NAME, EXPORT_POLICY_NAME)));
+
+    imports.put(
+        NODE_A,
+        makePolicy(
+            configs.get(NODE_A),
+            IMPORT_POLICY_NAME,
+            ifStatement(
+                checkForPrefixListMatch(PREFIX_MATCH), permitRoute(false), permitRoute(true))));
+    exports.put(NODE_A, makePolicy(configs.get(NODE_A), EXPORT_POLICY_NAME, ImmutableList.of()));
+    imports.put(NODE_B, makePolicy(configs.get(NODE_B), IMPORT_POLICY_NAME, ImmutableList.of()));
+    exports.put(NODE_B, makePolicy(configs.get(NODE_B), EXPORT_POLICY_NAME, ImmutableList.of()));
+
+    TransferBDD tbdd =
+        new TransferBDD(getConfigAtomicPredicates(configs.values(), ImmutableSet.of()));
+    return new TestConfigConstructionUtils.Network(tbdd, configs, imports, exports);
+  }
+
+  @Test
+  public void emptyPolicyTest() {
+    Ip entry = Ip.parse("10.30.0.0");
+    NodeRecord NODE_A_R = new NodeRecord("10.30.0.1", "node_A");
+    NodeRecord NODE_B_R = new NodeRecord("10.30.0.2", "node_B");
+
+    TestConfigConstructionUtils.Network net = emptyPolicyNetwork(entry, NODE_A_R, NODE_B_R);
+    NetworkInfo info = net.getInfo();
+    Node NODE_A = NODE_A_R.instantiate(info);
+    Node NODE_B = NODE_B_R.instantiate(info);
+
+    Infer verifier = info.toInfer();
+    Invariant notPrefix =
+        new Invariant(net.tbdd(), Invariant.clauseBuilder().avoidPrefix(PREFIX).build(net.tbdd(), null));
+    verifier.addProperty(NODE_B, notPrefix.copy());
+    Infer.Result result = verifier.run();
+
+    assertTrue(result.verified);
+    Map<Location, Invariant> inferred = result.invariants;
+    assertEquals(5, inferred.size());
+    // the empty policies pass routes through unchanged, so the property has to hold all the way
+    // back to A, whose import policy is what establishes it
+    assertEquals(notPrefix, inferred.get(NODE_B));
+    assertEquals(notPrefix, inferred.get(new Edge(NODE_A, NODE_B)));
+    assertEquals(notPrefix, inferred.get(NODE_A));
+    assertTrue(inferred.get(info.checkForEdgeViaIps(entry, NODE_A.getSingleIp()).get()).isTrue());
+    assertTrue(inferred.get(new Edge(NODE_B, NODE_A)).isTrue());
+
+    // each location must own its own BDD; if two share one, freeing either destroys both
+    Set<BDD> owned = Collections.newSetFromMap(new IdentityHashMap<>());
+    for (Invariant inv : inferred.values()) {
+      assertTrue("BDD shared between inferred invariants", owned.add(inv.getBDD()));
+    }
   }
 }

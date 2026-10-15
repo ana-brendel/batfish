@@ -614,6 +614,9 @@ public class Invariant {
    * executed. If the includeDenied flag is false, then only preconditions which result in routes
    * that are permitted is considered.
    *
+   * <p>The result is always a new invariant, never this one, so the caller may free it or consume
+   * it (e.g. with preImport) without affecting this invariant.
+   *
    * @param policy weakest precondition for this policy
    * @param includeDenied true if denied routes should be included
    * @return weakest precondition for this invariant to hold on policy
@@ -625,7 +628,9 @@ public class Invariant {
     if (policy.getStatements().isEmpty()) {
       if (policy.getOwner() == null
           || policy.getOwner().getDefaultInboundAction() == LineAction.PERMIT) {
-        return this; // default is permit, so invariant itself is the weakest precondition
+        // default is permit, so invariant itself is the weakest precondition.  Return a copy:
+        // callers free or consume the result, and this invariant is typically still in use.
+        return this.copy();
       } else {
         return new Invariant(tbdd); // default is deny so the weakest precondition is true
       }

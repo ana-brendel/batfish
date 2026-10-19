@@ -264,7 +264,9 @@ public class Infer {
    * whatever target properties and locations are provided. Included for violation analysis to avoid
    * logging every inference query in the loop.
    *
-   * @param pushFalse indicates if inferring a false should halt inference (true is no)
+   * @param pushFalse indicates whether to continue pushing a false invariant backward or to stop
+   *     and signal an error. stopping early is sound and can provide better error localization, but
+   *     it can also yield a false positive if no routes can actually reach that location.
    * @return Result indicating if verification succeeded, what the inferred invariants are and a
    *     counterexample if applicable
    */

@@ -20,7 +20,9 @@ with a route for the prefix. The examples are tests in
    excluded, so a route that some later hop on the good path would drop violates the constraint.
 3. `Infer` then requires that every route that can ever be at each of those nodes satisfies the
    node's path constraint. It reports interference if an ingress assumption allows a route that
-   would violate a requirement, or if a requirement cannot be met at all ("Dead End").
+   would violate a requirement. `Infer` runs with pushFalse set, so a requirement of false at
+   some location does not stop it; the false is pushed back to the ingresses like any other
+   requirement. (The "Dead End" report in `ReachabilityAnswerer.run` therefore never fires.)
 
 This is sound. Whatever route each node on the good path selects is carried one more hop, so the
 target gets a route. But it protects one particular path at every hop, which is stronger than
@@ -71,8 +73,9 @@ less preferred than the good route there.
 
 Test: `eLoopBackTag`. There is one ingress and one path. T's export back to A tags routes 2:2, and
 T's import from A drops 2:2. The copy of the good route that T sends back to A violates A's path
-constraint, and the requirement at A cannot be met. Interference is reported at the good path's
-own ingress, with a harmless route as the witness. That witness pattern is the clue to recognize
+constraint, so the requirement at T, and then everywhere upstream, becomes false. That false is
+pushed back to E1, and interference is reported at the good path's own ingress, with an arbitrary
+(harmless) route as the witness, since no route satisfies false. That witness pattern is the clue to recognize
 this case in real output.
 
 In real BGP the copy never comes back. Over eBGP, A rejects it because A's own AS is already in

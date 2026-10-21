@@ -7,7 +7,9 @@ with a route for the prefix. The examples are tests in
 
 - `InterferenceFalsePositiveTest`: small hand-built networks, one test per case. Where the check
   is wrong today, the interference assertion is commented out with a TODO.
-- `InterferenceRepoExampleTest`: the existing `weakerPathConstraints` network.
+- `InterferenceRepoExampleTest`: the existing `weakerPathConstraints` network, with every session
+  made eBGP. Variation 1 is a false positive; variation 2 is real interference (gamma's only way
+  in is beta, which drops the 1:1-tagged route beta may select), and the check rightly reports it.
 - `InterferenceDiagnosticsTest`: prints the path constraints and the inferred invariants for
   each network, which shows where each report comes from.
 
@@ -45,7 +47,7 @@ E1 -> A -> T.
 ## 1. Another path delivers the competing route
 
 Tests: `base`, `baseIngressE1`, `parallelSessionSwapped`, `parallelSessionSwappedIngressE1`,
-`cE2AtBIngressE1`, and variations 1 and 2 of `InterferenceRepoExampleTest`.
+`cE2AtBIngressE1`, and variation 1 of `InterferenceRepoExampleTest`.
 
 A route from E2 that carries 2:2 can be at A, and T's import from A drops it. So it violates A's
 path constraint, and interference is reported from E2. In reality T always has the prefix. If A

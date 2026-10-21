@@ -3,7 +3,9 @@ package org.batfish.minesweeper.question.reachability;
 import com.google.common.collect.ImmutableSet;
 import com.google.common.collect.ImmutableSortedMap;
 import org.apache.commons.lang3.tuple.Pair;
+import org.batfish.datamodel.BgpActivePeerConfig;
 import org.batfish.datamodel.BgpProcess;
+import org.batfish.datamodel.bgp.Ipv4UnicastAddressFamily;
 import org.batfish.datamodel.Configuration;
 import org.batfish.datamodel.ConfigurationFormat;
 import org.batfish.datamodel.Ip;
@@ -38,18 +40,21 @@ import static org.batfish.minesweeper.question.verificationutilities.Setup.getCo
 import static org.batfish.minesweeper.question.verificationutilities.TestConfigConstructionUtils.addToCommunities;
 import static org.batfish.minesweeper.question.verificationutilities.TestConfigConstructionUtils.checkForCommunity;
 import static org.batfish.minesweeper.question.verificationutilities.TestConfigConstructionUtils.clearCommunities;
-import static org.batfish.minesweeper.question.verificationutilities.TestConfigConstructionUtils.getBgpActivePeerConfig;
 import static org.batfish.minesweeper.question.verificationutilities.TestConfigConstructionUtils.ifStatement;
 import static org.batfish.minesweeper.question.verificationutilities.TestConfigConstructionUtils.includeCommunities;
 import static org.batfish.minesweeper.question.verificationutilities.TestConfigConstructionUtils.permitRoute;
+import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 
 /**
- * Copy of weakerPathConstraints(...) from ReachabilityAnswererTest, whose variation 1 is the
- * commented-out test weakerExampleNoInterferenceTest there. Runs variations 0, 1, 2 with target =
- * true at gamma, prefix 10.0.0.0/8, ingress = {} and prints the rows. Variations 1 and 2 report
- * interference although gamma always gets the prefix (see INTERFERENCE_FALSE_POSITIVES.md). Only
- * asserts that a good path exists.
+ * The weakerPathConstraints network from ReachabilityAnswererTest (whose variation 1 is the
+ * commented-out test weakerExampleNoInterferenceTest there), with every router and external
+ * neighbor in its own AS so that every session is EBGP and the real-BGP outcome is unambiguous.
+ * Target true at gamma, prefix 10.0.0.0/8, ingress = {}.
+ *
+ * <p>alpha's export to beta clears communities, delta's export to beta tags 1:1, and in variations
+ * 1 and 2 beta's export to gamma rejects 1:1. In variation 2 epsilon's export to gamma also
+ * rejects everything. Everything else permits.
  */
 public class InterferenceRepoExampleTest {
   private static final NetworkFactory nf = new NetworkFactory();
@@ -112,6 +117,20 @@ public class InterferenceRepoExampleTest {
     return Pair.of(goodPath, interference);
   }
 
+  private static BgpActivePeerConfig peer(
+      String group, String importPolicy, String exportPolicy, long localAs, long remoteAs) {
+    return BgpActivePeerConfig.builder()
+        .setGroup(group)
+        .setLocalAs(localAs)
+        .setRemoteAs(remoteAs)
+        .setIpv4UnicastAddressFamily(
+            Ipv4UnicastAddressFamily.builder()
+                .setImportPolicy(importPolicy)
+                .setExportPolicy(exportPolicy)
+                .build())
+        .build();
+  }
+
   private TestConfigConstructionUtils.Networkv2 weakerPathConstraints(
       NodeRecord ALPHANODE,
       NodeRecord BETANODE,
@@ -149,57 +168,75 @@ public class InterferenceRepoExampleTest {
     Map<NodeRecord, BgpProcess> processes =
         getBgpProcesses(configs, ALPHANODE, BETANODE, GAMMANODE, DELTANODE, EPSILONNODE);
 
+    // every router and external neighbor is in its own AS, so every session is EBGP
+    long alphaAs = 65001L;
+    long betaAs = 65002L;
+    long gammaAs = 65003L;
+    long deltaAs = 65004L;
+    long epsilonAs = 65005L;
+    long alphaExtAs = 65101L;
+    long deltaExtAs = 65104L;
+
     processes
         .get(ALPHANODE)
         .setNeighbors(
             ImmutableSortedMap.of(
                 alphaIncoming,
-                getBgpActivePeerConfig(EXTERNAL, importDefault, exportDefault),
+                peer(EXTERNAL, importDefault, exportDefault, alphaAs, alphaExtAs),
                 BETANODE.getIp(),
-                getBgpActivePeerConfig(INTERNAL, importDefault, removesAllCommunities),
+                peer(INTERNAL, importDefault, removesAllCommunities, alphaAs, betaAs),
                 DELTANODE.getIp(),
-                getBgpActivePeerConfig(INTERNAL, importDefault, exportDefault)));
+                peer(INTERNAL, importDefault, exportDefault, alphaAs, deltaAs)));
     processes
         .get(BETANODE)
         .setNeighbors(
             ImmutableSortedMap.of(
                 ALPHANODE.getIp(),
-                getBgpActivePeerConfig(INTERNAL, importDefault, exportDefault),
+                peer(INTERNAL, importDefault, exportDefault, betaAs, alphaAs),
                 DELTANODE.getIp(),
-                getBgpActivePeerConfig(INTERNAL, importDefault, exportDefault),
+                peer(INTERNAL, importDefault, exportDefault, betaAs, deltaAs),
                 GAMMANODE.getIp(),
-                getBgpActivePeerConfig(
-                    // if the variation is not 0, we deny traffic with community going to gamma
-                    INTERNAL, importDefault, 0 < variation ? denyCommunity : exportDefault),
+                // if the variation is not 0, we deny traffic with community going to gamma
+                peer(
+                    INTERNAL,
+                    importDefault,
+                    0 < variation ? denyCommunity : exportDefault,
+                    betaAs,
+                    gammaAs),
                 EPSILONNODE.getIp(),
-                getBgpActivePeerConfig(INTERNAL, importDefault, exportDefault)));
+                peer(INTERNAL, importDefault, exportDefault, betaAs, epsilonAs)));
     processes
         .get(GAMMANODE)
         .setNeighbors(
             ImmutableSortedMap.of(
-                BETANODE.getIp(), getBgpActivePeerConfig(INTERNAL, importDefault, exportDefault),
+                BETANODE.getIp(),
+                peer(INTERNAL, importDefault, exportDefault, gammaAs, betaAs),
                 EPSILONNODE.getIp(),
-                    getBgpActivePeerConfig(INTERNAL, importDefault, exportDefault)));
+                peer(INTERNAL, importDefault, exportDefault, gammaAs, epsilonAs)));
     processes
         .get(DELTANODE)
         .setNeighbors(
             ImmutableSortedMap.of(
                 deltaIncoming,
-                getBgpActivePeerConfig(EXTERNAL, importDefault, exportDefault),
+                peer(EXTERNAL, importDefault, exportDefault, deltaAs, deltaExtAs),
                 ALPHANODE.getIp(),
-                getBgpActivePeerConfig(INTERNAL, importDefault, exportDefault),
+                peer(INTERNAL, importDefault, exportDefault, deltaAs, alphaAs),
                 BETANODE.getIp(),
-                getBgpActivePeerConfig(INTERNAL, importDefault, tagOnExport)));
+                peer(INTERNAL, importDefault, tagOnExport, deltaAs, betaAs)));
 
     processes
         .get(EPSILONNODE)
         .setNeighbors(
             ImmutableSortedMap.of(
                 BETANODE.getIp(),
-                getBgpActivePeerConfig(INTERNAL, importDefault, exportDefault),
+                peer(INTERNAL, importDefault, exportDefault, epsilonAs, betaAs),
                 GAMMANODE.getIp(),
-                getBgpActivePeerConfig(
-                    INTERNAL, importDefault, variation == 2 ? denyEverything : exportDefault)));
+                peer(
+                    INTERNAL,
+                    importDefault,
+                    variation == 2 ? denyEverything : exportDefault,
+                    epsilonAs,
+                    gammaAs)));
 
     // Create the policies
     RoutingPolicy alphaDefaultImport =
@@ -235,7 +272,7 @@ public class InterferenceRepoExampleTest {
     return new TestConfigConstructionUtils.Networkv2(tbdd, configs, alphaDefaultImport, List.of());
   }
 
-  private void runVariation(int v) {
+  private Pair<Boolean, Boolean> runVariation(int v) {
     NodeRecord ALPHA_NODE_R = new NodeRecord("10.0.0.1", "alphaNode");
     NodeRecord BETA_NODE_R = new NodeRecord("10.0.0.2", "betaNode");
     NodeRecord GAMMA_NODE_R = new NodeRecord("10.0.0.3", "gammaNode");
@@ -279,20 +316,28 @@ public class InterferenceRepoExampleTest {
         .append("\n");
     System.out.print(sb);
     assertTrue(checks.getLeft());
+    return checks;
   }
 
   @Test
   public void weakerExampleV0() {
-    runVariation(0);
+    // beta passes every route to gamma
+    assertFalse(runVariation(0).getRight());
   }
 
   @Test
   public void weakerExampleV1() {
+    // no real interference: if beta selects delta's route tagged 1:1, beta's export to gamma drops
+    // it, but epsilon delivers it to gamma
     runVariation(1);
+    // TODO the interference check reports a false positive here (see INTERFERENCE_FALSE_POSITIVES.md)
+    // assertFalse(runVariation(1).getRight());
   }
 
   @Test
   public void weakerExampleV2() {
-    runVariation(2);
+    // real interference: epsilon passes nothing to gamma, and delta's route tagged 1:1 ties with
+    // alpha's at beta, so if beta selects it, gamma ends up with no route
+    assertTrue(runVariation(2).getRight());
   }
 }

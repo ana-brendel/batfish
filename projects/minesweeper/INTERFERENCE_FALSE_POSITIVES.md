@@ -23,6 +23,9 @@ with a route for the prefix. The examples are tests in
    would violate a requirement. `Infer` runs with pushFalse set, so a requirement of false at
    some location does not stop it; the false is pushed back to the ingresses like any other
    requirement. (The "Dead End" report in `ReachabilityAnswerer.run` therefore never fires.)
+4. Route preference: the requirement at a node on the good path is relaxed to also allow any
+   route that is less preferred (by weight, local-pref, then AS-path length) than every good
+   route that reaches that node, since such a route is never selected there.
 
 This is sound. Whatever route each node on the good path selects is carried one more hop, so the
 target gets a route. But it protects one particular path at every hop, which is stronger than
@@ -61,13 +64,13 @@ Controls: `aNoSecondPath` and `a2SecondPathAlsoFilters` remove the second path, 
 2:2 too. There, if A prefers E2's route, T really does lose the prefix, and the check is right to
 report interference.
 
-## 2. The competing route is never selected
+## 2. The competing route is never selected (fixed)
 
 Test: `bLowerLocalPref`. A sets local-pref 200 on E1's routes and 50 on E2's, so A never selects
-E2's route while E1's is present, and E2's route never replaces the good route. The check still
-reports it, because it does not reason about route preference. The `route-preference-interference`
-branch adds that reasoning: requirements at nodes on the good path are relaxed for routes that are
-less preferred than the good route there.
+E2's route while E1's is present, and E2's route never replaces the good route. This was a false
+positive before the route-preference reasoning (step 4 above) was added, and it now passes.
+Preference only excuses routes that are strictly less preferred than every good route, so a
+competing route that ties with the good route is still reported.
 
 ## 3. Loops
 
@@ -75,22 +78,22 @@ Test: `eLoopBackTag`. There is one ingress and one path. T's export back to A ta
 T's import from A drops 2:2. The copy of the good route that T sends back to A violates A's path
 constraint, so the requirement at T, and then everywhere upstream, becomes false. That false is
 pushed back to E1, and interference is reported at the good path's own ingress, with an arbitrary
-(harmless) route as the witness, since no route satisfies false. That witness pattern is the clue to recognize
-this case in real output.
+(harmless) route as the witness, since no route satisfies false. That witness pattern is the clue
+to recognize this case in real output.
 
 In real BGP the copy never comes back. Over eBGP, A rejects it because A's own AS is already in
 the path; over iBGP, T does not advertise a route learned over iBGP to another iBGP peer. The
-model has neither form of loop prevention. The loop tests on `route-preference-interference`
+model has neither form of loop prevention. The loop tests in `ReachabilityAnswererTest`
 (`ibgpLoopBackNoInterferenceTest`, `ebgpLoopBackNoInterferenceTest`) show the same thing.
 
-Note: on this branch the verdicts do not change if the sessions are iBGP instead of eBGP
-(`dSessionTypeMatrix`). `PathExploration` and `Infer` never read `Edge.isEBGP` here.
+Note: for these networks the verdicts are the same if the internal sessions are iBGP instead of
+eBGP (`dSessionTypeMatrix`).
 
 ## Possible fixes
 
 ### Route preference (class 2, partly class 3)
 
-Already implemented on `route-preference-interference`. It also excuses eBGP loops when the
+Implemented (step 4 above). It also excuses eBGP loops when the
 AS-path length of incoming routes is pinned by an assumption, because a looped copy then has a
 longer path. It cannot excuse iBGP loops: the copy ties with the good route on every attribute
 compared.

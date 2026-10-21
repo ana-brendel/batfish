@@ -654,9 +654,7 @@ public class InterferenceFalsePositiveTest {
 
   @Test
   public void bLowerLocalPref() {
-    // TODO the interference check reports a false positive here (see INTERFERENCE_FALSE_POSITIVES.md)
-    // check(B_LOWER_LOCAL_PREF);
-    checkGoodPath(B_LOWER_LOCAL_PREF);
+    check(B_LOWER_LOCAL_PREF);
   }
 
   @Test

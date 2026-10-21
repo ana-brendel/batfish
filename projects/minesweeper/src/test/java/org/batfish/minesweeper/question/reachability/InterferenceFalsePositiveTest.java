@@ -50,6 +50,7 @@ import static org.batfish.minesweeper.question.verificationutilities.TestConfigC
 import static org.batfish.minesweeper.question.verificationutilities.TestConfigConstructionUtils.includeCommunities;
 import static org.batfish.minesweeper.question.verificationutilities.TestConfigConstructionUtils.permitRoute;
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 
 /**
@@ -400,10 +401,34 @@ public class InterferenceFalsePositiveTest {
   }
 
   private Pair<Boolean, Boolean> run(Spec s) {
+    return run(s, null);
+  }
+
+  /// If externalAsPathLength is non-null, assumes that every external neighbor (E1, and E2 wherever
+  /// it attaches) sends routes with that AS-path length
+  private Pair<Boolean, Boolean> run(Spec s, Integer externalAsPathLength) {
     TestConfigConstructionUtils.Networkv2 net = build(s);
     PrefixSpace prefix = new PrefixSpace(PrefixRange.fromString(PREFIX));
     NetworkInfo info = net.getInfo(prefix);
     Node target = T_R.instantiate(info);
+    if (externalAsPathLength != null) {
+      List<Node> attached = s.withB() ? List.of(A_R.instantiate(info), B_R.instantiate(info))
+          : List.of(A_R.instantiate(info));
+      for (Node n : attached) {
+        for (Ip external : List.of(E1_IP, E2_IP)) {
+          n.getIncomingFrom(external)
+              .ifPresent(
+                  e ->
+                      info.addAssumption(
+                          e,
+                          new Invariant(
+                              net.tbdd(),
+                              Invariant.clauseBuilder()
+                                  .setAsPathLength(externalAsPathLength)
+                                  .build(net.tbdd(), net.template()))));
+        }
+      }
+    }
     Set<Edge> ingress = Set.of();
     if (s.ingressE1Only()) {
       Node a = A_R.instantiate(info);
@@ -412,7 +437,9 @@ public class InterferenceFalsePositiveTest {
     TableAnswerElement tae = runQuery(info, prefix, target, new Invariant(net.tbdd()), ingress);
     Pair<Boolean, Boolean> res = processResultRows(tae.getRowsList());
     StringBuilder sb = new StringBuilder();
-    sb.append("=== CASE ").append(s.name()).append(" ===\n");
+    String name =
+        externalAsPathLength == null ? s.name() : s.name() + "/len" + externalAsPathLength;
+    sb.append("=== CASE ").append(name).append(" ===\n");
     for (Row row : tae.getRowsList()) {
       sb.append("  [")
           .append(row.getString("Result_Label"))
@@ -421,7 +448,7 @@ public class InterferenceFalsePositiveTest {
           .append("\n");
     }
     sb.append("SUMMARY ")
-        .append(s.name())
+        .append(name)
         .append(" goodPath=")
         .append(res.getLeft())
         .append(" interference=")
@@ -667,6 +694,24 @@ public class InterferenceFalsePositiveTest {
     // TODO the interference check reports a false positive here (see INTERFERENCE_FALSE_POSITIVES.md)
     // check(C_E2_AT_B_INGRESS_E1);
     checkGoodPath(C_E2_AT_B_INGRESS_E1);
+  }
+
+  @Test
+  public void cE2AtBIngressE1PinnedAsPathLength() {
+    // with the external AS-path lengths pinned, E2's route reaches A through B one EBGP hop later
+    // than E1's, so it is less preferred at A and route preference excuses it
+    Pair<Boolean, Boolean> res = run(C_E2_AT_B_INGRESS_E1, 0);
+    assertTrue(res.getLeft());
+    assertFalse(res.getRight());
+  }
+
+  @Test
+  public void eLoopBackTagPinnedAsPathLength() {
+    // with E1's AS-path length pinned, the copy of the good route that comes back from T has gone
+    // through two more EBGP hops, so it is less preferred at A and route preference excuses it
+    Pair<Boolean, Boolean> res = run(E_LOOP_BACK_TAG, 0);
+    assertTrue(res.getLeft());
+    assertFalse(res.getRight());
   }
 
   @Test

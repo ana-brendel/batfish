@@ -93,10 +93,13 @@ eBGP (`dSessionTypeMatrix`).
 
 ### Route preference (class 2, partly class 3)
 
-Implemented (step 4 above). It also excuses eBGP loops when the
-AS-path length of incoming routes is pinned by an assumption, because a looped copy then has a
-longer path. It cannot excuse iBGP loops: the copy ties with the good route on every attribute
-compared.
+Implemented (step 4 above). It also excuses a competing route that arrives over more eBGP hops
+than the good route, but only when the AS-path length of incoming routes is pinned by an
+assumption; otherwise every length is possible and nothing is excused on length. With the lengths
+pinned at 0, `cE2AtBIngressE1PinnedAsPathLength` (E2's route reaches A one hop later, via B) and
+`eLoopBackTagPinnedAsPathLength` (the looped copy has gone two hops further) both pass. It cannot
+excuse iBGP loops, or competing routes that arrive over as many hops as the good route (`base`,
+the parallel-session cases): those tie with the good route on every attribute compared.
 
 ### Try other good paths (some of class 1)
 

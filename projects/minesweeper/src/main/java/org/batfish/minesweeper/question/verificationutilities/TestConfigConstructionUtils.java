@@ -215,7 +215,24 @@ public class TestConfigConstructionUtils {
 
   public static BgpActivePeerConfig getBgpActivePeerConfig(
       String groupName, String importPolicy, String exportPolicy) {
-    BgpActivePeerConfig.Builder builder = BgpActivePeerConfig.builder().setGroup(groupName);
+    return getBgpActivePeerConfig(
+        BgpActivePeerConfig.builder().setGroup(groupName), importPolicy, exportPolicy);
+  }
+
+  /// A peer whose session has the given AS numbers, which make it iBGP or eBGP
+  public static BgpActivePeerConfig getBgpActivePeerConfig(
+      String groupName, String importPolicy, String exportPolicy, long localAs, long remoteAs) {
+    return getBgpActivePeerConfig(
+        BgpActivePeerConfig.builder()
+            .setGroup(groupName)
+            .setLocalAs(localAs)
+            .setRemoteAs(remoteAs),
+        importPolicy,
+        exportPolicy);
+  }
+
+  private static BgpActivePeerConfig getBgpActivePeerConfig(
+      BgpActivePeerConfig.Builder builder, String importPolicy, String exportPolicy) {
     if (importPolicy != null && exportPolicy != null) {
       return builder
           .setIpv4UnicastAddressFamily(

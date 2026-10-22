@@ -36,7 +36,13 @@ import org.batfish.minesweeper.utils.Tuple;
 ///   future fix could add the condition "the AS path contains none of the ASes on the path" to
 ///   the origin's constraint, which TransferBDD's AS-path regexes can express.
 /// - An edge whose ASes are unknown (null; see Edge.setSessionAsInfo) contributes nothing to the
-///   AS path and is not checked as a receiver.
+///   AS path and is not checked as a receiver. If the receiver's AS is unknown, the edge is not
+///   treated as iBGP, although NetworkInfo marks it so. Note that a null local AS or an empty set
+///   of remote ASes in a peer's config is not really unknown: Batfish never establishes such a
+///   session (see BgpTopologyUtils), so no route crosses it, but NetworkInfo still creates an edge
+///   for it and paths over that edge are kept. A null sender AS can also come from a remote AS
+///   given as a range (e.g. FRR "remote-as external"), where the session is established and only
+///   the sender's AS is unknown.
 /// - Prepends of a VarAs, and AS-path rewrites (ExcludeAsPath, ReplaceAsesInAsSequence, as-override,
 ///   remove-private-as, replace-as) are not modeled. Confederations are not modeled.
 /// - Sender-side loop detection (Batfish's allowRemoteAsOut) is not modeled, since the standard
@@ -77,34 +83,64 @@ public class BgpPathValidity {
 
   /// Checks the path that traverses the given edges in order, from the origin to the target. If
   /// endsAtEdge is true, the target is the last edge itself: the route is sent on it but not yet
-  /// imported by its receiver, so the receiver's checks do not apply.
+  /// imported by its receiver, so the receiver's checks and import policy do not apply.
   public boolean isValid(@Nonnull List<Edge> edges, boolean endsAtEdge) {
-    for (int k = 1; k < edges.size(); k++) {
-      if (!edges.get(k - 1).isEBGP() && !edges.get(k).isEBGP()) {
+    Suffix suffix = Suffix.EMPTY;
+    for (int k = edges.size() - 1; k >= 0; k--) {
+      suffix = extend(suffix, edges.get(k), endsAtEdge && k == edges.size() - 1);
+      if (suffix == null) {
         return false;
       }
-    }
-    // the ASes that may be in the route's AS path so far
-    Set<Long> asPath = new HashSet<>();
-    for (int k = 0; k < edges.size(); k++) {
-      Edge edge = edges.get(k);
-      // the sender's export policy, then the sender's AS on an eBGP session
-      addPrepended(asPath, exports.get(edge), edge, true);
-      Long senderAs = senderAs(edge);
-      if (edge.isEBGP() && senderAs != null) {
-        asPath.add(senderAs);
-      }
-      if (endsAtEdge && k == edges.size() - 1) {
-        break;
-      }
-      // the receiver's loop check, which happens before its import policy
-      Long receiverAs = edge.getDstAs();
-      if (receiverAs != null && !edge.dstAllowsLocalAsIn() && asPath.contains(receiverAs)) {
-        return false;
-      }
-      addPrepended(asPath, imports.get(edge), edge, false);
     }
     return true;
+  }
+
+  /// What a valid path suffix, running from some node to the target, requires of the edges that
+  /// extend it backward: whether its first edge is iBGP, and the ASes of the receivers along it
+  /// that check for AS-path loops. Two suffixes with equal requirements allow the same extensions.
+  public record Suffix(boolean startsWithIbgp, @Nonnull Set<Long> checkedAses) {
+    public static final Suffix EMPTY = new Suffix(false, Set.of());
+
+    /// Whether every extension that the other suffix allows is also allowed by this one
+    public boolean weakerThan(@Nonnull Suffix other) {
+      return (!startsWithIbgp || other.startsWithIbgp)
+          && other.checkedAses.containsAll(checkedAses);
+    }
+  }
+
+  /// Extends the suffix backward by an edge into its first node, returning null if the longer
+  /// suffix is ruled out. If isTarget is true, the edge is the target itself, so the suffix is
+  /// empty and the edge's receiver is not checked.
+  public @Nullable Suffix extend(@Nonnull Suffix suffix, @Nonnull Edge edge, boolean isTarget) {
+    // a session whose local AS is unknown is marked iBGP by NetworkInfo, but its type is unknown
+    boolean ibgp = !edge.isEBGP() && edge.getDstAs() != null;
+    if (ibgp && suffix.startsWithIbgp()) {
+      return null;
+    }
+    // the ASes added by the sender's export policy and, on an eBGP session, the sender's AS
+    Set<Long> sent = new HashSet<>();
+    addPrepended(sent, exports.get(edge), edge, true);
+    Long senderAs = senderAs(edge);
+    if (edge.isEBGP() && senderAs != null) {
+      sent.add(senderAs);
+    }
+    // the receiver's loop check happens before its import policy, so it sees only the sent ASes
+    Set<Long> checkedAses = new HashSet<>(suffix.checkedAses());
+    Long receiverAs = edge.getDstAs();
+    if (!isTarget && receiverAs != null && !edge.dstAllowsLocalAsIn()) {
+      checkedAses.add(receiverAs);
+    }
+    if (sent.stream().anyMatch(checkedAses::contains)) {
+      return null;
+    }
+    if (!isTarget) {
+      Set<Long> imported = new HashSet<>();
+      addPrepended(imported, imports.get(edge), edge, false);
+      if (imported.stream().anyMatch(suffix.checkedAses()::contains)) {
+        return null;
+      }
+    }
+    return new Suffix(ibgp, Set.copyOf(checkedAses));
   }
 
   /// The AS the sender uses on the session, which is what it prepends on eBGP. If the sender is in

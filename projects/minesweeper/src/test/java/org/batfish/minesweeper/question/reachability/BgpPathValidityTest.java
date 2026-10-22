@@ -143,6 +143,21 @@ public class BgpPathValidityTest {
   }
 
   @Test
+  public void unknownAsIsNotTreatedAsIbgp() {
+    // NetworkInfo marks a session whose local AS is unknown as iBGP, but its type is unknown
+    Node a = new Node("a");
+    Node b = new Node("b");
+    Node c = new Node("c");
+    Edge aToB = new Edge(freshIp(), freshIp(), false);
+    aToB.setSrcNode(a);
+    aToB.setDstNode(b);
+    Edge bToC = new Edge(freshIp(), freshIp(), false);
+    bToC.setSrcNode(b);
+    bToC.setDstNode(c);
+    assertTrue(valid(false, external(100, a, 1), aToB, bToC));
+  }
+
+  @Test
   public void ibgpOriginToIbgpIsInvalid() {
     // a route from an unconfigured iBGP peer cannot be passed to another iBGP peer
     Node a = new Node("a");

@@ -12,6 +12,9 @@ import org.batfish.minesweeper.question.verificationutilities.Location;
 import org.batfish.minesweeper.question.verificationutilities.Node;
 import org.batfish.minesweeper.utils.Tuple;
 
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Comparator;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.LinkedList;
@@ -21,8 +24,6 @@ import java.util.Queue;
 import java.util.Set;
 
 public class PathExploration {
-  private final Map<Node, Pair<Edge, Integer>> shortest = new HashMap<>();
-
   private final Path.Context context;
   private final PrefixSpace prefix;
   private final Location location;
@@ -31,6 +32,8 @@ public class PathExploration {
   private final Set<Location> origins = new HashSet<>();
 
   private final Map<Tuple<String,RoutingPolicy>, List<TransferReturn>> computedPathsCache;
+
+  private final BgpPathValidity validity;
 
   public PathExploration(
       Path.Context context,
@@ -44,6 +47,7 @@ public class PathExploration {
     this.location = location;
     this.target = target;
     this.computedPathsCache = computedPathsCache;
+    this.validity = new BgpPathValidity(context.imports(), context.exports());
     // automatically sets potential origins to checked assumptions
     if (ingress.isEmpty()) {
       origins.addAll(context.checkedAssumptions().keySet());
@@ -64,46 +68,126 @@ public class PathExploration {
     return true;
   }
 
+  /// Returns the first path found from the given location to the target, or an empty array if
+  /// there is none
   private Location[] getPath(Location start) {
-    LinkedList<Location> path = new LinkedList<>();
-    Node origin = null;
-    Node nextNode;
-    if (start instanceof Edge edge) {
-      path.addFirst(edge);
-      nextNode = edge.getDstNode();
-      origin = edge.getSrcNode();
-    } else {
-      assert start instanceof Node;
-      nextNode = (Node) start;
+    List<Location[]> paths = searchPaths(Set.of(start));
+    return paths.isEmpty() ? new Location[0] : paths.get(0);
+  }
+
+  /// A path being extended backward from the target: its locations from the target to its first
+  /// node, the nodes on it, and what BGP loop prevention requires of edges that extend it
+  private record PartialPath(List<Location> steps, Set<Node> nodes, BgpPathValidity.Suffix suffix) {
+    Node first() {
+      return (Node) steps.get(steps.size() - 1);
     }
-    if (nextNode == null) {
-      return new Location[0];
+
+    Location[] extendTo(Location... more) {
+      Location[] path = steps.toArray(new Location[steps.size() + more.length]);
+      System.arraycopy(more, 0, path, steps.size(), more.length);
+      return path;
     }
-    Pair<Edge, Integer> next = shortest.get(nextNode);
-    while (next.getValue() > 0) {
-      if (nextNode.equals(origin)) {
-        // if there is some loop detected from starting point, disregard
-        return new Location[0];
+  }
+
+  /// Searches backward from the target, in order of path length, for paths that BGP's loop
+  /// prevention allows (see BgpPathValidity), and returns the first path found from each of the
+  /// given origins. Paths are ordered from the target back to the origin and never repeat a node.
+  ///
+  /// To bound the search, a path is not extended if a shorter path from the same node allows every
+  /// extension it does, as far as the loop-prevention rules are concerned (see
+  /// BgpPathValidity.Suffix). This can miss a path when the shorter one cannot continue only because
+  /// the continuation would repeat one of its nodes. That should be rare: the repeated node's AS is
+  /// usually already checked along the longer path, so loop detection rejects the continuation
+  /// there too. Exceptions involve unknown ASes, allowas-in, or a router using different local ASes
+  /// on different sessions, and may grow if route reflection is modeled.
+  private List<Location[]> searchPaths(Set<Location> startingPoints) {
+    Set<Location> remaining = new HashSet<>(startingPoints);
+    List<Location[]> found = new LinkedList<>();
+    Map<Node, List<BgpPathValidity.Suffix>> seen = new HashMap<>();
+    Queue<PartialPath> working = new LinkedList<>();
+
+    // the route is sent on a target edge but not imported, so the target edge is not checked as
+    // a receiver
+    if (this.location instanceof Edge edge) {
+      if (remaining.remove(edge)) {
+        found.add(new Location[] {edge});
       }
-      assert next.getKey().hasSrcNode();
-      path.addFirst(next.getKey().getSrcNode());
-      path.addFirst(next.getKey());
-      nextNode = next.getKey().getDstNode();
-      assert nextNode != null;
-      next = shortest.get(nextNode);
-    }
-    path.addFirst(nextNode);
-    if (next.getKey() != null) {
-      path.addFirst(next.getKey());
-    }
-    assert noLoops(path);
-    if (!path.isEmpty() && path.getFirst().equals(this.location)) {
-      Location[] arr = new Location[path.size()];
-      return path.toArray(arr);
+      Node src = edge.getSrcNode();
+      if (src != null) {
+        BgpPathValidity.Suffix suffix =
+            validity.extend(BgpPathValidity.Suffix.EMPTY, edge, true);
+        assert suffix != null;
+        visit(working, seen, remaining, found, List.of(edge), Set.of(), src, suffix);
+      }
     } else {
-      // returns null if no topological path to target
-      return new Location[0];
+      assert this.location instanceof Node;
+      visit(
+          working,
+          seen,
+          remaining,
+          found,
+          List.of(),
+          Set.of(),
+          (Node) this.location,
+          BgpPathValidity.Suffix.EMPTY);
     }
+
+    while (!working.isEmpty() && !remaining.isEmpty()) {
+      PartialPath current = working.remove();
+      List<Edge> incoming =
+          current.first().getAllIncomingEdges().stream()
+              .sorted(Comparator.comparing(Edge::toUniqueString))
+              .toList();
+      for (Edge edge : incoming) {
+        BgpPathValidity.Suffix suffix = validity.extend(current.suffix(), edge, false);
+        if (suffix == null) {
+          continue;
+        }
+        Node src = edge.getSrcNode();
+        if (src != null && current.nodes().contains(src)) {
+          // the edge comes from a node already on the path
+          continue;
+        }
+        if (remaining.remove(edge)) {
+          Location[] path = current.extendTo(edge);
+          assert noLoops(new LinkedList<>(Arrays.asList(path)));
+          found.add(path);
+        }
+        if (src != null) {
+          List<Location> steps = new ArrayList<>(current.steps());
+          steps.add(edge);
+          visit(working, seen, remaining, found, steps, current.nodes(), src, suffix);
+        }
+      }
+    }
+    return found;
+  }
+
+  /// Adds the node to the front of a partial path and queues it for extension, unless a shorter
+  /// path from the node already allows every extension this one does
+  private static void visit(
+      Queue<PartialPath> working,
+      Map<Node, List<BgpPathValidity.Suffix>> seen,
+      Set<Location> remaining,
+      List<Location[]> found,
+      List<Location> steps,
+      Set<Node> nodes,
+      Node node,
+      BgpPathValidity.Suffix suffix) {
+    List<BgpPathValidity.Suffix> seenAtNode = seen.computeIfAbsent(node, k -> new ArrayList<>());
+    if (seenAtNode.stream().anyMatch(s -> s.weakerThan(suffix))) {
+      return;
+    }
+    seenAtNode.add(suffix);
+    List<Location> extended = new ArrayList<>(steps);
+    extended.add(node);
+    Set<Node> extendedNodes = new HashSet<>(nodes);
+    extendedNodes.add(node);
+    PartialPath partial = new PartialPath(extended, extendedNodes, suffix);
+    if (remaining.remove(node)) {
+      found.add(partial.extendTo());
+    }
+    working.add(partial);
   }
 
   private Invariant[] getPathConstraints(Location[] path) {
@@ -124,53 +208,8 @@ public class PathExploration {
     return properties;
   }
 
-  private List<Location[]> populateShortestPaths() {
-    List<Location[]> potentialPaths = new LinkedList<>();
-    Queue<Location> working = new LinkedList<>();
-    // populate the target destination
-    if (this.location instanceof Edge edge) {
-      Node src = edge.getSrcNode();
-      working.add(src);
-      shortest.put(src, Pair.of(edge, 0));
-    } else {
-      assert this.location instanceof Node;
-      working.add(this.location);
-      shortest.put((Node) this.location, Pair.of(null, 0));
-    }
-    // start working through all locations
-    Set<Location> startingPoints = new HashSet<>(this.origins);
-    while (!working.isEmpty()) {
-      Location current = working.remove();
-      if (startingPoints.contains(current)) {
-        // we remove from starting points to only ever consider each start once
-        startingPoints.remove(current);
-        Location[] steps = getPath(current);
-        if (steps.length > 0) {
-          potentialPaths.add(steps);
-        }
-      }
-      if (current instanceof Edge edge && edge.getSrcNode() != null) {
-        Node last = edge.getDstNode();
-        Pair<Edge, Integer> lastShortest = shortest.get(last);
-        assert lastShortest != null;
-        Node next = edge.getSrcNode();
-        Pair<Edge, Integer> nextShortest = shortest.get(next);
-        if (nextShortest == null || lastShortest.getValue() + 1 < nextShortest.getValue()) {
-          shortest.put(next, Pair.of(edge, lastShortest.getValue() + 1));
-          if (!working.contains(next)) {
-            working.add(next);
-          }
-        }
-      } else if (current instanceof Node node) {
-        working.addAll(node.getAllIncomingEdges());
-      }
-    }
-    return potentialPaths;
-  }
-
   public Pair<Path, Set<Path>> run() {
-    // populates shortest paths and gets potential paths
-    List<Location[]> potentialPaths = populateShortestPaths();
+    List<Location[]> potentialPaths = searchPaths(this.origins);
     Set<Path> badPaths = new HashSet<>();
     for (Location[] steps : potentialPaths) {
       assert this.origins.contains(steps[steps.length - 1]);

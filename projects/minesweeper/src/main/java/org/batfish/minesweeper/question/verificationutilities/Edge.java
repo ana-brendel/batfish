@@ -16,6 +16,13 @@ public class Edge extends Location {
 
   private final boolean eBGP;
 
+  /// AS numbers and allowas-in setting of the BGP session this edge represents, as configured at
+  /// the receiving end (see setSessionAsInfo). A null AS means it is unknown.
+  private @Nullable Long srcAs;
+  private @Nullable Long dstAs;
+  private boolean srcAllowsLocalAsIn;
+  private boolean dstAllowsLocalAsIn;
+
   public Edge(@Nonnull Ip src, @Nonnull Ip dst, boolean eBGP) {
     assert !src.equals(dst);
     assert !src.equals(Ip.ZERO) && !dst.equals(Ip.ZERO);
@@ -49,12 +56,20 @@ public class Edge extends Location {
       @Nonnull Ip dst,
       boolean eBGP,
       @Nullable Node srcNode,
-      @Nullable Node dstNode) {
+      @Nullable Node dstNode,
+      @Nullable Long srcAs,
+      @Nullable Long dstAs,
+      boolean srcAllowsLocalAsIn,
+      boolean dstAllowsLocalAsIn) {
     this.src = src;
     this.dst = dst;
     this.eBGP = eBGP;
     this.srcNode = srcNode;
     this.dstNode = dstNode;
+    this.srcAs = srcAs;
+    this.dstAs = dstAs;
+    this.srcAllowsLocalAsIn = srcAllowsLocalAsIn;
+    this.dstAllowsLocalAsIn = dstAllowsLocalAsIn;
   }
 
   @Nonnull
@@ -81,9 +96,44 @@ public class Edge extends Location {
     return eBGP;
   }
 
+  /// The AS the sender uses on this session, which it prepends when advertising over eBGP
+  @Nullable
+  public Long getSrcAs() {
+    return srcAs;
+  }
+
+  /// The receiver's local AS on this session, which its BGP loop detection checks for
+  @Nullable
+  public Long getDstAs() {
+    return dstAs;
+  }
+
+  /// Whether the receiver accepts routes whose AS path already contains its local AS (allowas-in)
+  public boolean dstAllowsLocalAsIn() {
+    return dstAllowsLocalAsIn;
+  }
+
+  /// Records the session's AS numbers, as configured at the receiving end of this edge: srcAs is
+  /// the configured remote AS (null if not a single AS), dstAs is the local AS (null if unknown).
+  public void setSessionAsInfo(
+      @Nullable Long srcAs, @Nullable Long dstAs, boolean dstAllowsLocalAsIn) {
+    this.srcAs = srcAs;
+    this.dstAs = dstAs;
+    this.dstAllowsLocalAsIn = dstAllowsLocalAsIn;
+  }
+
   @Nonnull
   public Edge flipEdge() {
-    return new Edge(dst, src, eBGP, dstNode, srcNode);
+    return new Edge(
+        dst,
+        src,
+        eBGP,
+        dstNode,
+        srcNode,
+        dstAs,
+        srcAs,
+        dstAllowsLocalAsIn,
+        srcAllowsLocalAsIn);
   }
 
   public void setSrcNode(Node src) {
@@ -128,7 +178,16 @@ public class Edge extends Location {
 
   @Override
   public Edge copy() {
-    return new Edge(Ip.create(src.asLong()), Ip.create(dst.asLong()), eBGP, srcNode, dstNode);
+    return new Edge(
+        Ip.create(src.asLong()),
+        Ip.create(dst.asLong()),
+        eBGP,
+        srcNode,
+        dstNode,
+        srcAs,
+        dstAs,
+        srcAllowsLocalAsIn,
+        dstAllowsLocalAsIn);
   }
 
   @Override

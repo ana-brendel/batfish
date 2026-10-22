@@ -8,10 +8,12 @@ import org.batfish.common.Answerer;
 import org.batfish.common.BatfishException;
 import org.batfish.common.NetworkSnapshot;
 import org.batfish.common.plugin.IBatfish;
+import org.batfish.datamodel.BgpPeerConfig;
 import org.batfish.datamodel.BgpProcess;
 import org.batfish.datamodel.Bgpv4Route;
 import org.batfish.datamodel.Configuration;
 import org.batfish.datamodel.Ip;
+import org.batfish.datamodel.LongSpace;
 import org.batfish.datamodel.PrefixSpace;
 import org.batfish.datamodel.Vrf;
 import org.batfish.datamodel.bgp.Ipv4UnicastAddressFamily;
@@ -166,6 +168,7 @@ public class NetworkInfo {
                 if (!incoming.hasDstNode()) {
                   incoming.setDstNode(thisNode);
                 }
+                setSessionAsInfo(incoming, peer);
                 Edge outgoing = incoming.flipEdge();
 
                 nodeByName.get(nodeName.toLowerCase()).addIncomingNeighbor(incoming);
@@ -333,6 +336,7 @@ public class NetworkInfo {
                         boolean prevPresent = node.addIncomingNeighbor(incoming);
                         assert prev == null && !prevPresent;
                       }
+                      setSessionAsInfo(incoming, entry.getValue());
                       Edge outgoing = incoming.flipEdge();
 
                       if (outgoing.isEBGP()) {
@@ -362,6 +366,17 @@ public class NetworkInfo {
           });
     }
     return policies;
+  }
+
+  /// Records on the incoming edge the session's AS numbers and allowas-in setting, as configured at
+  /// the receiving node by the provided peer
+  private static void setSessionAsInfo(@Nonnull Edge incoming, @Nonnull BgpPeerConfig peer) {
+    LongSpace remoteAsns = peer.getRemoteAsns();
+    Ipv4UnicastAddressFamily unicast = peer.getIpv4UnicastAddressFamily();
+    incoming.setSessionAsInfo(
+        remoteAsns.isSingleton() ? remoteAsns.singletonValue() : null,
+        peer.getLocalAs(),
+        unicast != null && unicast.getAddressFamilyCapabilities().getAllowLocalAsIn());
   }
 
   /// String representation of the provided location within context of the network (ie using node
@@ -765,6 +780,10 @@ public class NetworkInfo {
       bgp.getActiveNeighbors()
           .forEach(
               (neighborIp, session) -> {
+                nodeByName
+                    .get(nodeName)
+                    .getIncoming(neighborIp, firstNonNull(session.getLocalIp(), bgp.getRouterId()))
+                    .ifPresent(incoming -> setSessionAsInfo(incoming, session));
                 Ipv4UnicastAddressFamily unicast = session.getIpv4UnicastAddressFamily();
                 if (!isNull(unicast) && !isNull(config.getRoutingPolicies())) {
                   boolean eBGP =
@@ -786,6 +805,7 @@ public class NetworkInfo {
                       throw new BatfishException("Edge (with node + ip combo) is not distinct");
                     }
                   }
+                  setSessionAsInfo(incoming, session);
                   Edge outgoing = incoming.flipEdge();
 
                   if (outgoing.isEBGP() && !outgoing.hasDstNode()) {

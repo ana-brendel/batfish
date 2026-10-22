@@ -56,6 +56,7 @@ import static org.batfish.minesweeper.question.verificationutilities.TestConfigC
 import static org.batfish.minesweeper.question.verificationutilities.TestConfigConstructionUtils.includeCommunities;
 import static org.batfish.minesweeper.question.verificationutilities.TestConfigConstructionUtils.permitRoute;
 import static org.batfish.minesweeper.question.verificationutilities.TestConfigConstructionUtils.replaceCommunities;
+import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 
@@ -940,6 +941,36 @@ public class ReachabilityAnswererTest {
     // TODO interference doesn't currently consider preference
     // the interfering path has a lower local preference
     // assertFalse(checks.getRight());
+  }
+
+  @Test
+  public void sessionAsInfoTest() {
+    NodeRecord ALPHANODE_R = new NodeRecord("10.0.0.1", "alphaNode");
+    NodeRecord BETANODE_R = new NodeRecord("10.0.0.2", "betaNode");
+    NodeRecord GAMMANODE_R = new NodeRecord("10.0.0.3", "gammaNode");
+    Ip incomingAlpha = Ip.parse("100.0.0.10");
+    String prefixStr = "2.4.8.0/24";
+
+    TestConfigConstructionUtils.Networkv2 net =
+        pathWithAsPathLengthExample(ALPHANODE_R, BETANODE_R, GAMMANODE_R, incomingAlpha, prefixStr);
+    NetworkInfo info = net.getInfo(new PrefixSpace(PrefixRange.fromString(prefixStr)));
+
+    Node ALPHANODE = ALPHANODE_R.instantiate(info);
+    Node BETANODE = BETANODE_R.instantiate(info);
+
+    // the edge from the external neighbor into alpha
+    Edge external = info.checkForEdgeViaIps(incomingAlpha, ALPHANODE.getSingleIp()).get();
+    assertEquals(Long.valueOf(65100L), external.getSrcAs());
+    assertEquals(Long.valueOf(65001L), external.getDstAs());
+    assertFalse(external.dstAllowsLocalAsIn());
+
+    // the edge from beta into alpha, and its flip
+    Edge betaToAlpha = ALPHANODE.getIncomingFrom(BETANODE).get();
+    assertEquals(Long.valueOf(65002L), betaToAlpha.getSrcAs());
+    assertEquals(Long.valueOf(65001L), betaToAlpha.getDstAs());
+    Edge alphaToBeta = betaToAlpha.flipEdge();
+    assertEquals(Long.valueOf(65001L), alphaToBeta.getSrcAs());
+    assertEquals(Long.valueOf(65002L), alphaToBeta.getDstAs());
   }
 
   private TestConfigConstructionUtils.Networkv2 weakerPathConstraints(

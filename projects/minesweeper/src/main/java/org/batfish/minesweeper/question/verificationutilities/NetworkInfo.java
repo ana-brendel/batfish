@@ -132,6 +132,7 @@ public class NetworkInfo {
       }
 
       policies.put(config, new HashSet<>());
+      setNodeInfo(nodeByName.get(nodeName.toLowerCase()), config.getDefaultVrf().getBgpProcess());
       config
           .getDefaultVrf()
           .getBgpProcess()
@@ -168,7 +169,7 @@ public class NetworkInfo {
                 if (!incoming.hasDstNode()) {
                   incoming.setDstNode(thisNode);
                 }
-                setSessionAsInfo(incoming, peer);
+                setSessionInfo(incoming, peer);
                 Edge outgoing = incoming.flipEdge();
 
                 nodeByName.get(nodeName.toLowerCase()).addIncomingNeighbor(incoming);
@@ -296,6 +297,7 @@ public class NetworkInfo {
       // gather the policies
       bgpProcesses.forEach(
           proc -> {
+            setNodeInfo(node, proc);
             proc.getActiveNeighbors().entrySet().stream()
                 .filter(
                     entry ->
@@ -336,7 +338,7 @@ public class NetworkInfo {
                         boolean prevPresent = node.addIncomingNeighbor(incoming);
                         assert prev == null && !prevPresent;
                       }
-                      setSessionAsInfo(incoming, entry.getValue());
+                      setSessionInfo(incoming, entry.getValue());
                       Edge outgoing = incoming.flipEdge();
 
                       if (outgoing.isEBGP()) {
@@ -368,15 +370,22 @@ public class NetworkInfo {
     return policies;
   }
 
-  /// Records on the incoming edge the session's AS numbers and allowas-in setting, as configured at
-  /// the receiving node by the provided peer
-  private static void setSessionAsInfo(@Nonnull Edge incoming, @Nonnull BgpPeerConfig peer) {
+  /// Records on the incoming edge the session's AS numbers, allowas-in setting, and
+  /// route-reflection settings, as configured at the receiving node by the provided peer
+  private static void setSessionInfo(@Nonnull Edge incoming, @Nonnull BgpPeerConfig peer) {
     LongSpace remoteAsns = peer.getRemoteAsns();
     Ipv4UnicastAddressFamily unicast = peer.getIpv4UnicastAddressFamily();
     incoming.setSessionAsInfo(
         remoteAsns.isSingleton() ? remoteAsns.singletonValue() : null,
         peer.getLocalAs(),
         unicast != null && unicast.getAddressFamilyCapabilities().getAllowLocalAsIn());
+    incoming.setRouteReflectionInfo(
+        unicast != null && unicast.getRouteReflectorClient(), peer.getClusterId());
+  }
+
+  /// Records on the node the route-reflection settings of its BGP process
+  private static void setNodeInfo(@Nonnull Node node, @Nonnull BgpProcess process) {
+    node.setRouteReflectionInfo(process.getClientToClientReflection(), process.getClusterIds());
   }
 
   /// String representation of the provided location within context of the network (ie using node
@@ -777,13 +786,14 @@ public class NetworkInfo {
         continue;
       }
       BgpProcess bgp = config.getDefaultVrf().getBgpProcess();
+      setNodeInfo(nodeByName.get(nodeName), bgp);
       bgp.getActiveNeighbors()
           .forEach(
               (neighborIp, session) -> {
                 nodeByName
                     .get(nodeName)
                     .getIncoming(neighborIp, firstNonNull(session.getLocalIp(), bgp.getRouterId()))
-                    .ifPresent(incoming -> setSessionAsInfo(incoming, session));
+                    .ifPresent(incoming -> setSessionInfo(incoming, session));
                 Ipv4UnicastAddressFamily unicast = session.getIpv4UnicastAddressFamily();
                 if (!isNull(unicast) && !isNull(config.getRoutingPolicies())) {
                   boolean eBGP =
@@ -805,7 +815,7 @@ public class NetworkInfo {
                       throw new BatfishException("Edge (with node + ip combo) is not distinct");
                     }
                   }
-                  setSessionAsInfo(incoming, session);
+                  setSessionInfo(incoming, session);
                   Edge outgoing = incoming.flipEdge();
 
                   if (outgoing.isEBGP() && !outgoing.hasDstNode()) {

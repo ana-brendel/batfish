@@ -6,6 +6,7 @@ import static org.junit.Assert.assertTrue;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import org.batfish.datamodel.Configuration;
 import org.batfish.datamodel.ConfigurationFormat;
 import org.batfish.datamodel.Ip;
@@ -77,6 +78,25 @@ public class BgpPathValidityTest {
                 new PrependAsPath(new LiteralAsList(List.of(ases))),
                 Statements.ExitAccept.toStaticStatement()))
         .build();
+  }
+
+  /// Makes the node a route reflector that uses the given cluster ID on all its sessions. Call it
+  /// after creating the node's sessions.
+  private static void reflector(Node node, long clusterId, boolean clientToClient) {
+    for (Edge in : node.getAllIncomingEdges()) {
+      in.setRouteReflectionInfo(in.dstTreatsSrcAsClient(), clusterId);
+    }
+    node.setRouteReflectionInfo(clientToClient, Set.of(clusterId));
+  }
+
+  private static void reflector(Node node, long clusterId) {
+    reflector(node, clusterId, true);
+  }
+
+  /// Makes the client a route-reflector client of the reflector
+  private static void client(Node reflector, Node client) {
+    Edge in = reflector.getIncomingFrom(client).orElseThrow();
+    in.setRouteReflectionInfo(true, in.getDstClusterId());
   }
 
   private boolean valid(boolean endsAtEdge, Edge... edges) {
@@ -221,5 +241,128 @@ public class BgpPathValidityTest {
     BgpPathValidity validity = new BgpPathValidity(imports, exports);
     assertFalse(validity.isValid(new Location[] {c, bToC, b, aToB, a, in}));
     assertTrue(validity.isValid(new Location[] {bToC, b, aToB, a, in}));
+  }
+
+  // Route reflection: a, the reflectors, and b are in AS 1 unless stated otherwise
+
+  @Test
+  public void reflectionFromClientToNonClientIsValid() {
+    Node a = new Node("a");
+    Node rr = new Node("rr");
+    Node b = new Node("b");
+    Edge aToRr = link(a, 1, rr, 1);
+    Edge rrToB = link(rr, 1, b, 1);
+    reflector(rr, 1);
+    client(rr, a);
+    assertTrue(valid(false, external(100, a, 1), aToRr, rrToB));
+  }
+
+  @Test
+  public void reflectionFromNonClientToClientIsValid() {
+    Node a = new Node("a");
+    Node rr = new Node("rr");
+    Node b = new Node("b");
+    Edge aToRr = link(a, 1, rr, 1);
+    Edge rrToB = link(rr, 1, b, 1);
+    reflector(rr, 1);
+    client(rr, b);
+    assertTrue(valid(false, external(100, a, 1), aToRr, rrToB));
+  }
+
+  @Test
+  public void reflectionFromNonClientToNonClientIsInvalid() {
+    Node a = new Node("a");
+    Node rr = new Node("rr");
+    Node b = new Node("b");
+    Edge aToRr = link(a, 1, rr, 1);
+    Edge rrToB = link(rr, 1, b, 1);
+    reflector(rr, 1);
+    assertFalse(valid(false, external(100, a, 1), aToRr, rrToB));
+  }
+
+  @Test
+  public void reflectionBetweenClientsNeedsClientToClient() {
+    Node a = new Node("a");
+    Node rr = new Node("rr");
+    Node b = new Node("b");
+    Edge aToRr = link(a, 1, rr, 1);
+    Edge rrToB = link(rr, 1, b, 1);
+    reflector(rr, 1);
+    client(rr, a);
+    client(rr, b);
+    assertTrue(valid(false, external(100, a, 1), aToRr, rrToB));
+    reflector(rr, 1, false);
+    assertFalse(valid(false, external(100, a, 1), aToRr, rrToB));
+  }
+
+  @Test
+  public void reflectorsInDifferentClustersAreValid() {
+    // a is a client of rr1, which is a client of rr2
+    Node a = new Node("a");
+    Node rr1 = new Node("rr1");
+    Node rr2 = new Node("rr2");
+    Node b = new Node("b");
+    Edge aToRr1 = link(a, 1, rr1, 1);
+    Edge rr1ToRr2 = link(rr1, 1, rr2, 1);
+    Edge rr2ToB = link(rr2, 1, b, 1);
+    reflector(rr1, 1);
+    reflector(rr2, 2);
+    client(rr1, a);
+    client(rr2, rr1);
+    assertTrue(valid(false, external(100, a, 1), aToRr1, rr1ToRr2, rr2ToB));
+  }
+
+  @Test
+  public void reflectorsInOneClusterAreInvalid() {
+    // rr2 rejects the route rr1 reflects, since rr1 adds their shared cluster ID
+    Node a = new Node("a");
+    Node rr1 = new Node("rr1");
+    Node rr2 = new Node("rr2");
+    Node b = new Node("b");
+    Edge aToRr1 = link(a, 1, rr1, 1);
+    Edge rr1ToRr2 = link(rr1, 1, rr2, 1);
+    Edge rr2ToB = link(rr2, 1, b, 1);
+    reflector(rr1, 1);
+    reflector(rr2, 1);
+    client(rr1, a);
+    client(rr2, rr1);
+    assertFalse(valid(false, external(100, a, 1), aToRr1, rr1ToRr2, rr2ToB));
+    assertFalse(valid(false, external(100, a, 1), aToRr1, rr1ToRr2));
+  }
+
+  @Test
+  public void targetEdgeReceiverClusterIsNotChecked() {
+    // the route is sent to rr2 but the target is the edge, before rr2 checks the cluster list
+    Node a = new Node("a");
+    Node rr1 = new Node("rr1");
+    Node rr2 = new Node("rr2");
+    Edge aToRr1 = link(a, 1, rr1, 1);
+    Edge rr1ToRr2 = link(rr1, 1, rr2, 1);
+    reflector(rr1, 1);
+    reflector(rr2, 1);
+    client(rr1, a);
+    assertTrue(valid(true, external(100, a, 1), aToRr1, rr1ToRr2));
+  }
+
+  @Test
+  public void clusterListIsClearedByEbgp() {
+    // rr1 in AS 1 and rr2 in AS 2 use the same cluster ID; the route reaches rr2 over eBGP, so
+    // rr1's cluster ID is no longer in its cluster list
+    Node a = new Node("a");
+    Node rr1 = new Node("rr1");
+    Node x = new Node("x");
+    Node p = new Node("p");
+    Node rr2 = new Node("rr2");
+    Node q = new Node("q");
+    Edge aToRr1 = link(a, 1, rr1, 1);
+    Edge rr1ToX = link(rr1, 1, x, 1);
+    Edge xToP = link(x, 1, p, 2);
+    Edge pToRr2 = link(p, 2, rr2, 2);
+    Edge rr2ToQ = link(rr2, 2, q, 2);
+    reflector(rr1, 1);
+    reflector(rr2, 1);
+    client(rr1, a);
+    client(rr2, p);
+    assertTrue(valid(false, external(100, a, 1), aToRr1, rr1ToX, xToP, pToRr2, rr2ToQ));
   }
 }

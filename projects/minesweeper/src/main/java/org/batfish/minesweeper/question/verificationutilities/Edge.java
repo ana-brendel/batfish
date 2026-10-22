@@ -23,6 +23,14 @@ public class Edge extends Location {
   private boolean srcAllowsLocalAsIn;
   private boolean dstAllowsLocalAsIn;
 
+  /// Route-reflection settings of the session, as configured at the receiving end (see
+  /// setRouteReflectionInfo): whether the receiver treats the sender as a route-reflector client,
+  /// and the cluster ID the receiver uses on the session (null if none)
+  private boolean srcTreatsDstAsClient;
+  private boolean dstTreatsSrcAsClient;
+  private @Nullable Long srcClusterId;
+  private @Nullable Long dstClusterId;
+
   public Edge(@Nonnull Ip src, @Nonnull Ip dst, boolean eBGP) {
     assert !src.equals(dst);
     assert !src.equals(Ip.ZERO) && !dst.equals(Ip.ZERO);
@@ -60,7 +68,11 @@ public class Edge extends Location {
       @Nullable Long srcAs,
       @Nullable Long dstAs,
       boolean srcAllowsLocalAsIn,
-      boolean dstAllowsLocalAsIn) {
+      boolean dstAllowsLocalAsIn,
+      boolean srcTreatsDstAsClient,
+      boolean dstTreatsSrcAsClient,
+      @Nullable Long srcClusterId,
+      @Nullable Long dstClusterId) {
     this.src = src;
     this.dst = dst;
     this.eBGP = eBGP;
@@ -70,6 +82,10 @@ public class Edge extends Location {
     this.dstAs = dstAs;
     this.srcAllowsLocalAsIn = srcAllowsLocalAsIn;
     this.dstAllowsLocalAsIn = dstAllowsLocalAsIn;
+    this.srcTreatsDstAsClient = srcTreatsDstAsClient;
+    this.dstTreatsSrcAsClient = dstTreatsSrcAsClient;
+    this.srcClusterId = srcClusterId;
+    this.dstClusterId = dstClusterId;
   }
 
   @Nonnull
@@ -122,6 +138,24 @@ public class Edge extends Location {
     this.dstAllowsLocalAsIn = dstAllowsLocalAsIn;
   }
 
+  /// Whether the receiver treats the sender as a route-reflector client on this session
+  public boolean dstTreatsSrcAsClient() {
+    return dstTreatsSrcAsClient;
+  }
+
+  /// The cluster ID the receiver uses on this session, which it adds to the cluster list of a
+  /// route it reflects to the sender; null if none is configured
+  @Nullable
+  public Long getDstClusterId() {
+    return dstClusterId;
+  }
+
+  /// Records the session's route-reflection settings, as configured at the receiving end
+  public void setRouteReflectionInfo(boolean dstTreatsSrcAsClient, @Nullable Long dstClusterId) {
+    this.dstTreatsSrcAsClient = dstTreatsSrcAsClient;
+    this.dstClusterId = dstClusterId;
+  }
+
   @Nonnull
   public Edge flipEdge() {
     return new Edge(
@@ -133,7 +167,11 @@ public class Edge extends Location {
         dstAs,
         srcAs,
         dstAllowsLocalAsIn,
-        srcAllowsLocalAsIn);
+        srcAllowsLocalAsIn,
+        dstTreatsSrcAsClient,
+        srcTreatsDstAsClient,
+        dstClusterId,
+        srcClusterId);
   }
 
   public void setSrcNode(Node src) {
@@ -187,7 +225,11 @@ public class Edge extends Location {
         srcAs,
         dstAs,
         srcAllowsLocalAsIn,
-        dstAllowsLocalAsIn);
+        dstAllowsLocalAsIn,
+        srcTreatsDstAsClient,
+        dstTreatsSrcAsClient,
+        srcClusterId,
+        dstClusterId);
   }
 
   @Override

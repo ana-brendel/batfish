@@ -10,6 +10,7 @@ import static org.junit.Assert.assertTrue;
 import com.google.common.collect.ImmutableSortedMap;
 import java.util.Arrays;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -52,7 +53,10 @@ public class PathExplorationLoopTest {
   private final NetworkFactory nf = new NetworkFactory();
   private Map<NodeRecord, Configuration> configs;
   private Map<NodeRecord, Long> ases;
-  private Map<NodeRecord, Map<Ip, BgpActivePeerConfig>> neighbors;
+  private Map<NodeRecord, Map<Ip, PeerSpec>> neighbors;
+  private Map<NodeRecord, Long> clusterIds;
+  private Map<NodeRecord, Set<NodeRecord>> clients;
+  private Set<NodeRecord> noClientToClient;
   private RoutingPolicy template;
   private int nextRouter;
 
@@ -61,6 +65,9 @@ public class PathExplorationLoopTest {
     configs = new LinkedHashMap<>();
     ases = new HashMap<>();
     neighbors = new HashMap<>();
+    clusterIds = new HashMap<>();
+    clients = new HashMap<>();
+    noClientToClient = new HashSet<>();
     nextRouter = 1;
   }
 
@@ -90,10 +97,25 @@ public class PathExplorationLoopTest {
     return node;
   }
 
-  /// A peer with the given AS numbers; a null AS is left unconfigured
+  /// A configured neighbor: a router, or an external neighbor (null) that is a route-reflector
+  /// client if externalClient is true. A null remote AS is left unconfigured.
+  private record PeerSpec(
+      NodeRecord neighbor,
+      Long remoteAs,
+      boolean allowLocalAsIn,
+      String importPolicy,
+      boolean externalClient) {}
+
+  /// A peer with the given settings; a null AS or cluster ID is left unconfigured
   private BgpActivePeerConfig peer(
-      Long localAs, Long remoteAs, boolean allowLocalAsIn, String importPolicy) {
-    BgpActivePeerConfig.Builder builder = BgpActivePeerConfig.builder().setLocalAs(localAs);
+      Long localAs,
+      Long remoteAs,
+      boolean allowLocalAsIn,
+      String importPolicy,
+      boolean client,
+      Long clusterId) {
+    BgpActivePeerConfig.Builder builder =
+        BgpActivePeerConfig.builder().setLocalAs(localAs).setClusterId(clusterId);
     if (remoteAs != null) {
       builder.setRemoteAs(remoteAs);
     }
@@ -104,30 +126,53 @@ public class PathExplorationLoopTest {
                     AddressFamilyCapabilities.builder().setAllowLocalAsIn(allowLocalAsIn).build())
                 .setImportPolicy(importPolicy)
                 .setExportPolicy(POLICY)
+                .setRouteReflectorClient(client)
                 .build())
         .build();
   }
 
   /// A BGP session between a and b; iBGP if they are in the same AS
   private void session(NodeRecord a, NodeRecord b, boolean bAllowsLocalAsIn) {
-    neighbors.get(a).put(b.getIp(), peer(ases.get(a), ases.get(b), false, POLICY));
-    neighbors.get(b).put(a.getIp(), peer(ases.get(b), ases.get(a), bAllowsLocalAsIn, POLICY));
+    neighbors.get(a).put(b.getIp(), new PeerSpec(b, ases.get(b), false, POLICY, false));
+    neighbors
+        .get(b)
+        .put(a.getIp(), new PeerSpec(a, ases.get(a), bAllowsLocalAsIn, POLICY, false));
   }
 
   /// Makes the receiver's session with the sender reject every route
   private void denyImport(NodeRecord receiver, NodeRecord sender) {
     neighbors
         .get(receiver)
-        .put(sender.getIp(), peer(ases.get(receiver), ases.get(sender), false, DENY));
+        .put(sender.getIp(), new PeerSpec(sender, ases.get(sender), false, DENY, false));
+  }
+
+  /// Makes the router a route reflector that uses the given cluster ID on all its sessions
+  private void reflector(NodeRecord router, long clusterId) {
+    clusterIds.put(router, clusterId);
+  }
+
+  /// Makes the client a route-reflector client of the reflector
+  private void client(NodeRecord reflector, NodeRecord client) {
+    clients.computeIfAbsent(reflector, k -> new HashSet<>()).add(client);
+  }
+
+  /// Turns off reflection between the router's route-reflector clients
+  private void noClientToClient(NodeRecord router) {
+    noClientToClient.add(router);
   }
 
   private void session(NodeRecord a, NodeRecord b) {
     session(a, b, false);
   }
 
-  /// A session from an external neighbor (no config) into a
+  /// A session from an external neighbor (no config) into a, which a treats as a route-reflector
+  /// client if client is true
+  private void external(NodeRecord a, String ip, Long externalAs, boolean client) {
+    neighbors.get(a).put(Ip.parse(ip), new PeerSpec(null, externalAs, false, POLICY, client));
+  }
+
   private void external(NodeRecord a, String ip, Long externalAs) {
-    neighbors.get(a).put(Ip.parse(ip), peer(ases.get(a), externalAs, false, POLICY));
+    external(a, ip, externalAs, false);
   }
 
   private Networkv2 build() {
@@ -145,13 +190,34 @@ public class PathExplorationLoopTest {
           .setLocalOriginationTypeTieBreaker(LocalOriginationTypeTieBreaker.NO_PREFERENCE)
           .setNetworkNextHopIpTieBreaker(NextHopIpTieBreaker.HIGHEST_NEXT_HOP_IP)
           .setRedistributeNextHopIpTieBreaker(NextHopIpTieBreaker.HIGHEST_NEXT_HOP_IP)
+          .setClientToClientReflection(!noClientToClient.contains(node))
           .setVrf(vrf)
           .build()
-          .setNeighbors(ImmutableSortedMap.copyOf(neighbors.get(node)));
+          .setNeighbors(ImmutableSortedMap.copyOf(peers(node)));
     }
     TransferBDD tbdd =
         new TransferBDD(getConfigAtomicPredicates(Set.of(), Set.of(), configs.values()));
     return new Networkv2(tbdd, configs, template, List.of());
+  }
+
+  private Map<Ip, BgpActivePeerConfig> peers(NodeRecord node) {
+    Map<Ip, BgpActivePeerConfig> peers = new HashMap<>();
+    neighbors
+        .get(node)
+        .forEach(
+            (ip, spec) ->
+                peers.put(
+                    ip,
+                    peer(
+                        ases.get(node),
+                        spec.remoteAs(),
+                        spec.allowLocalAsIn(),
+                        spec.importPolicy(),
+                        spec.neighbor() == null
+                            ? spec.externalClient()
+                            : clients.getOrDefault(node, Set.of()).contains(spec.neighbor()),
+                        clusterIds.get(node))));
+    return peers;
   }
 
   /// Whether the answerer finds a good path for the prefix to the given router
@@ -370,5 +436,181 @@ public class PathExplorationLoopTest {
     assertTrue(new BgpPathValidity(Map.of(), Map.of()).isValid(path));
     assertTrue(visits(path, y));
     assertFalse(visits(path, a));
+  }
+
+  // Route reflection. In each test, a, the reflectors, and b are in AS 1, and a route enters at a
+  // from an external neighbor in AS 100.
+
+  @Test
+  public void reflectFromClientToNonClient() {
+    NodeRecord a = router("a", 1L);
+    NodeRecord rr = router("rr", 1L);
+    NodeRecord b = router("b", 1L);
+    external(a, "100.0.0.1", 100L);
+    session(a, rr);
+    session(rr, b);
+    reflector(rr, 1);
+    client(rr, a);
+    assertTrue(goodPathTo(build(), b));
+  }
+
+  @Test
+  public void reflectFromNonClientToClient() {
+    NodeRecord a = router("a", 1L);
+    NodeRecord rr = router("rr", 1L);
+    NodeRecord b = router("b", 1L);
+    external(a, "100.0.0.1", 100L);
+    session(a, rr);
+    session(rr, b);
+    reflector(rr, 1);
+    client(rr, b);
+    assertTrue(goodPathTo(build(), b));
+  }
+
+  @Test
+  public void noReflectionFromNonClientToNonClient() {
+    NodeRecord a = router("a", 1L);
+    NodeRecord rr = router("rr", 1L);
+    NodeRecord b = router("b", 1L);
+    NodeRecord c = router("c", 1L);
+    external(a, "100.0.0.1", 100L);
+    session(a, rr);
+    session(rr, b);
+    session(rr, c);
+    reflector(rr, 1);
+    // rr has a client, but neither a nor b is one
+    client(rr, c);
+    assertFalse(goodPathTo(build(), b));
+  }
+
+  @Test
+  public void reflectBetweenClients() {
+    NodeRecord a = router("a", 1L);
+    NodeRecord rr = router("rr", 1L);
+    NodeRecord b = router("b", 1L);
+    external(a, "100.0.0.1", 100L);
+    session(a, rr);
+    session(rr, b);
+    reflector(rr, 1);
+    client(rr, a);
+    client(rr, b);
+    assertTrue(goodPathTo(build(), b));
+  }
+
+  @Test
+  public void noReflectionBetweenClientsWithoutClientToClient() {
+    NodeRecord a = router("a", 1L);
+    NodeRecord rr = router("rr", 1L);
+    NodeRecord b = router("b", 1L);
+    external(a, "100.0.0.1", 100L);
+    session(a, rr);
+    session(rr, b);
+    reflector(rr, 1);
+    client(rr, a);
+    client(rr, b);
+    noClientToClient(rr);
+    assertFalse(goodPathTo(build(), b));
+  }
+
+  @Test
+  public void reflectRouteFromUnconfiguredClient() {
+    // the route arrives at rr from an iBGP neighbor we have no config for, which rr treats as a
+    // client, so rr reflects it to its non-client b
+    NodeRecord rr = router("rr", 1L);
+    NodeRecord b = router("b", 1L);
+    external(rr, "100.0.0.1", 1L, true);
+    session(rr, b);
+    reflector(rr, 1);
+    assertTrue(goodPathTo(build(), b));
+  }
+
+  @Test
+  public void reflectorHierarchyWithDifferentClusters() {
+    // a is a client of rr1, which is a client of rr2, which reflects to its non-client b
+    NodeRecord a = router("a", 1L);
+    NodeRecord rr1 = router("rr1", 1L);
+    NodeRecord rr2 = router("rr2", 1L);
+    NodeRecord b = router("b", 1L);
+    external(a, "100.0.0.1", 100L);
+    session(a, rr1);
+    session(rr1, rr2);
+    session(rr2, b);
+    reflector(rr1, 1);
+    reflector(rr2, 2);
+    client(rr1, a);
+    client(rr2, rr1);
+    assertTrue(goodPathTo(build(), b));
+  }
+
+  @Test
+  public void noReflectionThroughTwoReflectorsInOneCluster() {
+    // as above, but rr1 and rr2 share a cluster, so rr2 rejects the route rr1 reflects to it
+    NodeRecord a = router("a", 1L);
+    NodeRecord rr1 = router("rr1", 1L);
+    NodeRecord rr2 = router("rr2", 1L);
+    NodeRecord b = router("b", 1L);
+    external(a, "100.0.0.1", 100L);
+    session(a, rr1);
+    session(rr1, rr2);
+    session(rr2, b);
+    reflector(rr1, 1);
+    reflector(rr2, 1);
+    client(rr1, a);
+    client(rr2, rr1);
+    assertFalse(goodPathTo(build(), b));
+  }
+
+  @Test
+  public void redundantReflectorsInOneCluster() {
+    // a and b are clients of both rr1 and rr2, which share a cluster; b gets the route through
+    // either reflector alone, never through both
+    NodeRecord a = router("a", 1L);
+    NodeRecord rr1 = router("rr1", 1L);
+    NodeRecord rr2 = router("rr2", 1L);
+    NodeRecord b = router("b", 1L);
+    external(a, "100.0.0.1", 100L);
+    session(a, rr1);
+    session(a, rr2);
+    session(rr1, b);
+    session(rr2, b);
+    session(rr1, rr2);
+    reflector(rr1, 1);
+    reflector(rr2, 1);
+    client(rr1, a);
+    client(rr1, b);
+    client(rr2, a);
+    client(rr2, b);
+    Networkv2 net = build();
+    assertTrue(goodPathTo(net, b));
+    Location[] path = explore(net, b);
+    assertFalse(visits(path, rr1) && visits(path, rr2));
+  }
+
+  @Test
+  public void longerPathThroughReflectors() {
+    // rr1 treats a and b as non-clients, so the shortest path a -> rr1 -> b is not allowed; the
+    // longer path a -> rr2 -> rr3 -> b is, with a a client of rr2 and rr2 a client of rr3
+    NodeRecord a = router("a", 1L);
+    NodeRecord rr1 = router("rr1", 1L);
+    NodeRecord rr2 = router("rr2", 1L);
+    NodeRecord rr3 = router("rr3", 1L);
+    NodeRecord b = router("b", 1L);
+    NodeRecord c = router("c", 1L);
+    external(a, "100.0.0.1", 100L);
+    session(a, rr1);
+    session(rr1, b);
+    session(rr1, c);
+    session(a, rr2);
+    session(rr2, rr3);
+    session(rr3, b);
+    reflector(rr1, 1);
+    reflector(rr2, 2);
+    reflector(rr3, 3);
+    client(rr1, c);
+    client(rr2, a);
+    client(rr3, rr2);
+    Location[] path = explore(build(), b);
+    assertTrue(visits(path, rr2));
+    assertFalse(visits(path, rr1));
   }
 }

@@ -95,11 +95,21 @@ public class PathExploration {
   ///
   /// To bound the search, a path is not extended if a shorter path from the same node allows every
   /// extension it does, as far as the loop-prevention rules are concerned (see
-  /// BgpPathValidity.Suffix). This can miss a path when the shorter one cannot continue only because
-  /// the continuation would repeat one of its nodes. That should be rare: the repeated node's AS is
-  /// usually already checked along the longer path, so loop detection rejects the continuation
-  /// there too. Exceptions involve unknown ASes, allowas-in, or a router using different local ASes
-  /// on different sessions, and may grow if route reflection is modeled.
+  /// BgpPathValidity.Suffix). This can miss a path when the shorter one cannot continue only
+  /// because the continuation would repeat one of its nodes. We think, from an informal argument
+  /// rather than a proof, that this only happens in unusual configurations:
+  ///
+  /// - If the repeated node is in a different AS from the node where the two paths start, the
+  ///   route must leave the repeated node's AS, whose number is already checked along the longer
+  ///   path, so AS-path loop detection rejects the continuation there too.
+  /// - Within one AS, the route can reach the shared node over iBGP alone, by route reflection,
+  ///   without its AS path changing. But the repeated node's cluster IDs are already checked along
+  ///   the longer path, so if the repeated node reflects the route, the cluster list rejects the
+  ///   continuation. If instead the route enters the AS at the repeated node, the route can follow
+  ///   the shorter path from there, so the origin still has a path.
+  ///
+  /// The argument fails with unknown ASes, allowas-in, a router using different local ASes on
+  /// different sessions, or a reflector with no cluster ID on the session it reflects onto.
   private List<Location[]> searchPaths(Set<Location> startingPoints) {
     Set<Location> remaining = new HashSet<>(startingPoints);
     List<Location[]> found = new LinkedList<>();

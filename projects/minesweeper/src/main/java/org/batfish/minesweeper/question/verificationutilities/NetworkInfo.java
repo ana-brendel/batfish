@@ -16,7 +16,10 @@ import org.batfish.datamodel.Ip;
 import org.batfish.datamodel.LongSpace;
 import org.batfish.datamodel.PrefixSpace;
 import org.batfish.datamodel.Vrf;
+import org.batfish.datamodel.bgp.BgpConfederation;
+import org.batfish.datamodel.bgp.BgpTopologyUtils.ConfedSessionType;
 import org.batfish.datamodel.bgp.Ipv4UnicastAddressFamily;
+import org.batfish.minesweeper.question.verificationutilities.Edge.ConfedInfo;
 import org.batfish.datamodel.routing_policy.RoutingPolicy;
 import org.batfish.datamodel.table.Row;
 import org.batfish.datamodel.table.TableAnswerElement;
@@ -169,7 +172,7 @@ public class NetworkInfo {
                 if (!incoming.hasDstNode()) {
                   incoming.setDstNode(thisNode);
                 }
-                setSessionInfo(incoming, peer);
+                setSessionInfo(incoming, peer, config.getDefaultVrf().getBgpProcess());
                 Edge outgoing = incoming.flipEdge();
 
                 nodeByName.get(nodeName.toLowerCase()).addIncomingNeighbor(incoming);
@@ -200,6 +203,7 @@ public class NetworkInfo {
                 }
               });
     }
+    finishConfederations();
 
     assert this.externalOutgoing.stream().allMatch(l -> l instanceof Edge);
   }
@@ -338,7 +342,7 @@ public class NetworkInfo {
                         boolean prevPresent = node.addIncomingNeighbor(incoming);
                         assert prev == null && !prevPresent;
                       }
-                      setSessionInfo(incoming, entry.getValue());
+                      setSessionInfo(incoming, entry.getValue(), proc);
                       Edge outgoing = incoming.flipEdge();
 
                       if (outgoing.isEBGP()) {
@@ -367,20 +371,86 @@ public class NetworkInfo {
                     });
           });
     }
+    finishConfederations();
     return policies;
   }
 
   /// Records on the incoming edge the session's AS numbers, allowas-in setting, and
-  /// route-reflection settings, as configured at the receiving node by the provided peer
-  private static void setSessionInfo(@Nonnull Edge incoming, @Nonnull BgpPeerConfig peer) {
+  /// route-reflection and confederation settings, as configured at the receiving node by the
+  /// provided peer of the provided BGP process
+  private static void setSessionInfo(
+      @Nonnull Edge incoming, @Nonnull BgpPeerConfig peer, @Nullable BgpProcess process) {
     LongSpace remoteAsns = peer.getRemoteAsns();
+    Long remoteAs = remoteAsns.isSingleton() ? remoteAsns.singletonValue() : null;
+    Long localAs = peer.getLocalAs();
     Ipv4UnicastAddressFamily unicast = peer.getIpv4UnicastAddressFamily();
+    // As in Batfish (BgpTopologyUtils.computeAsPair), a node in a confederation uses its member AS
+    // on sessions within the confederation and the confederation's AS number on sessions across
+    // its border. Whether the sender is in the same confederation is judged here from the
+    // receiver's config alone, and settled by finishConfederations when the sender's config is
+    // known.
+    Long confederationAs = peer.getConfederationAsn();
+    ConfedSessionType confedType = ConfedSessionType.NO_CONFED;
+    if (confederationAs != null) {
+      BgpConfederation confederation = process == null ? null : process.getConfederation();
+      boolean within =
+          remoteAs != null
+              && (remoteAs.equals(localAs)
+                  || (confederation != null && confederation.getMembers().contains(remoteAs)));
+      confedType =
+          within ? ConfedSessionType.WITHIN_CONFED : ConfedSessionType.ACROSS_CONFED_BORDER;
+    }
+    Long sessionAs =
+        confedType == ConfedSessionType.ACROSS_CONFED_BORDER ? confederationAs : localAs;
     incoming.setSessionAsInfo(
-        remoteAsns.isSingleton() ? remoteAsns.singletonValue() : null,
-        peer.getLocalAs(),
+        remoteAs,
+        sessionAs,
         unicast != null && unicast.getAddressFamilyCapabilities().getAllowLocalAsIn());
+    setConfederationSessionType(incoming, confederationAs, sessionAs);
     incoming.setRouteReflectionInfo(
         unicast != null && unicast.getRouteReflectorClient(), peer.getClusterId());
+    incoming.setConfederationInfo(new ConfedInfo(confedType, confederationAs, localAs));
+  }
+
+  /// Settles whether each session of a node in a confederation is within the confederation or
+  /// across its border, now that every node's config has been recorded: as in Batfish, it is
+  /// within the confederation exactly when both ends are in the same confederation. Sessions with
+  /// a sender that has no config keep the judgment from the receiver's config.
+  private void finishConfederations() {
+    for (Node node : nodeByName.values()) {
+      for (Edge incoming : node.getAllIncomingEdges()) {
+        ConfedInfo confed = incoming.getDstConfed();
+        Node sender = incoming.getSrcNode();
+        if (confed.confederationAs() == null || sender == null) {
+          continue;
+        }
+        Optional<Edge> reverse = sender.getIncoming(incoming.getDst(), incoming.getSrc());
+        if (reverse.isEmpty()) {
+          continue;
+        }
+        boolean within =
+            confed.confederationAs().equals(reverse.get().getDstConfed().confederationAs());
+        Long sessionAs = within ? confed.memberAs() : confed.confederationAs();
+        incoming.setSessionAsInfo(incoming.getSrcAs(), sessionAs, incoming.dstAllowsLocalAsIn());
+        setConfederationSessionType(incoming, confed.confederationAs(), sessionAs);
+        incoming.setConfederationInfo(
+            new ConfedInfo(
+                within ? ConfedSessionType.WITHIN_CONFED : ConfedSessionType.ACROSS_CONFED_BORDER,
+                confed.confederationAs(),
+                confed.memberAs()));
+      }
+    }
+  }
+
+  /// For a node in a confederation, marks the session iBGP exactly when the remote AS is the AS the
+  /// node uses on the session, as in Batfish. In particular, a session across the border with a
+  /// router whose AS is the confederation's AS number is iBGP, although the node's member AS
+  /// differs from it.
+  private static void setConfederationSessionType(
+      Edge incoming, @Nullable Long confederationAs, @Nullable Long sessionAs) {
+    if (confederationAs != null && sessionAs != null && incoming.getSrcAs() != null) {
+      incoming.setEBGP(!incoming.getSrcAs().equals(sessionAs));
+    }
   }
 
   /// Records on the node the route-reflection settings of its BGP process
@@ -793,7 +863,7 @@ public class NetworkInfo {
                 nodeByName
                     .get(nodeName)
                     .getIncoming(neighborIp, firstNonNull(session.getLocalIp(), bgp.getRouterId()))
-                    .ifPresent(incoming -> setSessionInfo(incoming, session));
+                    .ifPresent(incoming -> setSessionInfo(incoming, session, bgp));
                 Ipv4UnicastAddressFamily unicast = session.getIpv4UnicastAddressFamily();
                 if (!isNull(unicast) && !isNull(config.getRoutingPolicies())) {
                   boolean eBGP =
@@ -815,7 +885,7 @@ public class NetworkInfo {
                       throw new BatfishException("Edge (with node + ip combo) is not distinct");
                     }
                   }
-                  setSessionInfo(incoming, session);
+                  setSessionInfo(incoming, session, bgp);
                   Edge outgoing = incoming.flipEdge();
 
                   if (outgoing.isEBGP() && !outgoing.hasDstNode()) {
@@ -837,6 +907,7 @@ public class NetworkInfo {
                 }
               });
     }
+    finishConfederations();
 
     ConfigAtomicPredicates configAtomicPredicates =
         getConfigAtomicPredicates(communityRegexes, asPathRegexes, relevantPolicies);

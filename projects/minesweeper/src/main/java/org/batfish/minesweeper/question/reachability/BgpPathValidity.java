@@ -9,6 +9,7 @@ import java.util.Optional;
 import java.util.Set;
 import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
+import org.batfish.datamodel.bgp.BgpTopologyUtils.ConfedSessionType;
 import org.batfish.datamodel.routing_policy.RoutingPolicy;
 import org.batfish.datamodel.routing_policy.expr.AsExpr;
 import org.batfish.datamodel.routing_policy.expr.AutoAs;
@@ -35,6 +36,16 @@ import org.batfish.minesweeper.utils.Tuple;
 /// - AS-path loop detection: a node rejects a route whose AS path contains its local AS for the
 ///   session, unless the session allows it (allowas-in). The AS path grows by the sender's AS on
 ///   each eBGP hop and by any AS a policy along the path may prepend.
+/// - Confederations: a node in a confederation uses its member AS on sessions within the
+///   confederation, which are eBGP between member ASes, and the confederation's AS number on
+///   sessions across its border. Between member ASes, the sender adds its member AS as a
+///   confederation segment of the AS path; across the border, the sender removes the confederation
+///   segments before adding the confederation's AS number. A node checks its AS against every
+///   segment. A session is within a confederation when both ends are in the same one (see
+///   NetworkInfo.finishConfederations). A session across the border with a router whose AS is the
+///   confederation's AS number is iBGP, so as in Batfish, no AS is added and the confederation
+///   segments are kept. RFC 5065 instead has a member remove them before sending a route to any
+///   non-member.
 ///
 /// A path is rejected only when these rules show that no route can take it, apart from the
 /// approximations below. A path that is kept may still be unusable for some routes, which is a
@@ -57,8 +68,10 @@ import org.batfish.minesweeper.utils.Tuple;
 /// - The originator ID is not checked: a node rejects a route that it injected into iBGP itself.
 ///   Paths never repeat a node, so this only matters if two nodes share a router ID.
 /// - Prepends of a VarAs, and AS-path rewrites (ExcludeAsPath, ReplaceAsesInAsSequence,
-///   as-override, remove-private-as, replace-as) are not modeled. Confederations are not modeled,
-///   nor tested together with route reflection.
+///   as-override, remove-private-as, replace-as) are not modeled.
+/// - For a session with a neighbor that has no config, whether it is within the receiver's
+///   confederation is judged from the receiver's member ASes, which some platforms (e.g. FRR) list
+///   only partially, so the session can be misjudged either way.
 /// - Sender-side loop detection (Batfish's allowRemoteAsOut) is not modeled, since the standard
 ///   does not require it. It only matters when the target is an edge, whose receiver is not
 ///   checked: on platforms that do it, the route may not be advertised on the target edge. For
@@ -123,21 +136,26 @@ public class BgpPathValidity {
   /// - ibgpRunClusterIds: the cluster IDs of the receivers along the suffix's initial run of iBGP
   ///   edges, which reject a route whose cluster list contains one of them.
   /// - checkedAses: the ASes of the receivers along the suffix that check for AS-path loops.
+  /// - checkedConfedAses: the ASes of those receivers before the suffix's first crossing of a
+  ///   confederation border, which removes the member ASes from the AS path; only these receivers
+  ///   see a member AS added before the suffix.
   ///
   /// Two suffixes with equal requirements allow the same extensions.
   public record Suffix(
       boolean allowsIbgpFromClient,
       boolean allowsIbgpFromNonClient,
       @Nonnull Set<Long> ibgpRunClusterIds,
-      @Nonnull Set<Long> checkedAses) {
-    public static final Suffix EMPTY = new Suffix(true, true, Set.of(), Set.of());
+      @Nonnull Set<Long> checkedAses,
+      @Nonnull Set<Long> checkedConfedAses) {
+    public static final Suffix EMPTY = new Suffix(true, true, Set.of(), Set.of(), Set.of());
 
     /// Whether every extension that the other suffix allows is also allowed by this one
     public boolean weakerThan(@Nonnull Suffix other) {
       return (allowsIbgpFromClient || !other.allowsIbgpFromClient)
           && (allowsIbgpFromNonClient || !other.allowsIbgpFromNonClient)
           && other.ibgpRunClusterIds.containsAll(ibgpRunClusterIds)
-          && other.checkedAses.containsAll(checkedAses);
+          && other.checkedAses.containsAll(checkedAses)
+          && other.checkedConfedAses.containsAll(checkedConfedAses);
     }
   }
 
@@ -153,21 +171,37 @@ public class BgpPathValidity {
             : suffix.allowsIbgpFromNonClient())) {
       return null;
     }
-    // the ASes added by the sender's export policy and, on an eBGP session, the sender's AS
+    // the ASes added by the sender's export policy and, on an eBGP session, the sender's AS,
+    // which within a confederation is its member AS, added as a confederation segment
+    ConfedSessionType confedType = confedType(edge);
     Set<Long> sent = new HashSet<>();
     addPrepended(sent, exports.get(edge), edge, true);
     Long senderAs = senderAs(edge);
+    Long sentMemberAs = null;
     if (edge.isEBGP() && senderAs != null) {
-      sent.add(senderAs);
+      if (confedType == ConfedSessionType.WITHIN_CONFED) {
+        sentMemberAs = senderAs;
+      } else {
+        sent.add(senderAs);
+      }
     }
     // the receiver's loop check happens before its import policy, so it sees only the sent ASes
     Set<Long> checkedAses = new HashSet<>(suffix.checkedAses());
+    Set<Long> checkedConfedAses = new HashSet<>(suffix.checkedConfedAses());
     Long receiverAs = edge.getDstAs();
     if (!isTarget && receiverAs != null && !edge.dstAllowsLocalAsIn()) {
       checkedAses.add(receiverAs);
+      checkedConfedAses.add(receiverAs);
     }
-    if (sent.stream().anyMatch(checkedAses::contains)) {
+    if (sent.stream().anyMatch(checkedAses::contains)
+        || (sentMemberAs != null && checkedConfedAses.contains(sentMemberAs))) {
       return null;
+    }
+    // crossing a confederation border over eBGP removes the member ASes added before this edge, so
+    // no receiver from here on sees them; as in Batfish, an iBGP session across the border (with a
+    // router whose AS is the confederation's AS number) keeps them
+    if (confedType == ConfedSessionType.ACROSS_CONFED_BORDER && edge.isEBGP()) {
+      checkedConfedAses.clear();
     }
     if (!isTarget) {
       Set<Long> imported = new HashSet<>();
@@ -202,7 +236,23 @@ public class BgpPathValidity {
         allowsIbgpFromClient,
         allowsIbgpFromNonClient,
         Set.copyOf(ibgpRunClusterIds),
-        Set.copyOf(checkedAses));
+        Set.copyOf(checkedAses),
+        Set.copyOf(checkedConfedAses));
+  }
+
+  /// Whether the session is within a confederation or across its border, as configured at the
+  /// receiver if it is in a confederation, and otherwise at the sender, found on the reverse edge
+  private static ConfedSessionType confedType(Edge edge) {
+    ConfedSessionType type = edge.getDstConfed().type();
+    Node sender = edge.getSrcNode();
+    if (type == ConfedSessionType.NO_CONFED && sender != null) {
+      type =
+          sender
+              .getIncoming(edge.getDst(), edge.getSrc())
+              .map(reverse -> reverse.getDstConfed().type())
+              .orElse(ConfedSessionType.NO_CONFED);
+    }
+    return type;
   }
 
   /// The AS the sender uses on the session, which is what it prepends on eBGP. If the sender is in

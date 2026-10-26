@@ -26,6 +26,8 @@ import org.batfish.datamodel.PrefixRange;
 import org.batfish.datamodel.PrefixSpace;
 import org.batfish.datamodel.RoutingProtocol;
 import org.batfish.datamodel.Vrf;
+import org.batfish.datamodel.bgp.BgpConfederation;
+import org.batfish.datamodel.bgp.BgpTopologyUtils.ConfedSessionType;
 import org.batfish.datamodel.bgp.Ipv4UnicastAddressFamily;
 import org.batfish.datamodel.bgp.LocalOriginationTypeTieBreaker;
 import org.batfish.datamodel.bgp.NextHopIpTieBreaker;
@@ -143,13 +145,15 @@ public class NetworkInfoTest {
       long localAs,
       long remoteAs,
       boolean client,
-      Long clusterId) {
+      Long clusterId,
+      Long confederation) {
     nf.bgpNeighborBuilder()
         .setPeerAddress(peer)
         .setLocalIp(local.getIp())
         .setLocalAs(localAs)
         .setRemoteAs(remoteAs)
         .setClusterId(clusterId)
+        .setConfederation(confederation)
         .setBgpProcess(process)
         .setIpv4UnicastAddressFamily(
             Ipv4UnicastAddressFamily.builder()
@@ -162,7 +166,18 @@ public class NetworkInfoTest {
 
   private void neighbor(
       BgpProcess process, ConcreteInterfaceAddress local, Ip peer, long localAs, long remoteAs) {
-    neighbor(process, local, peer, localAs, remoteAs, false, null);
+    neighbor(process, local, peer, localAs, remoteAs, false, null, null);
+  }
+
+  private void neighbor(
+      BgpProcess process,
+      ConcreteInterfaceAddress local,
+      Ip peer,
+      long localAs,
+      long remoteAs,
+      boolean client,
+      Long clusterId) {
+    neighbor(process, local, peer, localAs, remoteAs, client, clusterId, null);
   }
 
   private SortedMap<String, Configuration> configs() {
@@ -185,7 +200,11 @@ public class NetworkInfoTest {
   }
 
   private NetworkInfo info(Source source) throws IOException {
-    SortedMap<String, Configuration> configs = configs();
+    return info(source, configs());
+  }
+
+  private NetworkInfo info(Source source, SortedMap<String, Configuration> configs)
+      throws IOException {
     if (source == Source.CONFIGS) {
       TransferBDD tbdd =
           new TransferBDD(getConfigAtomicPredicates(Set.of(), Set.of(), configs.values()));
@@ -315,5 +334,150 @@ public class NetworkInfoTest {
   @Test
   public void reachabilityFromSnapshotWithDataPlane() throws IOException {
     checkReachability(Source.SNAPSHOT_WITH_DATA_PLANE);
+  }
+
+  // A confederation with AS number 100: c1 is in member AS 65001, and c2 and c3 are in member AS
+  // 65002. As FRR does, each router lists only its own member AS as a member, so only the configs
+  // of both ends show that a session is within the confederation. e (AS 200) is outside the
+  // confederation and peers with c1. c1 also has two neighbors without configs, x (AS 300) and y
+  // (AS 65001). m is outside the confederation but in AS 100, its AS number, so its session with
+  // c2 is iBGP although it crosses the border. g is in member AS 65009 of another confederation,
+  // 200, and peers with c1.
+
+  private static final long CONFED = 100;
+  private static final ConcreteInterfaceAddress E_C1 =
+      ConcreteInterfaceAddress.parse("10.1.1.1/24");
+  private static final ConcreteInterfaceAddress C1_E =
+      ConcreteInterfaceAddress.parse("10.1.1.2/24");
+  private static final ConcreteInterfaceAddress C1_C2 =
+      ConcreteInterfaceAddress.parse("10.1.12.1/24");
+  private static final ConcreteInterfaceAddress C2_C1 =
+      ConcreteInterfaceAddress.parse("10.1.12.2/24");
+  private static final ConcreteInterfaceAddress C2_C3 =
+      ConcreteInterfaceAddress.parse("10.1.23.2/24");
+  private static final ConcreteInterfaceAddress C3_C2 =
+      ConcreteInterfaceAddress.parse("10.1.23.3/24");
+  private static final ConcreteInterfaceAddress C1_X =
+      ConcreteInterfaceAddress.parse("10.1.8.1/24");
+  private static final Ip X = Ip.parse("10.1.8.2");
+  private static final ConcreteInterfaceAddress C1_Y =
+      ConcreteInterfaceAddress.parse("10.1.9.1/24");
+  private static final Ip Y = Ip.parse("10.1.9.2");
+  private static final ConcreteInterfaceAddress C2_M =
+      ConcreteInterfaceAddress.parse("10.1.24.2/24");
+  private static final ConcreteInterfaceAddress M_C2 =
+      ConcreteInterfaceAddress.parse("10.1.24.4/24");
+  private static final ConcreteInterfaceAddress C1_G =
+      ConcreteInterfaceAddress.parse("10.1.15.1/24");
+  private static final ConcreteInterfaceAddress G_C1 =
+      ConcreteInterfaceAddress.parse("10.1.15.5/24");
+
+  private BgpProcess confedRouter(
+      ImmutableSortedMap.Builder<String, Configuration> configs,
+      String name,
+      String routerId,
+      long confederation,
+      long memberAs,
+      ConcreteInterfaceAddress... addresses) {
+    BgpProcess process = router(configs, name, routerId, addresses);
+    process.setConfederation(new BgpConfederation(confederation, Set.of(memberAs)));
+    return process;
+  }
+
+  private SortedMap<String, Configuration> confedConfigs() {
+    ImmutableSortedMap.Builder<String, Configuration> builder = ImmutableSortedMap.naturalOrder();
+    BgpProcess e = router(builder, "e", "9.0.0.1", E_C1);
+    BgpProcess c1 =
+        confedRouter(builder, "c1", "9.0.0.2", CONFED, 65001, C1_E, C1_C2, C1_X, C1_Y, C1_G);
+    BgpProcess c2 = confedRouter(builder, "c2", "9.0.0.3", CONFED, 65002, C2_C1, C2_C3, C2_M);
+    BgpProcess c3 = confedRouter(builder, "c3", "9.0.0.4", CONFED, 65002, C3_C2);
+    BgpProcess m = router(builder, "m", "9.0.0.5", M_C2);
+    BgpProcess g = confedRouter(builder, "g", "9.0.0.6", 200, 65009, G_C1);
+    neighbor(e, E_C1, C1_E.getIp(), 200, CONFED);
+    neighbor(c1, C1_E, E_C1.getIp(), 65001, 200, false, null, CONFED);
+    neighbor(c1, C1_C2, C2_C1.getIp(), 65001, 65002, false, null, CONFED);
+    neighbor(c1, C1_X, X, 65001, 300, false, null, CONFED);
+    neighbor(c1, C1_Y, Y, 65001, 65001, false, null, CONFED);
+    neighbor(c2, C2_C1, C1_C2.getIp(), 65002, 65001, false, null, CONFED);
+    neighbor(c2, C2_C3, C3_C2.getIp(), 65002, 65002, false, null, CONFED);
+    neighbor(c3, C3_C2, C2_C3.getIp(), 65002, 65002, false, null, CONFED);
+    neighbor(c2, C2_M, M_C2.getIp(), 65002, CONFED, false, null, CONFED);
+    neighbor(m, M_C2, C2_M.getIp(), CONFED, CONFED);
+    neighbor(c1, C1_G, G_C1.getIp(), 65001, 200, false, null, CONFED);
+    neighbor(g, G_C1, C1_G.getIp(), 65009, CONFED, false, null, 200L);
+    return builder.build();
+  }
+
+  private void checkConfederationInfo(Source source) throws IOException {
+    NetworkInfo info = info(source, confedConfigs());
+
+    // across the border, the confederation uses its own AS number
+    Edge eToC1 = incoming(info, "c1", E_C1.getIp(), C1_E.getIp());
+    assertTrue(eToC1.isEBGP());
+    assertEquals(Long.valueOf(200L), eToC1.getSrcAs());
+    assertEquals(Long.valueOf(CONFED), eToC1.getDstAs());
+    assertEquals(ConfedSessionType.ACROSS_CONFED_BORDER, eToC1.getDstConfed().type());
+    Edge c1ToE = incoming(info, "e", C1_E.getIp(), E_C1.getIp());
+    assertEquals(Long.valueOf(CONFED), c1ToE.getSrcAs());
+    assertEquals(Long.valueOf(200L), c1ToE.getDstAs());
+    assertEquals(ConfedSessionType.NO_CONFED, c1ToE.getDstConfed().type());
+
+    // within the confederation, members use their member ASes
+    Edge c1ToC2 = incoming(info, "c2", C1_C2.getIp(), C2_C1.getIp());
+    assertEquals("c1", c1ToC2.getSrcNode().getName());
+    assertTrue(c1ToC2.isEBGP());
+    assertEquals(Long.valueOf(65001L), c1ToC2.getSrcAs());
+    assertEquals(Long.valueOf(65002L), c1ToC2.getDstAs());
+    assertEquals(ConfedSessionType.WITHIN_CONFED, c1ToC2.getDstConfed().type());
+    Edge c2ToC3 = incoming(info, "c3", C2_C3.getIp(), C3_C2.getIp());
+    assertFalse(c2ToC3.isEBGP());
+    assertEquals(Long.valueOf(65002L), c2ToC3.getDstAs());
+    assertEquals(ConfedSessionType.WITHIN_CONFED, c2ToC3.getDstConfed().type());
+
+    // a session across the border with a router in the confederation's AS number is iBGP
+    Edge mToC2 = incoming(info, "c2", M_C2.getIp(), C2_M.getIp());
+    assertEquals("m", mToC2.getSrcNode().getName());
+    assertFalse(mToC2.isEBGP());
+    assertEquals(Long.valueOf(CONFED), mToC2.getDstAs());
+    assertEquals(ConfedSessionType.ACROSS_CONFED_BORDER, mToC2.getDstConfed().type());
+    Edge c2ToM = incoming(info, "m", C2_M.getIp(), M_C2.getIp());
+    assertFalse(c2ToM.isEBGP());
+    assertEquals(Long.valueOf(CONFED), c2ToM.getDstAs());
+
+    // between two confederations, each end uses its confederation's AS number
+    Edge gToC1 = incoming(info, "c1", G_C1.getIp(), C1_G.getIp());
+    assertEquals("g", gToC1.getSrcNode().getName());
+    assertTrue(gToC1.isEBGP());
+    assertEquals(Long.valueOf(200L), gToC1.getSrcAs());
+    assertEquals(Long.valueOf(CONFED), gToC1.getDstAs());
+    assertEquals(ConfedSessionType.ACROSS_CONFED_BORDER, gToC1.getDstConfed().type());
+    Edge c1ToG = incoming(info, "g", C1_G.getIp(), G_C1.getIp());
+    assertEquals(Long.valueOf(CONFED), c1ToG.getSrcAs());
+    assertEquals(Long.valueOf(200L), c1ToG.getDstAs());
+    assertEquals(ConfedSessionType.ACROSS_CONFED_BORDER, c1ToG.getDstConfed().type());
+
+    // without the sender's config, c1's own config decides: x's AS is not a member, while y is in
+    // c1's own member AS
+    Edge xToC1 = incoming(info, "c1", X, C1_X.getIp());
+    assertEquals(Long.valueOf(CONFED), xToC1.getDstAs());
+    assertEquals(ConfedSessionType.ACROSS_CONFED_BORDER, xToC1.getDstConfed().type());
+    Edge yToC1 = incoming(info, "c1", Y, C1_Y.getIp());
+    assertEquals(Long.valueOf(65001L), yToC1.getDstAs());
+    assertEquals(ConfedSessionType.WITHIN_CONFED, yToC1.getDstConfed().type());
+  }
+
+  @Test
+  public void confederationInfoFromConfigs() throws IOException {
+    checkConfederationInfo(Source.CONFIGS);
+  }
+
+  @Test
+  public void confederationInfoFromSnapshot() throws IOException {
+    checkConfederationInfo(Source.SNAPSHOT);
+  }
+
+  @Test
+  public void confederationInfoFromSnapshotWithDataPlane() throws IOException {
+    checkConfederationInfo(Source.SNAPSHOT_WITH_DATA_PLANE);
   }
 }

@@ -24,6 +24,7 @@ import org.batfish.datamodel.PrefixRange;
 import org.batfish.datamodel.PrefixSpace;
 import org.batfish.datamodel.Vrf;
 import org.batfish.datamodel.bgp.AddressFamilyCapabilities;
+import org.batfish.datamodel.bgp.BgpConfederation;
 import org.batfish.datamodel.bgp.Ipv4UnicastAddressFamily;
 import org.batfish.datamodel.bgp.LocalOriginationTypeTieBreaker;
 import org.batfish.datamodel.bgp.NextHopIpTieBreaker;
@@ -57,6 +58,7 @@ public class PathExplorationLoopTest {
   private Map<NodeRecord, Long> clusterIds;
   private Map<NodeRecord, Set<NodeRecord>> clients;
   private Set<NodeRecord> noClientToClient;
+  private Map<NodeRecord, Long> confederations;
   private RoutingPolicy template;
   private int nextRouter;
 
@@ -68,6 +70,7 @@ public class PathExplorationLoopTest {
     clusterIds = new HashMap<>();
     clients = new HashMap<>();
     noClientToClient = new HashSet<>();
+    confederations = new HashMap<>();
     nextRouter = 1;
   }
 
@@ -113,9 +116,13 @@ public class PathExplorationLoopTest {
       boolean allowLocalAsIn,
       String importPolicy,
       boolean client,
-      Long clusterId) {
+      Long clusterId,
+      Long confederation) {
     BgpActivePeerConfig.Builder builder =
-        BgpActivePeerConfig.builder().setLocalAs(localAs).setClusterId(clusterId);
+        BgpActivePeerConfig.builder()
+            .setLocalAs(localAs)
+            .setClusterId(clusterId)
+            .setConfederation(confederation);
     if (remoteAs != null) {
       builder.setRemoteAs(remoteAs);
     }
@@ -156,6 +163,24 @@ public class PathExplorationLoopTest {
     clients.computeIfAbsent(reflector, k -> new HashSet<>()).add(client);
   }
 
+  /// Puts the routers in a confederation with the given AS number; each router's AS is its member
+  /// AS. Like FRR, each router lists only its own member AS as a member.
+  private void confederation(long confederationAs, NodeRecord... routers) {
+    for (NodeRecord router : routers) {
+      confederations.put(router, confederationAs);
+    }
+  }
+
+  /// The AS that node's neighbor uses on their session: the neighbor's confederation AS number if
+  /// node is outside that confederation, and the neighbor's own AS otherwise
+  private Long remoteAs(NodeRecord node, NodeRecord neighbor) {
+    Long confederation = confederations.get(neighbor);
+    if (confederation != null && !confederation.equals(confederations.get(node))) {
+      return confederation;
+    }
+    return ases.get(neighbor);
+  }
+
   /// Turns off reflection between the router's route-reflector clients
   private void noClientToClient(NodeRecord router) {
     noClientToClient.add(router);
@@ -182,7 +207,12 @@ public class PathExplorationLoopTest {
               .setOwner(configs.get(node))
               .setName(Configuration.DEFAULT_VRF_NAME)
               .build();
+      BgpConfederation confederation =
+          confederations.containsKey(node)
+              ? new BgpConfederation(confederations.get(node), Set.of(ases.get(node)))
+              : null;
       nf.bgpProcessBuilder()
+          .setConfederation(confederation)
           .setRouterId(node.getIp())
           .setEbgpAdminCost(0)
           .setIbgpAdminCost(0)
@@ -210,13 +240,14 @@ public class PathExplorationLoopTest {
                     ip,
                     peer(
                         ases.get(node),
-                        spec.remoteAs(),
+                        spec.neighbor() == null ? spec.remoteAs() : remoteAs(node, spec.neighbor()),
                         spec.allowLocalAsIn(),
                         spec.importPolicy(),
                         spec.neighbor() == null
                             ? spec.externalClient()
                             : clients.getOrDefault(node, Set.of()).contains(spec.neighbor()),
-                        clusterIds.get(node))));
+                        clusterIds.get(node),
+                        confederations.get(node))));
     return peers;
   }
 
@@ -612,5 +643,218 @@ public class PathExplorationLoopTest {
     Location[] path = explore(build(), b);
     assertTrue(visits(path, rr2));
     assertFalse(visits(path, rr1));
+  }
+
+  // Confederations. In each test, confederation 100 has members 65001, 65002, and 65003, and a
+  // route enters at a (AS 1) from an external neighbor in AS 1000.
+
+  @Test
+  public void crossConfederation() {
+    NodeRecord a = router("a", 1L);
+    NodeRecord c1 = router("c1", 65001L);
+    NodeRecord c2 = router("c2", 65002L);
+    NodeRecord t = router("t", 2L);
+    confederation(100, c1, c2);
+    external(a, "100.0.0.1", 1000L);
+    session(a, c1);
+    session(c1, c2);
+    session(c2, t);
+    assertTrue(goodPathTo(build(), t));
+  }
+
+  @Test
+  public void noReentryToMemberAs() {
+    // c3 is in c1's member AS but has no session with c1, so it rejects the route that passed
+    // through c1 and c2
+    NodeRecord a = router("a", 1L);
+    NodeRecord c1 = router("c1", 65001L);
+    NodeRecord c2 = router("c2", 65002L);
+    NodeRecord c3 = router("c3", 65001L);
+    confederation(100, c1, c2, c3);
+    external(a, "100.0.0.1", 1000L);
+    session(a, c1);
+    session(c1, c2);
+    session(c2, c3);
+    assertFalse(goodPathTo(build(), c3));
+  }
+
+  @Test
+  public void noReentryToConfederation() {
+    // the route leaves the confederation at c1 and comes back in at c3, in another member AS, but
+    // its AS path contains the confederation's AS number
+    NodeRecord a = router("a", 1L);
+    NodeRecord c1 = router("c1", 65001L);
+    NodeRecord e = router("e", 2L);
+    NodeRecord c3 = router("c3", 65003L);
+    confederation(100, c1, c3);
+    external(a, "100.0.0.1", 1000L);
+    session(a, c1);
+    session(c1, e);
+    session(e, c3);
+    assertFalse(goodPathTo(build(), c3));
+  }
+
+  @Test
+  public void memberAsesAreRemovedAtBorder() {
+    // the route passes through member AS 65001 and leaves the confederation at c2, which removes
+    // the member ASes from its AS path; so f, outside the confederation and also in AS 65001,
+    // accepts it
+    NodeRecord a = router("a", 1L);
+    NodeRecord c1 = router("c1", 65001L);
+    NodeRecord c2 = router("c2", 65002L);
+    NodeRecord e = router("e", 2L);
+    NodeRecord f = router("f", 65001L);
+    confederation(100, c1, c2);
+    external(a, "100.0.0.1", 1000L);
+    session(a, c1);
+    session(c1, c2);
+    session(c2, e);
+    session(e, f);
+    assertTrue(goodPathTo(build(), f));
+  }
+
+  @Test
+  public void sessionBetweenMemberAsesIsNotIbgp() {
+    // iBGP within 65001, then a session between member ASes, then iBGP within 65002: no router
+    // passes an iBGP route to an iBGP peer
+    NodeRecord a = router("a", 1L);
+    NodeRecord c1 = router("c1", 65001L);
+    NodeRecord c1b = router("c1b", 65001L);
+    NodeRecord c2 = router("c2", 65002L);
+    NodeRecord c2b = router("c2b", 65002L);
+    confederation(100, c1, c1b, c2, c2b);
+    external(a, "100.0.0.1", 1000L);
+    session(a, c1);
+    session(c1, c1b);
+    session(c1b, c2);
+    session(c2, c2b);
+    assertTrue(goodPathTo(build(), c2b));
+  }
+
+  @Test
+  public void ibgpAcrossBorderNeedsReflection() {
+    // m is outside the confederation but in AS 100, its AS number, so its session with c2 is iBGP;
+    // c2 does not pass m's route on to its iBGP peer c3 unless it reflects it
+    NodeRecord m = router("m", 100L);
+    NodeRecord c2 = router("c2", 65002L);
+    NodeRecord c3 = router("c3", 65002L);
+    confederation(100, c2, c3);
+    external(m, "100.0.0.1", 1000L);
+    session(m, c2);
+    session(c2, c3);
+    assertFalse(goodPathTo(build(), c3));
+  }
+
+  @Test
+  public void ibgpAcrossBorderWithReflection() {
+    NodeRecord m = router("m", 100L);
+    NodeRecord c2 = router("c2", 65002L);
+    NodeRecord c3 = router("c3", 65002L);
+    confederation(100, c2, c3);
+    external(m, "100.0.0.1", 1000L);
+    session(m, c2);
+    session(c2, c3);
+    reflector(c2, 1);
+    client(c2, m);
+    assertTrue(goodPathTo(build(), c3));
+  }
+
+  @Test
+  public void ibgpAcrossBorderKeepsMemberAses() {
+    // as in Batfish, member ASes are removed only on eBGP sessions across the border, so the route
+    // leaves through the iBGP session from c2 to m still carrying 65001, and t (AS 65001) rejects
+    // it
+    NodeRecord a = router("a", 1L);
+    NodeRecord c1 = router("c1", 65001L);
+    NodeRecord c2 = router("c2", 65002L);
+    NodeRecord m = router("m", 100L);
+    NodeRecord t = router("t", 65001L);
+    confederation(100, c1, c2);
+    external(a, "100.0.0.1", 1000L);
+    session(a, c1);
+    session(c1, c2);
+    session(c2, m);
+    session(m, t);
+    assertFalse(goodPathTo(build(), t));
+  }
+
+  @Test
+  public void clusterListIsClearedBetweenMemberAses() {
+    // rr1 in member AS 65001 and rr2 in member AS 65002 use the same cluster ID; the session
+    // between member ASes is eBGP, so rr1's cluster ID is gone by the time rr2 gets the route
+    NodeRecord a = router("a", 1L);
+    NodeRecord c1 = router("c1", 65001L);
+    NodeRecord rr1 = router("rr1", 65001L);
+    NodeRecord b1 = router("b1", 65001L);
+    NodeRecord c2 = router("c2", 65002L);
+    NodeRecord rr2 = router("rr2", 65002L);
+    NodeRecord t = router("t", 65002L);
+    confederation(100, c1, rr1, b1, c2, rr2, t);
+    external(a, "100.0.0.1", 1000L);
+    session(a, c1);
+    session(c1, rr1);
+    session(rr1, b1);
+    session(b1, c2);
+    session(c2, rr2);
+    session(rr2, t);
+    reflector(rr1, 1);
+    reflector(rr2, 1);
+    client(rr1, c1);
+    client(rr2, c2);
+    assertTrue(goodPathTo(build(), t));
+  }
+
+  @Test
+  public void noReflectionThroughOneClusterInMemberAs() {
+    NodeRecord a = router("a", 1L);
+    NodeRecord c1 = router("c1", 65001L);
+    NodeRecord rr1 = router("rr1", 65001L);
+    NodeRecord rr2 = router("rr2", 65001L);
+    NodeRecord t = router("t", 65001L);
+    confederation(100, c1, rr1, rr2, t);
+    external(a, "100.0.0.1", 1000L);
+    session(a, c1);
+    session(c1, rr1);
+    session(rr1, rr2);
+    session(rr2, t);
+    reflector(rr1, 1);
+    reflector(rr2, 1);
+    client(rr1, c1);
+    client(rr2, rr1);
+    assertFalse(goodPathTo(build(), t));
+  }
+
+  @Test
+  public void crossTwoConfederations() {
+    // confederation 200 reuses the member ASes of confederation 100, whose member ASes are
+    // removed when the route leaves it, so d1 (65001) accepts the route that passed through c1
+    NodeRecord a = router("a", 1L);
+    NodeRecord c1 = router("c1", 65001L);
+    NodeRecord c2 = router("c2", 65002L);
+    NodeRecord d2 = router("d2", 65002L);
+    NodeRecord d1 = router("d1", 65001L);
+    confederation(100, c1, c2);
+    confederation(200, d2, d1);
+    external(a, "100.0.0.1", 1000L);
+    session(a, c1);
+    session(c1, c2);
+    session(c2, d2);
+    session(d2, d1);
+    assertTrue(goodPathTo(build(), d1));
+  }
+
+  @Test
+  public void noReentryAfterSecondConfederation() {
+    NodeRecord a = router("a", 1L);
+    NodeRecord c1 = router("c1", 65001L);
+    NodeRecord d2 = router("d2", 65002L);
+    NodeRecord c3 = router("c3", 65003L);
+    confederation(100, c1, c3);
+    confederation(200, d2);
+    external(a, "100.0.0.1", 1000L);
+    session(a, c1);
+    session(c1, d2);
+    session(d2, c3);
+    assertFalse(goodPathTo(build(), c3));
   }
 }

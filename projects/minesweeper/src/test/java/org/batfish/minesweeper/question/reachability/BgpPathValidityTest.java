@@ -11,6 +11,7 @@ import org.batfish.datamodel.Configuration;
 import org.batfish.datamodel.ConfigurationFormat;
 import org.batfish.datamodel.Ip;
 import org.batfish.datamodel.NetworkFactory;
+import org.batfish.datamodel.bgp.BgpTopologyUtils.ConfedSessionType;
 import org.batfish.datamodel.routing_policy.RoutingPolicy;
 import org.batfish.datamodel.routing_policy.expr.AsExpr;
 import org.batfish.datamodel.routing_policy.expr.ExplicitAs;
@@ -19,6 +20,7 @@ import org.batfish.datamodel.routing_policy.expr.LocalAs;
 import org.batfish.datamodel.routing_policy.statement.PrependAsPath;
 import org.batfish.datamodel.routing_policy.statement.Statements;
 import org.batfish.minesweeper.question.verificationutilities.Edge;
+import org.batfish.minesweeper.question.verificationutilities.Edge.ConfedInfo;
 import org.batfish.minesweeper.question.verificationutilities.Location;
 import org.batfish.minesweeper.question.verificationutilities.Node;
 import org.junit.Before;
@@ -97,6 +99,28 @@ public class BgpPathValidityTest {
   private static void client(Node reflector, Node client) {
     Edge in = reflector.getIncomingFrom(client).orElseThrow();
     in.setRouteReflectionInfo(true, in.getDstClusterId());
+  }
+
+  /// A session within confederation confed between a (member AS memberA) and b (member AS
+  /// memberB), returning the edge a -> b
+  private Edge confedLink(Node a, long memberA, Node b, long memberB, long confed) {
+    Edge aToB = link(a, memberA, b, memberB);
+    aToB.setConfederationInfo(new ConfedInfo(ConfedSessionType.WITHIN_CONFED, confed, memberB));
+    a.getIncomingFrom(b)
+        .orElseThrow()
+        .setConfederationInfo(new ConfedInfo(ConfedSessionType.WITHIN_CONFED, confed, memberA));
+    return aToB;
+  }
+
+  /// A session across the border of confederation confed between inside (member AS member) and
+  /// outside (AS outsideAs), returning the edge from -> to, one of the two
+  private Edge borderLink(
+      Node inside, long member, long confed, Node outside, long outsideAs, boolean fromInside) {
+    // each end sees the confederation's AS number for inside
+    link(inside, confed, outside, outsideAs);
+    Edge in = inside.getIncomingFrom(outside).orElseThrow();
+    in.setConfederationInfo(new ConfedInfo(ConfedSessionType.ACROSS_CONFED_BORDER, confed, member));
+    return fromInside ? outside.getIncomingFrom(inside).orElseThrow() : in;
   }
 
   private boolean valid(boolean endsAtEdge, Edge... edges) {
@@ -364,5 +388,88 @@ public class BgpPathValidityTest {
     client(rr1, a);
     client(rr2, p);
     assertTrue(valid(false, external(100, a, 1), aToRr1, rr1ToX, xToP, pToRr2, rr2ToQ));
+  }
+
+  // Confederations: confederation 100 has members 65001 and 65002; c1 and c3 are in 65001, c2 in
+  // 65002, and a route enters at a (AS 1) from an external neighbor in AS 1000
+
+  @Test
+  public void memberAsIsSeenWithinConfederation() {
+    Node a = new Node("a");
+    Node c1 = new Node("c1");
+    Node c2 = new Node("c2");
+    Node c3 = new Node("c3");
+    assertFalse(
+        valid(
+            false,
+            external(1000, a, 1),
+            borderLink(c1, 65001, 100, a, 1, false),
+            confedLink(c1, 65001, c2, 65002, 100),
+            confedLink(c2, 65002, c3, 65001, 100)));
+  }
+
+  @Test
+  public void memberAsIsRemovedAtBorder() {
+    // f, outside the confederation, is also in AS 65001
+    Node a = new Node("a");
+    Node c1 = new Node("c1");
+    Node c2 = new Node("c2");
+    Node e = new Node("e");
+    Node f = new Node("f");
+    assertTrue(
+        valid(
+            false,
+            external(1000, a, 1),
+            borderLink(c1, 65001, 100, a, 1, false),
+            confedLink(c1, 65001, c2, 65002, 100),
+            borderLink(c2, 65002, 100, e, 2, true),
+            link(e, 2, f, 65001)));
+  }
+
+  @Test
+  public void confederationAsIsAddedAtBorder() {
+    // the route leaves the confederation at c1 and comes back in at c2
+    Node a = new Node("a");
+    Node c1 = new Node("c1");
+    Node e = new Node("e");
+    Node c2 = new Node("c2");
+    assertFalse(
+        valid(
+            false,
+            external(1000, a, 1),
+            borderLink(c1, 65001, 100, a, 1, false),
+            borderLink(c1, 65001, 100, e, 2, true),
+            borderLink(c2, 65002, 100, e, 2, false)));
+  }
+
+  @Test
+  public void prependWithinConfederationSurvivesBorder() {
+    // c1's export policy prepends 65001 as an ordinary AS, which is not removed at the border
+    Node a = new Node("a");
+    Node c1 = new Node("c1");
+    Node c2 = new Node("c2");
+    Node e = new Node("e");
+    Node f = new Node("f");
+    Edge c1ToC2 = confedLink(c1, 65001, c2, 65002, 100);
+    exports.put(c1ToC2, prepending(new ExplicitAs(65001L)));
+    assertFalse(
+        valid(
+            false,
+            external(1000, a, 1),
+            borderLink(c1, 65001, 100, a, 1, false),
+            c1ToC2,
+            borderLink(c2, 65002, 100, e, 2, true),
+            link(e, 2, f, 65001)));
+  }
+
+  @Test
+  public void memberAsIsCheckedAgainstOrdinaryAses() {
+    // the external neighbor is in AS 65002, which stays in the AS path inside the confederation,
+    // so c2 rejects the route
+    Node c1 = new Node("c1");
+    Node c2 = new Node("c2");
+    Edge in = external(65002, c1, 100);
+    in.setConfederationInfo(new ConfedInfo(ConfedSessionType.ACROSS_CONFED_BORDER, 100L, 65001L));
+    assertFalse(valid(false, in, confedLink(c1, 65001, c2, 65002, 100)));
   }
 }

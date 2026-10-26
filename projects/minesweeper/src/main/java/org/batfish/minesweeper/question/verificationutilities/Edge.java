@@ -2,6 +2,7 @@ package org.batfish.minesweeper.question.verificationutilities;
 
 import org.batfish.common.BatfishException;
 import org.batfish.datamodel.Ip;
+import org.batfish.datamodel.bgp.BgpTopologyUtils.ConfedSessionType;
 
 import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
@@ -14,7 +15,7 @@ public class Edge extends Location {
   private final @Nonnull Ip dst;
   private @Nullable Node dstNode;
 
-  private final boolean eBGP;
+  private boolean eBGP;
 
   /// AS numbers and allowas-in setting of the BGP session this edge represents, as configured at
   /// the receiving end (see setSessionAsInfo). A null AS means it is unknown.
@@ -30,6 +31,19 @@ public class Edge extends Location {
   private boolean dstTreatsSrcAsClient;
   private @Nullable Long srcClusterId;
   private @Nullable Long dstClusterId;
+
+  /// Confederation settings of the session, as configured at the receiving end (see
+  /// setConfederationInfo)
+  private @Nonnull ConfedInfo srcConfed = ConfedInfo.NONE;
+  private @Nonnull ConfedInfo dstConfed = ConfedInfo.NONE;
+
+  /// A node's confederation settings for a session: whether the session is within the node's
+  /// confederation (both ends in it), across its border (the other end outside it), or the node is
+  /// not in a confederation; the confederation's AS number; and the node's own member AS within it
+  public record ConfedInfo(
+      @Nonnull ConfedSessionType type, @Nullable Long confederationAs, @Nullable Long memberAs) {
+    public static final ConfedInfo NONE = new ConfedInfo(ConfedSessionType.NO_CONFED, null, null);
+  }
 
   public Edge(@Nonnull Ip src, @Nonnull Ip dst, boolean eBGP) {
     assert !src.equals(dst);
@@ -72,7 +86,9 @@ public class Edge extends Location {
       boolean srcTreatsDstAsClient,
       boolean dstTreatsSrcAsClient,
       @Nullable Long srcClusterId,
-      @Nullable Long dstClusterId) {
+      @Nullable Long dstClusterId,
+      @Nonnull ConfedInfo srcConfed,
+      @Nonnull ConfedInfo dstConfed) {
     this.src = src;
     this.dst = dst;
     this.eBGP = eBGP;
@@ -86,6 +102,8 @@ public class Edge extends Location {
     this.dstTreatsSrcAsClient = dstTreatsSrcAsClient;
     this.srcClusterId = srcClusterId;
     this.dstClusterId = dstClusterId;
+    this.srcConfed = srcConfed;
+    this.dstConfed = dstConfed;
   }
 
   @Nonnull
@@ -110,6 +128,12 @@ public class Edge extends Location {
 
   public boolean isEBGP() {
     return eBGP;
+  }
+
+  /// Corrects whether the session is eBGP, once the AS each end uses on it is known (see
+  /// NetworkInfo.finishConfederations)
+  public void setEBGP(boolean eBGP) {
+    this.eBGP = eBGP;
   }
 
   /// The AS the sender uses on this session, which it prepends when advertising over eBGP
@@ -156,6 +180,17 @@ public class Edge extends Location {
     this.dstClusterId = dstClusterId;
   }
 
+  /// The receiver's confederation settings for this session
+  @Nonnull
+  public ConfedInfo getDstConfed() {
+    return dstConfed;
+  }
+
+  /// Records the session's confederation settings, as configured at the receiving end
+  public void setConfederationInfo(@Nonnull ConfedInfo dstConfed) {
+    this.dstConfed = dstConfed;
+  }
+
   @Nonnull
   public Edge flipEdge() {
     return new Edge(
@@ -171,7 +206,9 @@ public class Edge extends Location {
         dstTreatsSrcAsClient,
         srcTreatsDstAsClient,
         dstClusterId,
-        srcClusterId);
+        srcClusterId,
+        dstConfed,
+        srcConfed);
   }
 
   public void setSrcNode(Node src) {
@@ -229,7 +266,9 @@ public class Edge extends Location {
         srcTreatsDstAsClient,
         dstTreatsSrcAsClient,
         srcClusterId,
-        dstClusterId);
+        dstClusterId,
+        srcConfed,
+        dstConfed);
   }
 
   @Override

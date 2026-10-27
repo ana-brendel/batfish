@@ -206,6 +206,8 @@ public class ReachabilityAnswerer extends Answerer {
 
       Path goodPath = paths.getKey();
       Map<Node, Invariant> reachableGood = goodPath.reachableRoutes();
+      Map<Node, Invariant> nextHopRequirements =
+          goodPath.nextHopPreferenceRequirements(reachableGood, computedPathsCache);
       Path weakenedPathConstraints = goodPath;
       Infer inference = info.toInfer();
       inference.addPrefixToAssumptions(prefix);
@@ -222,6 +224,12 @@ public class ReachabilityAnswerer extends Answerer {
           weakenedPathConstraints.getConstraints().entrySet()) {
         if (entry.getKey() instanceof Node node) {
           BDD bdd = entry.getValue().getBDDCopy();
+          // Infer excuses routes that are less preferred than any route the good path delivers, so
+          // a route that the node selects must not lose to the routes excused at the next node
+          Invariant nextHopRequirement = nextHopRequirements.get(node);
+          if (nextHopRequirement != null) {
+            bdd.andWith(nextHopRequirement.getBDDCopy());
+          }
           // if (auxiliaryRequirements.containsKey(entry.getKey())) {
           //  bdd.orWith(bdd);
           // }

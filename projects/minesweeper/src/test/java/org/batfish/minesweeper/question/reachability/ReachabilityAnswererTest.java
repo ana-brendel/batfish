@@ -34,6 +34,7 @@ import org.batfish.minesweeper.question.verificationutilities.Invariant;
 import org.batfish.minesweeper.question.verificationutilities.Location;
 import org.batfish.minesweeper.question.verificationutilities.NetworkInfo;
 import org.batfish.minesweeper.question.verificationutilities.Node;
+import org.batfish.minesweeper.question.verificationutilities.Setup;
 import org.batfish.minesweeper.question.verificationutilities.TestConfigConstructionUtils;
 import org.batfish.minesweeper.question.verificationutilities.TestConfigConstructionUtils.NodeRecord;
 import org.junit.Before;
@@ -56,6 +57,7 @@ import static org.batfish.minesweeper.question.verificationutilities.TestConfigC
 import static org.batfish.minesweeper.question.verificationutilities.TestConfigConstructionUtils.includeCommunities;
 import static org.batfish.minesweeper.question.verificationutilities.TestConfigConstructionUtils.permitRoute;
 import static org.batfish.minesweeper.question.verificationutilities.TestConfigConstructionUtils.replaceCommunities;
+import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 
@@ -2694,6 +2696,182 @@ public class ReachabilityAnswererTest {
   public void ebgpLoopBackUnchangedNoInterferenceTest() {
     Pair<Boolean, Boolean> checks = runLoopBackExample(false, false, null);
     assertTrue(checks.getLeft());
+    assertFalse(checks.getRight());
+  }
+
+  /**
+   * A chain n1 -> n2 -> tNode of EBGP peers, with the good path coming into n1 from an external
+   * neighbor O and the target being any route at tNode.  n1 tags routes from O with 1:1 and gives
+   * them local-pref 100.  n1 also has an external neighbor X, whose routes it gives local-pref 200
+   * with all communities cleared, so n1 prefers a route from X over the good route.  n2 has an
+   * external neighbor Y, whose routes it gives local-pref 200 and tags with 2:2, and n2's export to
+   * tNode denies 2:2, so a route from Y never reaches tNode.  Sessions only carry routes towards
+   * tNode.
+   *
+   * <p>n2's import from n1 sets local-pref 300.  When conditionalLocalPref is set it does so only
+   * for routes with 1:1 and sets local-pref 100 otherwise, so the route from X that n1 prefers
+   * arrives at n2 with local-pref 100.  The good route arrives with local-pref 300, so the route
+   * from Y is less preferred than any route the good path can deliver to n2, but it is preferred
+   * over the route from X.  n2 then selects the route from Y and tNode receives nothing.  Without
+   * conditionalLocalPref the route from X arrives at n2 with local-pref 300 and reaches tNode.
+   */
+  private TestConfigConstructionUtils.Networkv2 preferredUpstreamRouteExample(
+      NodeRecord N1NODE,
+      NodeRecord N2NODE,
+      NodeRecord TNODE,
+      Ip oIncoming,
+      Ip xIncoming,
+      Ip yIncoming,
+      boolean conditionalLocalPref) {
+    Map<NodeRecord, Configuration> configs = new HashMap<>();
+
+    String cust = "1:1";
+    String regex_cust = "^" + cust + "$";
+    String fromY = "2:2";
+    String regex_fromY = "^" + fromY + "$";
+
+    String importFromO = "importFromO";
+    String importFromX = "importFromX";
+    String importFromN1 = "importFromN1";
+    String importFromY = "importFromY";
+    String exportToT = "exportToT";
+    String permitAll = "permitAll";
+    String rejectAll = "rejectAll";
+
+    setUpConfigs(configs, N1NODE, N2NODE, TNODE);
+    includeCommunities(configs.get(N1NODE), regex_cust, regex_fromY);
+    includeCommunities(configs.get(N2NODE), regex_cust, regex_fromY);
+
+    long n1As = 65001L;
+    long n2As = 65002L;
+    long tAs = 65003L;
+    Map<NodeRecord, BgpProcess> processes = getBgpProcesses(configs, N1NODE, N2NODE, TNODE);
+    processes
+        .get(N1NODE)
+        .setNeighbors(
+            ImmutableSortedMap.of(
+                oIncoming,
+                getPeerConfigWithAs("external", importFromO, rejectAll, n1As, 65101L),
+                xIncoming,
+                getPeerConfigWithAs("external", importFromX, rejectAll, n1As, 65102L),
+                N2NODE.getIp(),
+                getPeerConfigWithAs("internal", rejectAll, permitAll, n1As, n2As)));
+    processes
+        .get(N2NODE)
+        .setNeighbors(
+            ImmutableSortedMap.of(
+                N1NODE.getIp(),
+                getPeerConfigWithAs("internal", importFromN1, rejectAll, n2As, n1As),
+                yIncoming,
+                getPeerConfigWithAs("external", importFromY, rejectAll, n2As, 65103L),
+                TNODE.getIp(),
+                getPeerConfigWithAs("internal", rejectAll, exportToT, n2As, tAs)));
+    processes
+        .get(TNODE)
+        .setNeighbors(
+            ImmutableSortedMap.of(
+                N2NODE.getIp(), getPeerConfigWithAs("internal", permitAll, rejectAll, tAs, n2As)));
+
+    for (NodeRecord node : List.of(N1NODE, N2NODE, TNODE)) {
+      makePolicy(configs.get(node), permitAll, permitRoute(true));
+      makePolicy(configs.get(node), rejectAll, permitRoute(false));
+    }
+
+    makePolicy(configs.get(N1NODE), importFromO, replaceCommunities(cust));
+    List<Statement> importFromXStatements = new java.util.ArrayList<>(clearCommunities());
+    importFromXStatements.add(0, new SetLocalPreference(new LiteralLong(200L)));
+    makePolicy(configs.get(N1NODE), importFromX, importFromXStatements);
+
+    List<Statement> setHighLocalPref =
+        ImmutableList.of(
+            new SetLocalPreference(new LiteralLong(300L)),
+            new Statements.StaticStatement(Statements.ExitAccept));
+    List<Statement> setDefaultLocalPref =
+        ImmutableList.of(
+            new SetLocalPreference(new LiteralLong(100L)),
+            new Statements.StaticStatement(Statements.ExitAccept));
+    RoutingPolicy template =
+        makePolicy(
+            configs.get(N2NODE),
+            importFromN1,
+            conditionalLocalPref
+                ? ifStatement(checkForCommunity(cust), setHighLocalPref, setDefaultLocalPref)
+                : setHighLocalPref);
+    List<Statement> importFromYStatements = new java.util.ArrayList<>(replaceCommunities(fromY));
+    importFromYStatements.add(0, new SetLocalPreference(new LiteralLong(200L)));
+    makePolicy(configs.get(N2NODE), importFromY, importFromYStatements);
+    makePolicy(
+        configs.get(N2NODE),
+        exportToT,
+        ifStatement(checkForCommunity(fromY), permitRoute(false), permitRoute(true)));
+
+    Set<RegexConstraint> communityRegexes =
+        ImmutableSet.<RegexConstraint>builder()
+            .add(RegexConstraint.parse(cust))
+            .add(RegexConstraint.parse(fromY))
+            .build();
+    ConfigAtomicPredicates configAPs =
+        getConfigAtomicPredicates(communityRegexes, Set.of(), configs.values());
+    TransferBDD tbdd = new TransferBDD(configAPs);
+
+    return new TestConfigConstructionUtils.Networkv2(tbdd, configs, template, List.of());
+  }
+
+  /// Runs the liveness check on preferredUpstreamRouteExample with any route at tNode as the
+  /// target, starting the good path at O; returns the result rows and the label of a row reporting
+  /// interference from X's session into n1
+  private Pair<List<Row>, String> runPreferredUpstreamRouteExample(boolean conditionalLocalPref) {
+    NodeRecord N1NODE_R = new NodeRecord("10.0.0.1", "n1");
+    NodeRecord N2NODE_R = new NodeRecord("10.0.0.2", "n2");
+    NodeRecord TNODE_R = new NodeRecord("10.0.0.3", "tNode");
+    Ip oIncoming = Ip.parse("100.0.0.10");
+    Ip xIncoming = Ip.parse("100.0.0.20");
+    Ip yIncoming = Ip.parse("100.0.0.30");
+    String prefixStr = "2.4.8.0/24";
+
+    PrefixSpace TARGET_PREFIX = new PrefixSpace(PrefixRange.fromString(prefixStr));
+
+    TestConfigConstructionUtils.Networkv2 net =
+        preferredUpstreamRouteExample(
+            N1NODE_R, N2NODE_R, TNODE_R, oIncoming, xIncoming, yIncoming, conditionalLocalPref);
+    NetworkInfo info = net.getInfo(TARGET_PREFIX);
+
+    Node N1NODE = N1NODE_R.instantiate(info);
+    Node TNODE = TNODE_R.instantiate(info);
+    Edge fromO = (Edge) info.checkForEdgeViaIps(oIncoming, N1NODE.getSingleIp()).get();
+    Location fromX = info.checkForEdgeViaIps(xIncoming, N1NODE.getSingleIp()).get();
+
+    TableAnswerElement result =
+        ReachabilityAnswerer.run(
+            info, TARGET_PREFIX, TNODE, new Invariant(net.tbdd()), Set.of(fromO));
+    return Pair.of(
+        result.getRowsList(), Setup.SOURCE_OF_INTERFERENCE + info.locationStr(fromX));
+  }
+
+  @Test
+  public void preferredUpstreamRouteLosesDownstreamInterferenceTest() {
+    Pair<List<Row>, String> run = runPreferredUpstreamRouteExample(true);
+    Pair<Boolean, Boolean> checks = processResultRows(run.getLeft());
+    assertTrue(checks.getLeft());
+    // n1 prefers the route from X, which arrives at n2 with local-pref 100, so n2 selects the route
+    // from Y even though it is less preferred than any route the good path can deliver to n2.  The
+    // interference must be blamed on the route from X: the route from Y is correctly excused at n2,
+    // provided that whatever n1 sends there arrives with local-pref 300
+    List<String> interference =
+        run.getLeft().stream()
+            .map(row -> row.getString(Setup.RESULT_LABEL_COL))
+            .filter(label -> label.startsWith(Setup.SOURCE_OF_INTERFERENCE))
+            .toList();
+    assertEquals(List.of(run.getRight()), interference);
+  }
+
+  @Test
+  public void preferredUpstreamRouteWinsDownstreamNoInterferenceTest() {
+    Pair<Boolean, Boolean> checks =
+        processResultRows(runPreferredUpstreamRouteExample(false).getLeft());
+    assertTrue(checks.getLeft());
+    // n1 prefers the route from X, but it arrives at n2 with local-pref 300 and so still beats the
+    // route from Y there
     assertFalse(checks.getRight());
   }
 }

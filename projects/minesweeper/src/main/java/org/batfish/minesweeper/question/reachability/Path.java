@@ -11,6 +11,8 @@ import org.batfish.datamodel.PrefixSpace;
 import org.batfish.datamodel.routing_policy.RoutingPolicy;
 import org.batfish.minesweeper.bdd.BDDRoute;
 import org.batfish.minesweeper.bdd.TransferBDD;
+import org.batfish.minesweeper.bdd.TransferReturn;
+import org.batfish.minesweeper.utils.Tuple;
 import org.batfish.minesweeper.question.verificationutilities.Edge;
 import org.batfish.minesweeper.question.verificationutilities.Invariant;
 import org.batfish.minesweeper.question.verificationutilities.Location;
@@ -22,6 +24,7 @@ import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
@@ -29,6 +32,7 @@ import java.util.Stack;
 import java.util.stream.Collectors;
 
 import static org.batfish.minesweeper.bdd.TransferBDD.isRelevantForDestination;
+import static org.batfish.minesweeper.bdd.TransferBDDUtils.lessPreferredThanBgp;
 import static org.batfish.minesweeper.question.verificationutilities.NetworkInfo.getRouteExample;
 
 public class Path {
@@ -312,6 +316,49 @@ public class Path {
       // since this is an edge the previous step must be a node, so we can skip it and move to the
       // next edge
       i -= 2;
+    }
+    return result.build();
+  }
+
+  /// Returns a map from each node on the path that forwards the route to another node on the path
+  /// to an invariant on the routes that, once they cross to that next node, are not less preferred
+  /// than every route the path can deliver there (see lessPreferredThanBgp).  The next node excuses
+  /// routes that are less preferred than any route the path delivers, which is only sound if the
+  /// route actually arriving along the path cannot lose to them.  That route is whatever this node
+  /// selected, which need not be one the path delivers, so this node must only select routes that
+  /// still beat the excused routes when they arrive.
+  ///
+  /// @param reachable the routes that can reach each node along this path (see reachableRoutes)
+  public Map<Node, Invariant> nextHopPreferenceRequirements(
+      Map<Node, Invariant> reachable,
+      Map<Tuple<String, RoutingPolicy>, List<TransferReturn>> cache) {
+    ImmutableMap.Builder<Node, Invariant> result = new ImmutableMap.Builder<>();
+    // the path is in reverse order, so each edge is preceded by the node it leads to and followed
+    // by the node it leaves; the last step is the edge into the network, which has no such node
+    for (int i = 1; i < steps.length - 1; i++) {
+      if (!(steps[i] instanceof Edge edge
+          && steps[i - 1] instanceof Node next
+          && steps[i + 1] instanceof Node current)) {
+        continue;
+      }
+      Invariant nextRoutes = reachable.get(next);
+      if (nextRoutes == null) {
+        continue;
+      }
+      BDD excused = lessPreferredThanBgp(nextRoutes.getBDD(), context.tbdd);
+      Invariant requirement = new Invariant(context.tbdd, excused.not());
+      excused.free();
+      // a route denied on the way is never selected at the next node, so it is unconstrained
+      RoutingPolicy importPolicy = context.imports.get(edge);
+      if (importPolicy != null) {
+        requirement = requirement.weakestPrecondition(importPolicy, true, cache);
+      }
+      requirement = requirement.preImport(edge.isEBGP());
+      RoutingPolicy exportPolicy = context.exports.get(edge);
+      if (exportPolicy != null) {
+        requirement = requirement.weakestPrecondition(exportPolicy, true, cache);
+      }
+      result.put(current, requirement);
     }
     return result.build();
   }

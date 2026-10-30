@@ -30,6 +30,7 @@ import org.batfish.minesweeper.bdd.TransferBDD;
 import org.batfish.minesweeper.question.searchroutepolicies.RegexConstraint;
 import org.batfish.minesweeper.question.searchroutepolicies.RegexConstraints;
 import org.batfish.minesweeper.question.verificationutilities.Edge;
+import org.batfish.common.util.BatfishObjectMapper;
 import org.batfish.minesweeper.question.verificationutilities.Invariant;
 import org.batfish.minesweeper.question.verificationutilities.Location;
 import org.batfish.minesweeper.question.verificationutilities.NetworkInfo;
@@ -1696,6 +1697,76 @@ public class ReachabilityAnswererTest {
     // the interfering route travels one more EBGP hop, so its AS path is longer and it can
     // never be selected
     assertFalse(checks.getRight());
+  }
+
+  /// Runs pathWithAsPathLengthExample with the assumption and target given as the strings the
+  /// whirlpool Python API sends, deserialized the same way the reachability question does.
+  private Pair<Boolean, Boolean> runPathWithAsPathLengthFromStrings(
+      String assumptionString, String targetString) throws IOException {
+    NodeRecord ALPHANODE_R = new NodeRecord("10.0.0.1", "alphaNode");
+    NodeRecord BETANODE_R = new NodeRecord("10.0.0.2", "betaNode");
+    NodeRecord GAMMANODE_R = new NodeRecord("10.0.0.3", "gammaNode");
+    Ip incomingAlpha = Ip.parse("100.0.0.10");
+    String prefixStr = "2.4.8.0/24";
+
+    PrefixSpace TARGET_PREFIX = new PrefixSpace(PrefixRange.fromString(prefixStr));
+
+    TestConfigConstructionUtils.Networkv2 net =
+        pathWithAsPathLengthExample(ALPHANODE_R, BETANODE_R, GAMMANODE_R, incomingAlpha, prefixStr);
+    NetworkInfo info = net.getInfo(TARGET_PREFIX);
+
+    Node ALPHANODE = ALPHANODE_R.instantiate(info);
+    Node GAMMANODE = GAMMANODE_R.instantiate(info);
+
+    Invariant.Builders assumptions =
+        BatfishObjectMapper.mapper()
+            .readValue(BatfishObjectMapper.writeString(assumptionString), Invariant.Builders.class);
+    Invariant.Builder target =
+        BatfishObjectMapper.mapper()
+            .readValue(BatfishObjectMapper.writeString(targetString), Invariant.Builder.class);
+
+    Location loc = info.checkForEdgeViaIps(incomingAlpha, ALPHANODE.getSingleIp()).get();
+    info.addAssumption(loc, assumptions.get_builders().get(0).build(net.tbdd(), net.template()));
+
+    TableAnswerElement result =
+        ReachabilityAnswerer.run(
+            info,
+            TARGET_PREFIX,
+            GAMMANODE,
+            target.build(net.tbdd(), net.template()),
+            Set.of());
+    return processResultRows(result.getRowsList());
+  }
+
+  /// Same as pathWithAsPathLengthTargetNoInterferenceTest, but with the constraints written as the
+  /// Python API writes them.
+  @Test
+  public void pathWithAsPathLengthTargetFromStringsTest() throws IOException {
+    Pair<Boolean, Boolean> checks =
+        runPathWithAsPathLengthFromStrings(
+            "~asPathLength = 1~", "~comm = 1:1 & asPathLength = 3~");
+    assertTrue(checks.getLeft());
+    assertFalse(checks.getRight());
+  }
+
+  /// The good route can only reach gammaNode with an AS-path length of 3 (1 as the external
+  /// neighbor sent it, plus that neighbor's prepend and alphaNode's), so a target naming any other
+  /// length must not be reachable.
+  @Test
+  public void pathWithAsPathLengthWrongTargetTest() throws IOException {
+    for (int wrong : new int[] {0, 1, 2, 4, 14}) {
+      Pair<Boolean, Boolean> checks =
+          runPathWithAsPathLengthFromStrings(
+              "~asPathLength = 1~", "~comm = 1:1 & asPathLength = " + wrong + "~");
+      assertFalse("target length " + wrong, checks.getLeft());
+    }
+    // and a different assumed length shifts the reachable target length with it
+    assertTrue(
+        runPathWithAsPathLengthFromStrings("~asPathLength = 2~", "~comm = 1:1 & asPathLength = 4~")
+            .getLeft());
+    assertFalse(
+        runPathWithAsPathLengthFromStrings("~asPathLength = 2~", "~comm = 1:1 & asPathLength = 3~")
+            .getLeft());
   }
 
   private TestConfigConstructionUtils.Networkv2 weakerPathConstraints(

@@ -6,6 +6,8 @@ import com.google.common.collect.ImmutableSet;
 import com.google.common.collect.ImmutableSortedMap;
 import net.sf.javabdd.BDD;
 import net.sf.javabdd.BDDFactory;
+import org.batfish.common.BatfishException;
+import org.batfish.common.bdd.MutableBDDInteger;
 import org.batfish.datamodel.BgpProcess;
 import org.batfish.datamodel.Configuration;
 import org.batfish.datamodel.ConfigurationFormat;
@@ -33,9 +35,12 @@ import org.batfish.datamodel.routing_policy.communities.MatchCommunities;
 import org.batfish.datamodel.routing_policy.communities.SetCommunities;
 import org.batfish.datamodel.routing_policy.expr.BooleanExpr;
 import org.batfish.datamodel.routing_policy.expr.DestinationNetwork;
+import org.batfish.datamodel.routing_policy.expr.ExplicitAs;
+import org.batfish.datamodel.routing_policy.expr.LiteralAsList;
 import org.batfish.datamodel.routing_policy.expr.MatchPrefixSet;
 import org.batfish.datamodel.routing_policy.expr.NamedPrefixSet;
 import org.batfish.datamodel.routing_policy.statement.If;
+import org.batfish.datamodel.routing_policy.statement.PrependAsPath;
 import org.batfish.datamodel.routing_policy.statement.Statement;
 import org.batfish.datamodel.routing_policy.statement.Statements;
 import org.batfish.minesweeper.CommunityVar;
@@ -64,7 +69,9 @@ import static org.batfish.datamodel.LineAction.PERMIT;
 import static org.batfish.minesweeper.bdd.TransferBDD.isRelevantForDestination;
 import static org.batfish.minesweeper.question.verificationutilities.TestConfigConstructionUtils.getBgpActivePeerConfig;
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotSame;
+import static org.junit.Assert.assertThrows;
 import static org.junit.Assert.assertTrue;
 
 public class InvariantTest {
@@ -878,5 +885,116 @@ public class InvariantTest {
                         new PrefixSpace(PrefixRange.fromPrefix(Prefix.parse("2.4.8.0/24")))))
             .build(tbdd, exports.get(ALPHANODE));
     assertEquals(CD_expected.getBDDCopy(), CD_interpolant.getBDDCopy());
+  }
+
+  /// The strings here are exactly what the whirlpool Python API sends: Clause(as_path_length=N)
+  /// formats as "asPathLength = N", joined to the clause's other atoms with " & ".
+  @Test
+  public void asPathLengthStringParseTest() {
+    RoutingPolicy policyUsed = exports.get(BETANODE);
+    MutableBDDInteger len = tbdd.getOriginalRoute().getAsPathLength();
+
+    assertEquals(
+        len.value(3),
+        Invariant.Builder.forValue("~asPathLength = 3~").build(tbdd, policyUsed).getBDD());
+    assertEquals(
+        len.value(0),
+        Invariant.Builder.forValue("~asPathLength = 0~").build(tbdd, policyUsed).getBDD());
+
+    BDD commAndLength =
+        Invariant.clauseBuilder()
+            .setCommunities(new RegexConstraints(List.of(RegexConstraint.parse("100:1"))))
+            .setAsPathLength(3)
+            .build(tbdd, policyUsed);
+    assertEquals(
+        commAndLength,
+        Invariant.Builder.forValue("~comm = 100:1 & asPathLength = 3~")
+            .build(tbdd, policyUsed)
+            .getBDD());
+
+    // separate clauses are disjoined, which is the only way to say the length is in a range
+    assertEquals(
+        len.value(1).or(len.value(2)),
+        Invariant.Builder.forValue("~asPathLength = 1~~asPathLength = 2~")
+            .build(tbdd, policyUsed)
+            .getBDD());
+
+    // a list of assumptions, one per assumption location, is comma-separated
+    List<Invariant.Builder> assumptions =
+        Invariant.Builders.forValue("~asPathLength = 1~,~asPathLength = 2~").get_builders();
+    assertEquals(2, assumptions.size());
+    assertEquals(len.value(1), assumptions.get(0).build(tbdd, policyUsed).getBDD());
+    assertEquals(len.value(2), assumptions.get(1).build(tbdd, policyUsed).getBDD());
+  }
+
+  @Test
+  public void asPathLengthStringParseErrorsTest() {
+    RoutingPolicy policyUsed = exports.get(BETANODE);
+    assertThrows(
+        BatfishException.class,
+        () -> Invariant.Builder.forValue("~asPathLength = 1 & asPathLength = 2~"));
+    assertThrows(
+        NumberFormatException.class, () -> Invariant.Builder.forValue("~asPathLength = two~"));
+    assertThrows(
+        IllegalArgumentException.class,
+        () -> Invariant.Builder.forValue("~asPathLength = -1~").build(tbdd, policyUsed));
+    // the top value of the 4-bit field saturates, so it would mean "15 or more"
+    assertThrows(
+        IllegalArgumentException.class,
+        () -> Invariant.Builder.forValue("~asPathLength = 15~").build(tbdd, policyUsed));
+  }
+
+  private RoutingPolicy prependTwicePolicy() {
+    Configuration owner =
+        nf.configurationBuilder()
+            .setHostname("prependNode")
+            .setConfigurationFormat(ConfigurationFormat.CISCO_IOS)
+            .setDefaultInboundAction(PERMIT)
+            .build();
+    return nf.routingPolicyBuilder()
+        .setOwner(owner)
+        .setName(EXPORT_POLICY_NAME)
+        .setStatements(
+            ImmutableList.of(
+                new PrependAsPath(
+                    new LiteralAsList(
+                        ImmutableList.of(new ExplicitAs(65000L), new ExplicitAs(65000L)))),
+                Statements.ExitAccept.toStaticStatement()))
+        .build();
+  }
+
+  @Test
+  public void weakestPreconditionOfAsPathPrependTest() {
+    RoutingPolicy prepend = prependTwicePolicy();
+    MutableBDDInteger len = tbdd.getOriginalRoute().getAsPathLength();
+
+    // to leave with length 3, a route must arrive with length 1
+    Invariant three =
+        new Invariant(tbdd, Invariant.clauseBuilder().setAsPathLength(3).build(tbdd, prepend));
+    assertEquals(len.value(1), three.weakestPrecondition(prepend, false).getBDD());
+
+    // no route can leave with length 1 after two ASNs are prepended
+    Invariant one =
+        new Invariant(tbdd, Invariant.clauseBuilder().setAsPathLength(1).build(tbdd, prepend));
+    assertTrue(one.weakestPrecondition(prepend, false).isFalse());
+  }
+
+  @Test
+  public void strongestPostconditionOfAsPathPrependTest() {
+    RoutingPolicy prepend = prependTwicePolicy();
+    MutableBDDInteger len = tbdd.getOriginalRoute().getAsPathLength();
+
+    // when the incoming length is pinned, the outgoing length is exact
+    Invariant one =
+        new Invariant(tbdd, Invariant.clauseBuilder().setAsPathLength(1).build(tbdd, prepend));
+    BDD sp = one.strongestPostcondition(prepend).getBDD();
+    assertFalse(sp.isZero());
+    assertTrue(sp.imp(len.value(3)).isOne());
+
+    // when it is not, the strongest postcondition currently drops the length altogether (see
+    // TransferBDDUtils.bddPrePathToPostBDD), so a length of 0 is not ruled out even though every
+    // route leaves with at least 2.  This is sound but imprecise.
+    BDD spOfTrue = new Invariant(tbdd).strongestPostcondition(prepend).getBDD();
+    assertTrue(spOfTrue.andSat(len.value(0)));
   }
 }

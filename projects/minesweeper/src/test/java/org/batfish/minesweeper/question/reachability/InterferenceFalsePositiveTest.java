@@ -34,7 +34,6 @@ import org.junit.Test;
 
 import java.util.ArrayList;
 import java.util.HashMap;
-import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -436,29 +435,7 @@ public class InterferenceFalsePositiveTest {
       ingress = Set.of(a.getIncomingFrom(E1_IP).orElseThrow());
     }
     TableAnswerElement tae = runQuery(info, prefix, target, new Invariant(net.tbdd()), ingress);
-    Pair<Boolean, Boolean> res = processResultRows(tae.getRowsList());
-    StringBuilder sb = new StringBuilder();
-    String name =
-        externalAsPathLength == null ? s.name() : s.name() + "/len" + externalAsPathLength;
-    sb.append("=== CASE ").append(name).append(" ===\n");
-    for (Row row : tae.getRowsList()) {
-      sb.append("  [")
-          .append(row.getString("Result_Label"))
-          .append("] ")
-          .append(row.getString("Result"))
-          .append("\n");
-    }
-    sb.append("SUMMARY ")
-        .append(name)
-        .append(" goodPath=")
-        .append(res.getLeft())
-        .append(" interference=")
-        .append(res.getRight())
-        .append(" realInterference=")
-        .append(s.realInterference())
-        .append("\n");
-    System.out.print(sb);
-    return res;
+    return processResultRows(tae.getRowsList());
   }
 
   /// For the known false positives: asserts only that a good path is found
@@ -735,12 +712,12 @@ public class InterferenceFalsePositiveTest {
   }
 
   /**
-   * (d) Does the session type matter to the tool? Runs every spec with NO_AS and IBGP_CORE and
-   * prints the verdicts (no assertion on interference, only on the good path).
+   * Every spec still finds a good path when the sessions have no AS numbers or the core is iBGP.
+   * The interference verdict is not checked, since the real-BGP ground truth was worked out only
+   * for the all-eBGP networks.
    */
   @Test
-  public void dSessionTypeMatrix() {
-    Map<String, Pair<Boolean, Boolean>> results = new LinkedHashMap<>();
+  public void goodPathUnderOtherSessionTypes() {
     for (Spec s :
         List.of(
             BASE,
@@ -755,15 +732,8 @@ public class InterferenceFalsePositiveTest {
             PARALLEL_SESSION,
             PARALLEL_SESSION_SWAPPED)) {
       for (Sessions sess : List.of(Sessions.NO_AS, Sessions.IBGP_CORE)) {
-        Spec v = s.with(sess);
-        Pair<Boolean, Boolean> r = run(v);
-        results.put(v.name(), r);
-        assertTrue("good path expected for " + v.name(), r.getLeft());
+        checkGoodPath(s.with(sess));
       }
     }
-    results.forEach(
-        (k, v) ->
-            System.out.println(
-                "MATRIX " + k + " goodPath=" + v.getLeft() + " interference=" + v.getRight()));
   }
 }

@@ -298,24 +298,7 @@ public class InterferenceRepoExampleTest {
     TableAnswerElement result =
         runQuery(info, BASIC_PREFIX, GAMMANODE, new Invariant(net.tbdd()), Set.of());
     Pair<Boolean, Boolean> checks = processResultRows(result.getRowsList());
-    StringBuilder sb = new StringBuilder();
-    sb.append("=== CASE repo-weakerExample-v").append(v).append(" ===\n");
-    for (Row row : result.getRowsList()) {
-      sb.append("  [")
-          .append(row.getString("Result_Label"))
-          .append("] ")
-          .append(row.getString("Result"))
-          .append("\n");
-    }
-    sb.append("SUMMARY repo-weakerExample-v")
-        .append(v)
-        .append(" goodPath=")
-        .append(checks.getLeft())
-        .append(" interference=")
-        .append(checks.getRight())
-        .append("\n");
-    System.out.print(sb);
-    assertTrue(checks.getLeft());
+    assertTrue("good path expected for variation " + v, checks.getLeft());
     return checks;
   }
 

@@ -330,7 +330,8 @@ public class InterferenceRepoExampleTest {
     // no real interference: if beta selects delta's route tagged 1:1, beta's export to gamma drops
     // it, but epsilon delivers it to gamma
     runVariation(1);
-    // TODO the interference check reports a false positive here (see INTERFERENCE_FALSE_POSITIVES.md)
+    // TODO false positive: the check protects only the good path through beta, so it does not see
+    // that epsilon delivers delta's route to gamma
     // assertFalse(runVariation(1).getRight());
   }
 

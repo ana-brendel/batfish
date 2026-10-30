@@ -56,8 +56,9 @@ import static org.junit.Assert.assertTrue;
 /**
  * Pure reachability queries (target = true at node T, prefix 2.4.8.0/24) on which the interference
  * check of ReachabilityAnswerer.run is too strong: it reports interference although, in real BGP,
- * T always ends up with a route for the prefix. See INTERFERENCE_FALSE_POSITIVES.md in
- * projects/minesweeper for the explanation of each case.
+ * T always ends up with a route for the prefix. The check picks one good path and requires every
+ * route that can be at each node on it to be carried the rest of the way along that path. That is
+ * sound, but stronger than reachability needs, since the prefix may reach T some other way.
  *
  * <p>Each test asserts that a good path is found and that the interference verdict equals the
  * ground truth for real BGP (worked out by hand for the all-eBGP version of the network; see the
@@ -628,7 +629,9 @@ public class InterferenceFalsePositiveTest {
 
   @Test
   public void parallelSessionSwapped() {
-    // TODO the interference check reports a false positive here (see INTERFERENCE_FALSE_POSITIVES.md)
+    // TODO false positive: only the A-T session that the good path uses filters 2:2, so a 2:2 route
+    // at A still reaches T over the other session. With the filter on the other session
+    // (parallelSession) the check passes, so the verdict depends on which path is picked first.
     // check(PARALLEL_SESSION_SWAPPED);
     checkGoodPath(PARALLEL_SESSION_SWAPPED);
   }
@@ -640,21 +643,25 @@ public class InterferenceFalsePositiveTest {
 
   @Test
   public void parallelSessionSwappedIngressE1() {
-    // TODO the interference check reports a false positive here (see INTERFERENCE_FALSE_POSITIVES.md)
+    // TODO false positive: only the A-T session that the good path uses filters 2:2, so a 2:2 route
+    // at A still reaches T over the other session. With the filter on the other session
+    // (parallelSession) the check passes, so the verdict depends on which path is picked first.
     // check(PARALLEL_SESSION_SWAPPED_INGRESS_E1);
     checkGoodPath(PARALLEL_SESSION_SWAPPED_INGRESS_E1);
   }
 
   @Test
   public void base() {
-    // TODO the interference check reports a false positive here (see INTERFERENCE_FALSE_POSITIVES.md)
+    // TODO false positive: the check protects only the good path E1 -> A -> T. A route from E2
+    // tagged 2:2 can be at A, and T's import from A drops it, but B delivers it to T.
     // check(BASE);
     checkGoodPath(BASE);
   }
 
   @Test
   public void baseIngressE1() {
-    // TODO the interference check reports a false positive here (see INTERFERENCE_FALSE_POSITIVES.md)
+    // TODO false positive: the check protects only the good path E1 -> A -> T. A route from E2
+    // tagged 2:2 can be at A, and T's import from A drops it, but B delivers it to T.
     // check(BASE_INGRESS_E1);
     checkGoodPath(BASE_INGRESS_E1);
   }
@@ -691,7 +698,9 @@ public class InterferenceFalsePositiveTest {
 
   @Test
   public void cE2AtBIngressE1() {
-    // TODO the interference check reports a false positive here (see INTERFERENCE_FALSE_POSITIVES.md)
+    // TODO false positive: ingress forces the good path to start at E1. E2's route enters at B and
+    // can be selected at A, where T's import from A would drop it, but B delivers it to T. With no
+    // ingress (cE2AtB) the good path starts at E2 and the check passes.
     // check(C_E2_AT_B_INGRESS_E1);
     checkGoodPath(C_E2_AT_B_INGRESS_E1);
   }
@@ -716,7 +725,11 @@ public class InterferenceFalsePositiveTest {
 
   @Test
   public void eLoopBackTag() {
-    // TODO the interference check reports a false positive here (see INTERFERENCE_FALSE_POSITIVES.md)
+    // TODO false positive: the copy of the good route that T exports back to A is tagged 2:2,
+    // which T's import from A drops, so A's requirement fails and false is pushed back to E1. In
+    // real BGP the copy never comes back: over eBGP, A sees its own AS in the path; over iBGP, T
+    // does not re-advertise a route learned from one iBGP peer to another. The model has neither.
+    // It shows up as interference at the good path's own ingress, with an arbitrary witness route.
     // check(E_LOOP_BACK_TAG);
     checkGoodPath(E_LOOP_BACK_TAG);
   }

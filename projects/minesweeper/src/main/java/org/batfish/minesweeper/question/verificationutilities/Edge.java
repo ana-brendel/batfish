@@ -7,6 +7,7 @@ import org.batfish.datamodel.bgp.BgpTopologyUtils.ConfedSessionType;
 import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
 import java.util.Objects;
+import java.util.Optional;
 import java.util.Set;
 
 public class Edge extends Location {
@@ -36,6 +37,11 @@ public class Edge extends Location {
   /// setConfederationInfo)
   private @Nonnull ConfedInfo srcConfed = ConfedInfo.NONE;
   private @Nonnull ConfedInfo dstConfed = ConfedInfo.NONE;
+
+  /// Whether the receiver, when exporting to the sender over this session, replaces the ASes in the
+  /// AS path with its own (Batfish's replaceNonLocalAsesOnExport), as configured at the receiver
+  private boolean srcReplacesAsesOnExport;
+  private boolean dstReplacesAsesOnExport;
 
   /// A node's confederation settings for a session: whether the session is within the node's
   /// confederation (both ends in it), across its border (the other end outside it), or the node is
@@ -88,7 +94,9 @@ public class Edge extends Location {
       @Nullable Long srcClusterId,
       @Nullable Long dstClusterId,
       @Nonnull ConfedInfo srcConfed,
-      @Nonnull ConfedInfo dstConfed) {
+      @Nonnull ConfedInfo dstConfed,
+      boolean srcReplacesAsesOnExport,
+      boolean dstReplacesAsesOnExport) {
     this.src = src;
     this.dst = dst;
     this.eBGP = eBGP;
@@ -104,6 +112,8 @@ public class Edge extends Location {
     this.dstClusterId = dstClusterId;
     this.srcConfed = srcConfed;
     this.dstConfed = dstConfed;
+    this.srcReplacesAsesOnExport = srcReplacesAsesOnExport;
+    this.dstReplacesAsesOnExport = dstReplacesAsesOnExport;
   }
 
   @Nonnull
@@ -191,6 +201,33 @@ public class Edge extends Location {
     this.dstConfed = dstConfed;
   }
 
+  /// Records whether the receiver replaces the ASes in the AS paths it exports back to the sender,
+  /// as configured at the receiving end
+  public void setReplacesAsesOnExport(boolean dstReplacesAsesOnExport) {
+    this.dstReplacesAsesOnExport = dstReplacesAsesOnExport;
+  }
+
+  /// The edge in the other direction that the sender has recorded with its own configuration of
+  /// the session, if the sender is in the network
+  private Optional<Edge> reverse() {
+    return srcNode == null ? Optional.empty() : srcNode.getIncoming(dst, src);
+  }
+
+  /// The AS the sender uses on the session, which is what it prepends on eBGP. If the sender is in
+  /// the network, this is the local AS in its own config, found on the reverse edge; otherwise it
+  /// is the remote AS configured at the receiver.
+  @Nullable
+  public Long senderAs() {
+    Long local = reverse().map(Edge::getDstAs).orElse(null);
+    return local != null ? local : srcAs;
+  }
+
+  /// Whether the sender replaces the ASes in the AS path with its own when exporting on this
+  /// session, from its own config; false if the sender is not in the network
+  public boolean senderReplacesAses() {
+    return reverse().map(r -> r.dstReplacesAsesOnExport).orElse(false);
+  }
+
   @Nonnull
   public Edge flipEdge() {
     return new Edge(
@@ -208,7 +245,9 @@ public class Edge extends Location {
         dstClusterId,
         srcClusterId,
         dstConfed,
-        srcConfed);
+        srcConfed,
+        dstReplacesAsesOnExport,
+        srcReplacesAsesOnExport);
   }
 
   public void setSrcNode(Node src) {
@@ -268,7 +307,9 @@ public class Edge extends Location {
         srcClusterId,
         dstClusterId,
         srcConfed,
-        dstConfed);
+        dstConfed,
+        srcReplacesAsesOnExport,
+        dstReplacesAsesOnExport);
   }
 
   @Override

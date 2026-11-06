@@ -540,7 +540,6 @@ public class InterferenceFalsePositiveTest {
    * (e) No second ingress and no second path: nodes A, T, single external neighbor E1, but T's
    * export back to A tags 2:2. No real interference: T's route back to A has A's AS in its path,
    * so A drops it (with iBGP, T would not send an iBGP-learned route back to its iBGP peer A).
-   * The tool has no loop prevention, so it must assume A can select T's tagged route.
    */
   static final Spec E_LOOP_BACK_TAG =
       new Spec(
@@ -651,13 +650,9 @@ public class InterferenceFalsePositiveTest {
 
   @Test
   public void eLoopBackTag() {
-    // TODO false positive: the copy of the good route that T exports back to A is tagged 2:2,
-    // which T's import from A drops, so A's requirement fails and false is pushed back to E1. In
-    // real BGP the copy never comes back: over eBGP, A sees its own AS in the path; over iBGP, T
-    // does not re-advertise a route learned from one iBGP peer to another. The model has neither.
-    // It shows up as interference at the good path's own ingress, with an arbitrary witness route.
-    // check(E_LOOP_BACK_TAG);
-    checkGoodPath(E_LOOP_BACK_TAG);
+    // the copy of the good route that T exports back to A is tagged 2:2, which T's import from A
+    // drops; but A's AS-path loop check drops the copy, since it carries A's own AS
+    check(E_LOOP_BACK_TAG);
   }
 
   /**

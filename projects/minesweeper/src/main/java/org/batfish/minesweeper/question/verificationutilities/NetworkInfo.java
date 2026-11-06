@@ -375,8 +375,8 @@ public class NetworkInfo {
     return policies;
   }
 
-  /// Records on the incoming edge the session's AS numbers, allowas-in setting, and
-  /// route-reflection and confederation settings, as configured at the receiving node by the
+  /// Records on the incoming edge the session's AS numbers, allowas-in setting, AS-path rewriting,
+  /// and route-reflection and confederation settings, as configured at the receiving node by the
   /// provided peer of the provided BGP process
   private static void setSessionInfo(
       @Nonnull Edge incoming, @Nonnull BgpPeerConfig peer, @Nullable BgpProcess process) {
@@ -409,6 +409,7 @@ public class NetworkInfo {
     setConfederationSessionType(incoming, confederationAs, sessionAs);
     incoming.setRouteReflectionInfo(
         unicast != null && unicast.getRouteReflectorClient(), peer.getClusterId());
+    incoming.setReplacesAsesOnExport(peer.getReplaceNonLocalAsesOnExport());
     incoming.setConfederationInfo(new ConfedInfo(confedType, confederationAs, localAs));
   }
 

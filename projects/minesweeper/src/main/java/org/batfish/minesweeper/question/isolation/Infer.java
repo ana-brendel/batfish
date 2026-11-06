@@ -186,6 +186,28 @@ public class Infer {
     }
   }
 
+  /// Weakens the given requirement on routes received over the edge to allow routes whose AS path
+  /// contains the receiver's AS for the session, which BGP's loop detection drops before the
+  /// import policy, unless the session allows them (allowas-in). Consumes the given invariant.
+  ///
+  /// The AS path's tracked ASes are known only as far as the model updates them (see
+  /// BDDRoute.getAsPathContains): routes entering the network can have any values for them, so
+  /// an incoming route whose AS path contains the receiver's AS is excused whatever an assumption
+  /// on its AS-path regexes says.
+  private Invariant excuseAsPathLoop(Invariant requirement, Edge edge) {
+    Long receiverAs = edge.getDstAs();
+    if (receiverAs == null || edge.dstAllowsLocalAsIn()) {
+      return requirement;
+    }
+    BDD containsReceiverAs = tbdd.getOriginalRoute().getAsPathContains(receiverAs);
+    if (containsReceiverAs == null) {
+      return requirement;
+    }
+    Invariant excused = new Invariant(tbdd, requirement.getBDD().or(containsReceiverAs));
+    requirement.free();
+    return excused;
+  }
+
   /// Performs iterative invariant inference using the weakest preconditions
   private Optional<CounterExample> inferenceLoop(boolean pushFalse) {
     while (!working.isEmpty()) {
@@ -233,7 +255,8 @@ public class Infer {
           } else {
             RoutingPolicy importPolicy = imports.get(edge);
             Invariant wp = this.getWeakestPrecondition(property, importPolicy);
-            wp = wp.preImport(edge.isEBGP());
+            wp = excuseAsPathLoop(wp, edge);
+            wp = wp.preImport(edge);
             boolean firstVisit = !inferred.containsKey(edge);
             // get inferred if present, otherwise get enforced assumption, otherwise default is true
             Invariant existing =

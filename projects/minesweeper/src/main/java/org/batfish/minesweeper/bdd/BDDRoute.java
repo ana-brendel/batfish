@@ -18,6 +18,7 @@ import java.util.Set;
 import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 import javax.annotation.Nonnull;
+import javax.annotation.Nullable;
 import net.sf.javabdd.BDD;
 import net.sf.javabdd.BDDFactory;
 import net.sf.javabdd.BDDPairing;
@@ -168,6 +169,16 @@ public final class BDDRoute implements IDeepCopy<BDDRoute> {
    */
   private BDD[] _tracks;
 
+  /**
+   * The AS numbers tracked in AS paths, and for each one (at the same index) a BDD for whether the
+   * route's AS path contains it. Unlike the AS-path regex atomic predicates, these reflect the ASes
+   * that policies prepend (see {@link TransferBDD}), and clients that model BGP's own export
+   * behavior update them for the AS the sender prepends.
+   */
+  private final List<Long> _trackedAses;
+
+  private BDD[] _asPathContains;
+
   private MutableBDDInteger _weight;
 
   // whether the analysis encountered an unsupported route-policy
@@ -195,7 +206,8 @@ public final class BDDRoute implements IDeepCopy<BDDRoute> {
         aps.getPeerAddresses().size(),
         aps.getSourceVrfs().size(),
         aps.getTracks().size(),
-        aps.getTunnelEncapsulationAttributes());
+        aps.getTunnelEncapsulationAttributes(),
+        aps.getTrackedAses());
   }
 
   /**
@@ -214,6 +226,32 @@ public final class BDDRoute implements IDeepCopy<BDDRoute> {
       int numSourceVrfs,
       int numTracks,
       List<TunnelEncapsulationAttribute> tunnelEncapsulationAttributes) {
+    this(
+        factory,
+        numCommAtomicPredicates,
+        numAsPathRegexAtomicPredicates,
+        numNextHopInterfaces,
+        numPeerAddresses,
+        numSourceVrfs,
+        numTracks,
+        tunnelEncapsulationAttributes,
+        ImmutableList.of());
+  }
+
+  /**
+   * As above, and also allocating one BDD variable per tracked AS number, representing whether
+   * the route's AS path contains it.
+   */
+  private BDDRoute(
+      BDDFactory factory,
+      int numCommAtomicPredicates,
+      int numAsPathRegexAtomicPredicates,
+      int numNextHopInterfaces,
+      int numPeerAddresses,
+      int numSourceVrfs,
+      int numTracks,
+      List<TunnelEncapsulationAttribute> tunnelEncapsulationAttributes,
+      List<Long> trackedAses) {
     _factory = factory;
 
     int bitsToRepresentAdmin =
@@ -241,7 +279,8 @@ public final class BDDRoute implements IDeepCopy<BDDRoute> {
             + BDDTunnelEncapsulationAttribute.numBitsFor(tunnelEncapsulationAttributes)
             + numBits(OriginType.values().length)
             + numBits(RoutingProtocol.values().length)
-            + numBits(allMetricTypes.size());
+            + numBits(allMetricTypes.size())
+            + trackedAses.size();
     if (numVars < numNeeded) {
       factory.setVarNum(numNeeded);
     }
@@ -357,6 +396,15 @@ public final class BDDRoute implements IDeepCopy<BDDRoute> {
     addBitNames("ospfMetric", len, idx, false);
     idx += len;
 
+    // Initialize one BDD per tracked AS number, each of which has a corresponding BDD variable
+    _trackedAses = ImmutableList.copyOf(trackedAses);
+    _asPathContains = new BDD[trackedAses.size()];
+    for (int i = 0; i < trackedAses.size(); i++) {
+      _asPathContains[i] = factory.ithVar(idx);
+      _bitNames.put(idx, "AS path contains " + trackedAses.get(i));
+      idx++;
+    }
+
     _prependedASes = new ArrayList<>();
 
     // Initially there are no unsupported statements encountered
@@ -395,6 +443,8 @@ public final class BDDRoute implements IDeepCopy<BDDRoute> {
     _peerAddress = new BDDDomain<>(other._peerAddress);
     _sourceVrfs = new BDDDomain<>(other._sourceVrfs);
     _tracks = other._tracks.clone();
+    _trackedAses = other._trackedAses;
+    _asPathContains = other._asPathContains.clone();
     _tunnelEncapsulationAttribute =
         BDDTunnelEncapsulationAttribute.copyOf(other._tunnelEncapsulationAttribute);
     _unsupported = other._unsupported;
@@ -440,6 +490,11 @@ public final class BDDRoute implements IDeepCopy<BDDRoute> {
     _peerAddress = new BDDDomain<>(pred, route._peerAddress);
     _sourceVrfs = new BDDDomain<>(pred, route._sourceVrfs);
     _tracks = route.getTracks();
+    _trackedAses = route._trackedAses;
+    _asPathContains = new BDD[route._asPathContains.length];
+    for (int i = 0; i < _asPathContains.length; i++) {
+      _asPathContains[i] = route._asPathContains[i].and(pred);
+    }
     _tunnelEncapsulationAttribute = route._tunnelEncapsulationAttribute.and(pred);
   }
 
@@ -551,6 +606,7 @@ public final class BDDRoute implements IDeepCopy<BDDRoute> {
     _peerAddress.augmentPairing(other._peerAddress, pairing);
     _sourceVrfs.augmentPairing(other._sourceVrfs, pairing);
     pairing.set(other._tracks, _tracks);
+    pairing.set(other._asPathContains, _asPathContains);
     _tunnelEncapsulationAttribute.augmentPairing(other._tunnelEncapsulationAttribute, pairing);
   }
 
@@ -753,6 +809,35 @@ public final class BDDRoute implements IDeepCopy<BDDRoute> {
     _tracks = tracks;
   }
 
+  /** The AS numbers tracked in AS paths (see {@link #getAsPathContains(long)}) */
+  public List<Long> getTrackedAses() {
+    return _trackedAses;
+  }
+
+  /** The BDDs for whether the AS path contains each tracked AS, in the order of getTrackedAses */
+  public BDD[] getAsPathContains() {
+    return _asPathContains;
+  }
+
+  /**
+   * The BDD for whether the route's AS path contains the given AS number, or null if that AS is
+   * not tracked
+   */
+  public @Nullable BDD getAsPathContains(long as) {
+    int i = _trackedAses.indexOf(as);
+    return i < 0 ? null : _asPathContains[i];
+  }
+
+  /** Records that the given AS has been added to the route's AS path, if that AS is tracked */
+  public void addToAsPath(long as) {
+    int i = _trackedAses.indexOf(as);
+    if (i >= 0) {
+      // the array may be shared with another route
+      _asPathContains = _asPathContains.clone();
+      _asPathContains[i] = _factory.one();
+    }
+  }
+
   public @Nonnull BDDTunnelEncapsulationAttribute getTunnelEncapsulationAttribute() {
     return _tunnelEncapsulationAttribute;
   }
@@ -803,6 +888,7 @@ public final class BDDRoute implements IDeepCopy<BDDRoute> {
         && Objects.equals(_peerAddress, other._peerAddress)
         && Objects.equals(_sourceVrfs, other._sourceVrfs)
         && Arrays.equals(_tracks, other._tracks)
+        && Arrays.equals(_asPathContains, other._asPathContains)
         && _tunnelEncapsulationAttribute.equals(other._tunnelEncapsulationAttribute)
         && Objects.equals(_unsupported, other._unsupported);
   }

@@ -176,7 +176,7 @@ public class BgpPathValidity {
     ConfedSessionType confedType = confedType(edge);
     Set<Long> sent = new HashSet<>();
     addPrepended(sent, exports.get(edge), edge, true);
-    Long senderAs = senderAs(edge);
+    Long senderAs = edge.senderAs();
     Long sentMemberAs = null;
     if (edge.isEBGP() && senderAs != null) {
       if (confedType == ConfedSessionType.WITHIN_CONFED) {
@@ -255,21 +255,6 @@ public class BgpPathValidity {
     return type;
   }
 
-  /// The AS the sender uses on the session, which is what it prepends on eBGP. If the sender is in
-  /// the network, this is the local AS in its own config, found on the reverse edge; otherwise it
-  /// is the remote AS configured at the receiver.
-  private static @Nullable Long senderAs(Edge edge) {
-    Node sender = edge.getSrcNode();
-    if (sender != null) {
-      Long local =
-          sender.getIncoming(edge.getDst(), edge.getSrc()).map(Edge::getDstAs).orElse(null);
-      if (local != null) {
-        return local;
-      }
-    }
-    return edge.getSrcAs();
-  }
-
   /// The AS the receiver expects of the sender: the remote AS in the sender's config, found on the
   /// reverse edge if the sender is in the network, or else the receiver's local AS.
   private static @Nullable Long receiverAsAtSender(Edge edge) {
@@ -313,12 +298,12 @@ public class BgpPathValidity {
     if (expr instanceof ExplicitAs explicit) {
       return explicit.getAs();
     } else if (expr instanceof LocalAs) {
-      return export ? senderAs(edge) : edge.getDstAs();
+      return export ? edge.senderAs() : edge.getDstAs();
     } else if (expr instanceof RemoteAs) {
       return export ? receiverAsAtSender(edge) : edge.getSrcAs();
     } else if (expr instanceof AutoAs) {
       // outbound this is the local AS; inbound it is the last AS of the route, already present
-      return export ? senderAs(edge) : null;
+      return export ? edge.senderAs() : null;
     } else {
       // LastAs repeats an AS already in the path; VarAs cannot be evaluated
       return null;

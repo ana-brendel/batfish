@@ -295,7 +295,7 @@ public class Path {
       if (context.checkedAssumptions.containsKey(edge)) {
         // the edge is coming from outside the network so use its assumption
         curr.free();
-        curr = context.checkedAssumptions.get(loc).copy().postExport(edge.isEBGP());
+        curr = context.checkedAssumptions.get(loc).copy().postExport(edge);
       } else {
         // the edge is internal so do a strongest post computation
         RoutingPolicy exportPolicy = context.exports.get(edge);
@@ -304,7 +304,7 @@ public class Path {
         }
         // we need to account for the export transformations that BGP does, to
         // convert curr to an invariant on the routes that the importer will receive
-        curr = curr.postExport(edge.isEBGP());
+        curr = curr.postExport(edge);
       }
       RoutingPolicy importPolicy = context.imports.get(edge);
       if (importPolicy != null) {
@@ -353,7 +353,7 @@ public class Path {
       if (importPolicy != null) {
         requirement = requirement.weakestPrecondition(importPolicy, true, cache);
       }
-      requirement = requirement.preImport(edge.isEBGP());
+      requirement = requirement.preImport(edge);
       RoutingPolicy exportPolicy = context.exports.get(edge);
       if (exportPolicy != null) {
         requirement = requirement.weakestPrecondition(exportPolicy, true, cache);

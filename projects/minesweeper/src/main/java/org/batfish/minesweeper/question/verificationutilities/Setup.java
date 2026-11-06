@@ -5,6 +5,7 @@ import com.google.common.collect.ImmutableSet;
 import org.apache.commons.lang3.tuple.Pair;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
+import org.batfish.datamodel.BgpPeerConfig;
 import org.batfish.datamodel.BgpRoute;
 import org.batfish.datamodel.Bgpv4Route;
 import org.batfish.datamodel.Configuration;
@@ -26,6 +27,7 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.TreeSet;
 
 import static org.batfish.datamodel.answers.Schema.STRING;
 
@@ -84,7 +86,30 @@ public class Setup {
         getCommunityVars(communityRegexes, configAndPolicies.keySet()),
         asPathRegexes.stream()
             .map(RegexConstraint::getRegex)
-            .collect(ImmutableSet.toImmutableSet()));
+            .collect(ImmutableSet.toImmutableSet()),
+        loopCheckedAses(configAndPolicies.keySet()));
+  }
+
+  /// The ASes that BGP loop detection may check in the given configs: every local AS and
+  /// confederation AS number configured on a BGP session. A receiver checks the AS it uses on the
+  /// session, which is one of these.
+  private static List<Long> loopCheckedAses(Collection<Configuration> configs) {
+    Set<Long> ases = new TreeSet<>();
+    for (Configuration config : configs) {
+      if (config.getDefaultVrf() == null || config.getDefaultVrf().getBgpProcess() == null) {
+        continue;
+      }
+      for (BgpPeerConfig peer :
+          config.getDefaultVrf().getBgpProcess().getActiveNeighbors().values()) {
+        if (peer.getLocalAs() != null) {
+          ases.add(peer.getLocalAs());
+        }
+        if (peer.getConfederationAsn() != null) {
+          ases.add(peer.getConfederationAsn());
+        }
+      }
+    }
+    return ImmutableList.copyOf(ases);
   }
 
   /// This function takes the provided invariants and builds them in the context of the current

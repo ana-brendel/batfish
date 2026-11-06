@@ -1438,6 +1438,7 @@ public class TransferBDD {
         throw new UnsupportedOperationException(ase.toString());
       }
       prependedASes.add(((ExplicitAs) ase).getAs());
+      route.addToAsPath(((ExplicitAs) ase).getAs());
     }
     prependedASes.addAll(route.getPrependedASes());
     route.setPrependedASes(prependedASes);

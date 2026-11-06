@@ -711,13 +711,15 @@ public class Invariant {
   }
 
   // Returns a version of the current invariant that represents what must hold on export
-  // from the neighbor in order for this invariant to hold on import.  In other words,
-  // it represents the transformations that BGP performs when it exports a route.
+  // from the neighbor in order for this invariant to hold on import over the given edge.  In
+  // other words, it represents the transformations that BGP performs when it exports a route.
   // Consumes this.bdd
-  public Invariant preImport(boolean isEBGP) {
+  public Invariant preImport(Edge edge) {
     // for now the only transformations that we handle are the weight and (if EBGP) local
     // preference, which are reset to default (0 and 100 respectively), and (if EBGP) the
-    // AS path, to which the sender prepends its own ASN
+    // AS path, to which the sender prepends its own ASN, possibly after replacing the ASes in it
+    // with its own
+    boolean isEBGP = edge.isEBGP();
 
     MutableBDDInteger weight = tbdd.getOriginalRoute().getWeight();
     MutableBDDInteger localPref = tbdd.getOriginalRoute().getLocalPref();
@@ -743,8 +745,34 @@ public class Invariant {
       BDD beforePrepend = shiftAsPathLength(restricted, false);
       restricted.free();
       restricted = beforePrepend;
+      // the importer sees the tracked ASes of the path after any replacement, plus the sender's
+      BDDRoute route = tbdd.getOriginalRoute();
+      if (edge.senderReplacesAses()) {
+        for (BDD contains : route.getAsPathContains()) {
+          restricted = restrictTo(restricted, contains, false);
+        }
+      }
+      Long senderAs = edge.senderAs();
+      BDD senderContains = senderAs == null ? null : route.getAsPathContains(senderAs);
+      if (senderContains != null) {
+        restricted = restrictTo(restricted, senderContains, true);
+      }
     }
     return new Invariant(tbdd, restricted);
+  }
+
+  /// Substitutes the given value for the given BDD variable in the constraint, which it consumes
+  private static BDD restrictTo(BDD constraint, BDD variable, boolean value) {
+    BDD literal = value ? variable.id() : variable.not();
+    BDD result = constraint.restrict(literal);
+    literal.free();
+    constraint.free();
+    return result;
+  }
+
+  /// Sets the given BDD variable to the given value in the constraint, which it consumes
+  private static BDD setTo(BDD constraint, BDD variable, boolean value) {
+    return constraint.existEq(variable).andWith(value ? variable.id() : variable.not());
   }
 
   /**
@@ -791,10 +819,12 @@ public class Invariant {
   // Like preImport above, but in the reverse direction (for use in a strongest postcondition
   // computation)
   // Consumes this.bdd
-  public Invariant postExport(boolean isEBGP) {
+  public Invariant postExport(Edge edge) {
     // for now the only transformations are to reset the weight and (if EBGP) local preference
     // to default (0 and 100 respectively), and (if EBGP) to prepend the sender's ASN to the AS
-    // path -- all of which BGP does after the export policy has run
+    // path, possibly after replacing the ASes in it with its own -- all of which BGP does after
+    // the export policy has run
+    boolean isEBGP = edge.isEBGP();
     MutableBDDInteger weight = tbdd.getOriginalRoute().getWeight();
     BDD wsupport = weight.support();
     BDD result = bdd.existEq(wsupport).andWith(weight.value(0L));
@@ -807,6 +837,17 @@ public class Invariant {
       BDD prepended = shiftAsPathLength(result, true);
       result.free();
       result = prepended;
+      BDDRoute route = tbdd.getOriginalRoute();
+      if (edge.senderReplacesAses()) {
+        for (BDD contains : route.getAsPathContains()) {
+          result = setTo(result, contains, false);
+        }
+      }
+      Long senderAs = edge.senderAs();
+      BDD senderContains = senderAs == null ? null : route.getAsPathContains(senderAs);
+      if (senderContains != null) {
+        result = setTo(result, senderContains, true);
+      }
     }
     return new Invariant(tbdd, result);
   }

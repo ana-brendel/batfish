@@ -2758,6 +2758,11 @@ public class ReachabilityAnswererTest {
    * EBGP peers and aNode rejects the copy because its own AS is in the AS path; in that case aNode's
    * import from bNode also sets local-pref 200, so that the copy ties with the good route on
    * local-pref.
+   *
+   * <p>The options vary the loop: preferredCopy makes aNode's import from bNode set local-pref 300
+   * instead, so that aNode would prefer the copy; allowAsIn makes aNode accept routes from bNode
+   * whose AS path contains its own AS; replaceAses makes bNode replace the ASes in the paths it
+   * sends aNode with its own AS; prependA makes bNode's export to aNode prepend aNode's AS.
    */
   private TestConfigConstructionUtils.Networkv2 loopBackExample(
       NodeRecord ANODE,
@@ -2765,7 +2770,8 @@ public class ReachabilityAnswererTest {
       Ip externalIncoming,
       String prefixString,
       boolean sameAs,
-      boolean stripOnReturn) {
+      boolean stripOnReturn,
+      LoopBackOptions options) {
     Map<NodeRecord, Configuration> configs = new HashMap<>();
 
     String community1 = "1:1";
@@ -2798,12 +2804,36 @@ public class ReachabilityAnswererTest {
                 externalIncoming,
                 getPeerConfigWithAs("external", externalImport, permitAll, aAs, 65101L),
                 BNODE.getIp(),
-                getPeerConfigWithAs("internal", importFromB, permitAll, aAs, bAs)));
+                org.batfish.datamodel.BgpActivePeerConfig.builder()
+                    .setGroup("internal")
+                    .setLocalAs(aAs)
+                    .setRemoteAs(bAs)
+                    .setIpv4UnicastAddressFamily(
+                        org.batfish.datamodel.bgp.Ipv4UnicastAddressFamily.builder()
+                            .setAddressFamilyCapabilities(
+                                org.batfish.datamodel.bgp.AddressFamilyCapabilities.builder()
+                                    .setAllowLocalAsIn(options.allowAsIn())
+                                    .build())
+                            .setImportPolicy(importFromB)
+                            .setExportPolicy(permitAll)
+                            .build())
+                    .build()));
     processes
         .get(BNODE)
         .setNeighbors(
             ImmutableSortedMap.of(
-                ANODE.getIp(), getPeerConfigWithAs("internal", permitAll, exportToA, bAs, aAs)));
+                ANODE.getIp(),
+                org.batfish.datamodel.BgpActivePeerConfig.builder()
+                    .setGroup("internal")
+                    .setLocalAs(bAs)
+                    .setRemoteAs(aAs)
+                    .setReplaceNonLocalAsesOnExport(options.replaceAses())
+                    .setIpv4UnicastAddressFamily(
+                        org.batfish.datamodel.bgp.Ipv4UnicastAddressFamily.builder()
+                            .setImportPolicy(permitAll)
+                            .setExportPolicy(exportToA)
+                            .build())
+                    .build()));
 
     List<Statement> externalImportStatements =
         new java.util.ArrayList<>(
@@ -2816,14 +2846,24 @@ public class ReachabilityAnswererTest {
         makePolicy(configs.get(ANODE), externalImport, externalImportStatements);
     makePolicy(configs.get(ANODE), permitAll, permitRoute(true));
     List<Statement> importFromBStatements = new java.util.ArrayList<>(permitRoute(true));
-    if (!sameAs) {
+    if (options.preferredCopy()) {
+      importFromBStatements.add(0, new SetLocalPreference(new LiteralLong(300L)));
+    } else if (!sameAs) {
       importFromBStatements.add(0, new SetLocalPreference(new LiteralLong(200L)));
     }
     makePolicy(configs.get(ANODE), importFromB, importFromBStatements);
 
     makePolicy(configs.get(BNODE), permitAll, permitRoute(true));
-    makePolicy(
-        configs.get(BNODE), exportToA, stripOnReturn ? clearCommunities() : permitRoute(true));
+    List<Statement> exportToAStatements =
+        new java.util.ArrayList<>(stripOnReturn ? clearCommunities() : permitRoute(true));
+    if (options.prependA()) {
+      exportToAStatements.add(
+          0,
+          new org.batfish.datamodel.routing_policy.statement.PrependAsPath(
+              new org.batfish.datamodel.routing_policy.expr.LiteralAsList(
+                  List.of(new org.batfish.datamodel.routing_policy.expr.ExplicitAs(aAs)))));
+    }
+    makePolicy(configs.get(BNODE), exportToA, exportToAStatements);
 
     Set<RegexConstraint> communityRegexes =
         ImmutableSet.<RegexConstraint>builder().add(RegexConstraint.parse(community1)).build();
@@ -2834,10 +2874,24 @@ public class ReachabilityAnswererTest {
     return new TestConfigConstructionUtils.Networkv2(tbdd, configs, template, List.of());
   }
 
+  /// Variations of loopBackExample; see its comment
+  private record LoopBackOptions(
+      boolean preferredCopy, boolean allowAsIn, boolean replaceAses, boolean prependA) {
+    static final LoopBackOptions NONE = new LoopBackOptions(false, false, false, false);
+  }
+
+  private Pair<Boolean, Boolean> runLoopBackExample(
+      boolean sameAs, boolean stripOnReturn, Integer externalAsPathLength) {
+    return runLoopBackExample(sameAs, stripOnReturn, externalAsPathLength, LoopBackOptions.NONE);
+  }
+
   /// Runs the liveness check on loopBackExample with target 1:1 at bNode, optionally assuming the
   /// AS-path length of the routes the external neighbor sends; returns (good path, interference)
   private Pair<Boolean, Boolean> runLoopBackExample(
-      boolean sameAs, boolean stripOnReturn, Integer externalAsPathLength) {
+      boolean sameAs,
+      boolean stripOnReturn,
+      Integer externalAsPathLength,
+      LoopBackOptions options) {
     NodeRecord ANODE_R = new NodeRecord("10.0.0.1", "aNode");
     NodeRecord BNODE_R = new NodeRecord("10.0.0.2", "bNode");
     Ip externalIncoming = Ip.parse("100.0.0.10");
@@ -2846,7 +2900,8 @@ public class ReachabilityAnswererTest {
     PrefixSpace TARGET_PREFIX = new PrefixSpace(PrefixRange.fromString(prefixStr));
 
     TestConfigConstructionUtils.Networkv2 net =
-        loopBackExample(ANODE_R, BNODE_R, externalIncoming, prefixStr, sameAs, stripOnReturn);
+        loopBackExample(
+            ANODE_R, BNODE_R, externalIncoming, prefixStr, sameAs, stripOnReturn, options);
     NetworkInfo info = net.getInfo(TARGET_PREFIX);
 
     Node ANODE = ANODE_R.instantiate(info);
@@ -2895,12 +2950,51 @@ public class ReachabilityAnswererTest {
   public void ebgpLoopBackNoInterferenceTest() {
     Pair<Boolean, Boolean> checks = runLoopBackExample(false, true, null);
     assertTrue(checks.getLeft());
-    // TODO AS-path loop detection is not modeled, so interference is currently reported: aNode
-    // accepts the copy of the good route that comes back from bNode with 1:1 stripped.  The copy's
-    // AS path is two hops longer, but with no assumption on the external AS-path length the good
-    // route's length is unbounded, so route preference cannot excuse it (compare
-    // ebgpLoopBackAsPathLengthAssumedNoInterferenceTest)
-    // assertFalse(checks.getRight());
+    // aNode's AS-path loop check drops the copy of the good route that comes back from bNode with
+    // 1:1 stripped.  Route preference alone cannot excuse the copy: its AS path is two hops longer,
+    // but with no assumption on the external AS-path length the good route's length is unbounded
+    // (compare ebgpLoopBackAsPathLengthAssumedNoInterferenceTest)
+    assertFalse(checks.getRight());
+  }
+
+  @Test
+  public void ebgpLoopBackPreferredCopyNoInterferenceTest() {
+    // aNode would prefer the copy that comes back from bNode, by local-pref, but its AS-path loop
+    // check drops it
+    Pair<Boolean, Boolean> checks =
+        runLoopBackExample(false, true, null, new LoopBackOptions(true, false, false, false));
+    assertTrue(checks.getLeft());
+    assertFalse(checks.getRight());
+  }
+
+  @Test
+  public void ebgpLoopBackPreferredCopyAllowAsInInterferenceTest() {
+    // with allowas-in, aNode accepts the copy that comes back from bNode with 1:1 stripped and
+    // prefers it, so bNode loses the route with 1:1
+    Pair<Boolean, Boolean> checks =
+        runLoopBackExample(false, true, null, new LoopBackOptions(true, true, false, false));
+    assertTrue(checks.getLeft());
+    assertTrue(checks.getRight());
+  }
+
+  @Test
+  public void ebgpLoopBackPreferredCopyReplacedAsesInterferenceTest() {
+    // bNode replaces the ASes in the path it sends aNode with its own, so aNode no longer sees its
+    // own AS, accepts the copy with 1:1 stripped, and prefers it
+    Pair<Boolean, Boolean> checks =
+        runLoopBackExample(false, true, null, new LoopBackOptions(true, false, true, false));
+    assertTrue(checks.getLeft());
+    assertTrue(checks.getRight());
+  }
+
+  @Test
+  public void ibgpLoopBackPrependedOwnAsNoInterferenceTest() {
+    // bNode's export to aNode prepends their shared AS, so aNode's AS-path loop check drops the
+    // copy (which iBGP loop prevention also blocks: bNode does not relay an iBGP route to aNode)
+    Pair<Boolean, Boolean> checks =
+        runLoopBackExample(true, true, null, new LoopBackOptions(false, false, false, true));
+    assertTrue(checks.getLeft());
+    assertFalse(checks.getRight());
   }
 
   @Test

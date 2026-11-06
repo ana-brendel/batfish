@@ -219,7 +219,7 @@ public class PathExploration {
         // route as the sender's export policy produced it, before BGP's own export
         // transformations.  This matches how Infer stores edge invariants and how checked
         // assumptions on edges are interpreted.
-        properties[i] = properties[i].preImport(incoming.isEBGP());
+        properties[i] = properties[i].preImport(incoming);
       }
     }
     return properties;
@@ -335,7 +335,7 @@ public class PathExploration {
       } else {
         assert steps[i] instanceof Edge && steps[i - 1] instanceof Node : "Invalid Path";
         // as in getPathConstraints, an edge constraint is from the sender's point of view
-        weakened[i] = wp.preImport(((Edge) steps[i]).isEBGP());
+        weakened[i] = wp.preImport((Edge) steps[i]);
       }
     }
     return Pair.of(Path.create(steps, weakened, context, prefix), auxiliaryRequirements);

@@ -2,6 +2,7 @@ package org.batfish.minesweeper.question.verificationutilities;
 
 import org.batfish.common.BatfishException;
 import org.batfish.datamodel.Ip;
+import org.batfish.datamodel.bgp.BgpTopologyUtils.ConfedSessionType;
 
 import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
@@ -14,7 +15,35 @@ public class Edge extends Location {
   private final @Nonnull Ip dst;
   private @Nullable Node dstNode;
 
-  private final boolean eBGP;
+  private boolean eBGP;
+
+  /// AS numbers and allowas-in setting of the BGP session this edge represents, as configured at
+  /// the receiving end (see setSessionAsInfo). A null AS means it is unknown.
+  private @Nullable Long srcAs;
+  private @Nullable Long dstAs;
+  private boolean srcAllowsLocalAsIn;
+  private boolean dstAllowsLocalAsIn;
+
+  /// Route-reflection settings of the session, as configured at the receiving end (see
+  /// setRouteReflectionInfo): whether the receiver treats the sender as a route-reflector client,
+  /// and the cluster ID the receiver uses on the session (null if none)
+  private boolean srcTreatsDstAsClient;
+  private boolean dstTreatsSrcAsClient;
+  private @Nullable Long srcClusterId;
+  private @Nullable Long dstClusterId;
+
+  /// Confederation settings of the session, as configured at the receiving end (see
+  /// setConfederationInfo)
+  private @Nonnull ConfedInfo srcConfed = ConfedInfo.NONE;
+  private @Nonnull ConfedInfo dstConfed = ConfedInfo.NONE;
+
+  /// A node's confederation settings for a session: whether the session is within the node's
+  /// confederation (both ends in it), across its border (the other end outside it), or the node is
+  /// not in a confederation; the confederation's AS number; and the node's own member AS within it
+  public record ConfedInfo(
+      @Nonnull ConfedSessionType type, @Nullable Long confederationAs, @Nullable Long memberAs) {
+    public static final ConfedInfo NONE = new ConfedInfo(ConfedSessionType.NO_CONFED, null, null);
+  }
 
   public Edge(@Nonnull Ip src, @Nonnull Ip dst, boolean eBGP) {
     assert !src.equals(dst);
@@ -49,12 +78,32 @@ public class Edge extends Location {
       @Nonnull Ip dst,
       boolean eBGP,
       @Nullable Node srcNode,
-      @Nullable Node dstNode) {
+      @Nullable Node dstNode,
+      @Nullable Long srcAs,
+      @Nullable Long dstAs,
+      boolean srcAllowsLocalAsIn,
+      boolean dstAllowsLocalAsIn,
+      boolean srcTreatsDstAsClient,
+      boolean dstTreatsSrcAsClient,
+      @Nullable Long srcClusterId,
+      @Nullable Long dstClusterId,
+      @Nonnull ConfedInfo srcConfed,
+      @Nonnull ConfedInfo dstConfed) {
     this.src = src;
     this.dst = dst;
     this.eBGP = eBGP;
     this.srcNode = srcNode;
     this.dstNode = dstNode;
+    this.srcAs = srcAs;
+    this.dstAs = dstAs;
+    this.srcAllowsLocalAsIn = srcAllowsLocalAsIn;
+    this.dstAllowsLocalAsIn = dstAllowsLocalAsIn;
+    this.srcTreatsDstAsClient = srcTreatsDstAsClient;
+    this.dstTreatsSrcAsClient = dstTreatsSrcAsClient;
+    this.srcClusterId = srcClusterId;
+    this.dstClusterId = dstClusterId;
+    this.srcConfed = srcConfed;
+    this.dstConfed = dstConfed;
   }
 
   @Nonnull
@@ -81,9 +130,85 @@ public class Edge extends Location {
     return eBGP;
   }
 
+  /// Corrects whether the session is eBGP, once the AS each end uses on it is known (see
+  /// NetworkInfo.finishConfederations)
+  public void setEBGP(boolean eBGP) {
+    this.eBGP = eBGP;
+  }
+
+  /// The AS the sender uses on this session, which it prepends when advertising over eBGP
+  @Nullable
+  public Long getSrcAs() {
+    return srcAs;
+  }
+
+  /// The receiver's local AS on this session, which its BGP loop detection checks for
+  @Nullable
+  public Long getDstAs() {
+    return dstAs;
+  }
+
+  /// Whether the receiver accepts routes whose AS path already contains its local AS (allowas-in)
+  public boolean dstAllowsLocalAsIn() {
+    return dstAllowsLocalAsIn;
+  }
+
+  /// Records the session's AS numbers, as configured at the receiving end of this edge: srcAs is
+  /// the configured remote AS (null if not a single AS), dstAs is the local AS (null if unknown).
+  public void setSessionAsInfo(
+      @Nullable Long srcAs, @Nullable Long dstAs, boolean dstAllowsLocalAsIn) {
+    this.srcAs = srcAs;
+    this.dstAs = dstAs;
+    this.dstAllowsLocalAsIn = dstAllowsLocalAsIn;
+  }
+
+  /// Whether the receiver treats the sender as a route-reflector client on this session
+  public boolean dstTreatsSrcAsClient() {
+    return dstTreatsSrcAsClient;
+  }
+
+  /// The cluster ID the receiver uses on this session, which it adds to the cluster list of a
+  /// route it reflects to the sender; null if none is configured
+  @Nullable
+  public Long getDstClusterId() {
+    return dstClusterId;
+  }
+
+  /// Records the session's route-reflection settings, as configured at the receiving end
+  public void setRouteReflectionInfo(boolean dstTreatsSrcAsClient, @Nullable Long dstClusterId) {
+    this.dstTreatsSrcAsClient = dstTreatsSrcAsClient;
+    this.dstClusterId = dstClusterId;
+  }
+
+  /// The receiver's confederation settings for this session
+  @Nonnull
+  public ConfedInfo getDstConfed() {
+    return dstConfed;
+  }
+
+  /// Records the session's confederation settings, as configured at the receiving end
+  public void setConfederationInfo(@Nonnull ConfedInfo dstConfed) {
+    this.dstConfed = dstConfed;
+  }
+
   @Nonnull
   public Edge flipEdge() {
-    return new Edge(dst, src, eBGP, dstNode, srcNode);
+    return new Edge(
+        dst,
+        src,
+        eBGP,
+        dstNode,
+        srcNode,
+        dstAs,
+        srcAs,
+        dstAllowsLocalAsIn,
+        srcAllowsLocalAsIn,
+        dstTreatsSrcAsClient,
+        srcTreatsDstAsClient,
+        dstClusterId,
+        srcClusterId,
+        dstConfed,
+        srcConfed);
   }
 
   public void setSrcNode(Node src) {
@@ -128,7 +253,22 @@ public class Edge extends Location {
 
   @Override
   public Edge copy() {
-    return new Edge(Ip.create(src.asLong()), Ip.create(dst.asLong()), eBGP, srcNode, dstNode);
+    return new Edge(
+        Ip.create(src.asLong()),
+        Ip.create(dst.asLong()),
+        eBGP,
+        srcNode,
+        dstNode,
+        srcAs,
+        dstAs,
+        srcAllowsLocalAsIn,
+        dstAllowsLocalAsIn,
+        srcTreatsDstAsClient,
+        dstTreatsSrcAsClient,
+        srcClusterId,
+        dstClusterId,
+        srcConfed,
+        dstConfed);
   }
 
   @Override

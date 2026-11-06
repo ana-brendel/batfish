@@ -153,38 +153,56 @@ public class ReachabilityAnswererTest {
     Map<NodeRecord, BgpProcess> processes =
         getBgpProcesses(configs, ALPHANODE, BETANODE, GAMMANODE, DELTANODE);
 
+    // every router and external neighbor is in its own AS, so every session is eBGP
+    long alphaAs = 65001L;
+    long betaAs = 65002L;
+    long gammaAs = 65003L;
+    long deltaAs = 65004L;
+    long alphaExtAs = 65101L;
+
     processes
         .get(ALPHANODE)
         .setNeighbors(
             ImmutableSortedMap.of(
                 alphaIncoming,
-                getBgpActivePeerConfig(EXTERNAL, externalImport, exportDefault),
+                getBgpActivePeerConfig(
+                    EXTERNAL, externalImport, exportDefault, alphaAs, alphaExtAs),
                 BETANODE.getIp(),
-                getBgpActivePeerConfig(INTERNAL, importDefault, exportDefault),
+                getBgpActivePeerConfig(INTERNAL, importDefault, exportDefault, alphaAs, betaAs),
                 DELTANODE.getIp(),
-                getBgpActivePeerConfig(INTERNAL, importDefault, exportDefault)));
+                getBgpActivePeerConfig(INTERNAL, importDefault, exportDefault, alphaAs, deltaAs)));
     processes
         .get(BETANODE)
         .setNeighbors(
             ImmutableSortedMap.of(
-                ALPHANODE.getIp(), getBgpActivePeerConfig(INTERNAL, importDefault, exportDefault),
+                ALPHANODE.getIp(),
+                getBgpActivePeerConfig(
+                    INTERNAL, importDefault, exportDefault, betaAs, alphaAs),
                 GAMMANODE.getIp(),
                     getBgpActivePeerConfig(
                         INTERNAL,
                         importDefault,
-                        variation == 1 ? exportBETA2GAMMA : exportDefault)));
+                        variation == 1 ? exportBETA2GAMMA : exportDefault, betaAs, gammaAs)));
     processes
         .get(GAMMANODE)
         .setNeighbors(
             ImmutableSortedMap.of(
-                BETANODE.getIp(), getBgpActivePeerConfig(INTERNAL, importDefault, exportDefault),
-                DELTANODE.getIp(), getBgpActivePeerConfig(INTERNAL, importDefault, exportDefault)));
+                BETANODE.getIp(),
+                getBgpActivePeerConfig(
+                    INTERNAL, importDefault, exportDefault, gammaAs, betaAs),
+                DELTANODE.getIp(),
+                getBgpActivePeerConfig(
+                    INTERNAL, importDefault, exportDefault, gammaAs, deltaAs)));
     processes
         .get(DELTANODE)
         .setNeighbors(
             ImmutableSortedMap.of(
-                ALPHANODE.getIp(), getBgpActivePeerConfig(INTERNAL, importDefault, exportDefault),
-                GAMMANODE.getIp(), getBgpActivePeerConfig(INTERNAL, importDefault, exportDefault)));
+                ALPHANODE.getIp(),
+                getBgpActivePeerConfig(
+                    INTERNAL, importDefault, exportDefault, deltaAs, alphaAs),
+                GAMMANODE.getIp(),
+                getBgpActivePeerConfig(
+                    INTERNAL, importDefault, exportDefault, deltaAs, gammaAs)));
 
     // Create the policies
     makePolicy(configs.get(ALPHANODE), externalImport, addToCommunities(community));
@@ -299,8 +317,6 @@ public class ReachabilityAnswererTest {
     String importBETA2GAMMA = "importB2C";
     String importDefault = "defaultImportPolicy";
     String exportDefault = "defaultExportPolicy";
-    long betaAs = 65002L;
-    long externalBetaAs = 65102L;
 
     String PREFIX_LABEL = "prefixMatch";
     RouteFilterList prefixMatch =
@@ -322,39 +338,40 @@ public class ReachabilityAnswererTest {
     Map<NodeRecord, BgpProcess> processes =
         getBgpProcesses(configs, ALPHANODE, BETANODE, GAMMANODE);
 
+    // every router and external neighbor is in its own AS, so every session is eBGP
+    long alphaAs = 65001L;
+    long betaAs = 65002L;
+    long gammaAs = 65003L;
+    long alphaExtAs = 65101L;
+    long betaExtAs = 65102L;
+
     processes
         .get(ALPHANODE)
         .setNeighbors(
             ImmutableSortedMap.of(
                 alphaIncoming,
-                getBgpActivePeerConfig(EXTERNAL, externalAlphaImport, exportDefault),
+                getBgpActivePeerConfig(
+                    EXTERNAL, externalAlphaImport, exportDefault, alphaAs, alphaExtAs),
                 BETANODE.getIp(),
-                getBgpActivePeerConfig(INTERNAL, importDefault, exportDefault)));
+                getBgpActivePeerConfig(INTERNAL, importDefault, exportDefault, alphaAs, betaAs)));
     processes
         .get(BETANODE)
         .setNeighbors(
             ImmutableSortedMap.of(
                 ALPHANODE.getIp(),
-                getBgpActivePeerConfig(INTERNAL, importALPHA2BETA, exportDefault),
+                getBgpActivePeerConfig(INTERNAL, importALPHA2BETA, exportDefault, betaAs, alphaAs),
                 GAMMANODE.getIp(),
-                getBgpActivePeerConfig(INTERNAL, importDefault, exportDefault),
+                getBgpActivePeerConfig(INTERNAL, importDefault, exportDefault, betaAs, gammaAs),
                 betaIncoming,
-                org.batfish.datamodel.BgpActivePeerConfig.builder()
-                    .setGroup(EXTERNAL)
-                    .setLocalAs(betaAs)
-                    .setRemoteAs(externalBetaAs)
-                    .setIpv4UnicastAddressFamily(
-                        org.batfish.datamodel.bgp.Ipv4UnicastAddressFamily.builder()
-                            .setImportPolicy(externalBetaImport)
-                            .setExportPolicy(exportDefault)
-                            .build())
-                    .build()));
+                getBgpActivePeerConfig(
+                    EXTERNAL, externalBetaImport, exportDefault, betaAs, betaExtAs)));
     processes
         .get(GAMMANODE)
         .setNeighbors(
             ImmutableSortedMap.of(
                 BETANODE.getIp(),
-                getBgpActivePeerConfig(INTERNAL, importBETA2GAMMA, exportDefault)));
+                getBgpActivePeerConfig(
+                    INTERNAL, importBETA2GAMMA, exportDefault, gammaAs, betaAs)));
 
     // Create the policies
     makePolicy(
@@ -679,6 +696,17 @@ public class ReachabilityAnswererTest {
 
   private static org.batfish.datamodel.BgpActivePeerConfig getPeerConfigWithAs(
       String groupName, String importPolicy, String exportPolicy, long localAs, long remoteAs) {
+    return getPeerConfigWithAs(groupName, importPolicy, exportPolicy, localAs, remoteAs, false);
+  }
+
+  /// A peer that is a route-reflector client of the configuring router if rrClient is true
+  private static org.batfish.datamodel.BgpActivePeerConfig getPeerConfigWithAs(
+      String groupName,
+      String importPolicy,
+      String exportPolicy,
+      long localAs,
+      long remoteAs,
+      boolean rrClient) {
     return org.batfish.datamodel.BgpActivePeerConfig.builder()
         .setGroup(groupName)
         .setLocalAs(localAs)
@@ -687,6 +715,7 @@ public class ReachabilityAnswererTest {
             org.batfish.datamodel.bgp.Ipv4UnicastAddressFamily.builder()
                 .setImportPolicy(importPolicy)
                 .setExportPolicy(exportPolicy)
+                .setRouteReflectorClient(rrClient)
                 .build())
         .build();
   }
@@ -736,6 +765,8 @@ public class ReachabilityAnswererTest {
     Map<NodeRecord, BgpProcess> processes =
         getBgpProcesses(configs, ALPHANODE, BETANODE, GAMMANODE);
 
+    // alpha, beta, and gamma share AS 65003 over iBGP, so local preference is carried along the
+    // path; beta reflects routes from its client alpha to gamma
     long internalAs = 65003L;
     processes
         .get(ALPHANODE)
@@ -753,7 +784,7 @@ public class ReachabilityAnswererTest {
             ImmutableSortedMap.of(
                 ALPHANODE.getIp(),
                 getPeerConfigWithAs(
-                    INTERNAL, importALPHA2BETA, exportDefault, internalAs, internalAs),
+                    INTERNAL, importALPHA2BETA, exportDefault, internalAs, internalAs, true),
                 GAMMANODE.getIp(),
                 getPeerConfigWithAs(
                     INTERNAL, importGAMMA2BETA, exportDefault, internalAs, internalAs),
@@ -861,30 +892,39 @@ public class ReachabilityAnswererTest {
     Map<NodeRecord, BgpProcess> processes =
         getBgpProcesses(configs, ALPHANODE, BETANODE, GAMMANODE);
 
+    // alpha, beta, and gamma share AS 65003 over iBGP, so local preference is carried along the
+    // path; beta reflects routes from its client alpha to gamma
+    long internalAs = 65003L;
     processes
         .get(ALPHANODE)
         .setNeighbors(
             ImmutableSortedMap.of(
                 alphaIncoming,
-                getBgpActivePeerConfig(EXTERNAL, externalAlphaImport, exportDefault),
+                getPeerConfigWithAs(
+                    EXTERNAL, externalAlphaImport, exportDefault, internalAs, 65101L),
                 BETANODE.getIp(),
-                getBgpActivePeerConfig(INTERNAL, importDefault, exportDefault)));
+                getPeerConfigWithAs(
+                    INTERNAL, importDefault, exportDefault, internalAs, internalAs)));
     processes
         .get(BETANODE)
         .setNeighbors(
             ImmutableSortedMap.of(
                 ALPHANODE.getIp(),
-                getBgpActivePeerConfig(INTERNAL, importALPHA2BETA, exportDefault),
+                getPeerConfigWithAs(
+                    INTERNAL, importALPHA2BETA, exportDefault, internalAs, internalAs, true),
                 GAMMANODE.getIp(),
-                getBgpActivePeerConfig(INTERNAL, importDefault, exportDefault),
+                getPeerConfigWithAs(
+                    INTERNAL, importDefault, exportDefault, internalAs, internalAs),
                 betaIncoming,
-                getBgpActivePeerConfig(EXTERNAL, externalBetaImport, exportDefault)));
+                getPeerConfigWithAs(
+                    EXTERNAL, externalBetaImport, exportDefault, internalAs, 65102L)));
     processes
         .get(GAMMANODE)
         .setNeighbors(
             ImmutableSortedMap.of(
                 BETANODE.getIp(),
-                getBgpActivePeerConfig(INTERNAL, importBETA2GAMMA, exportDefault)));
+                getPeerConfigWithAs(
+                    INTERNAL, importBETA2GAMMA, exportDefault, internalAs, internalAs)));
 
     makePolicy(
         configs.get(ALPHANODE),
@@ -971,11 +1011,14 @@ public class ReachabilityAnswererTest {
     includeCommunities(configs.get(BETANODE), regex_community1, regex_community2);
     configs.get(BETANODE).setRouteFilterLists(ImmutableMap.of(PREFIX_LABEL, prefixMatch));
     includeCommunities(configs.get(GAMMANODE), regex_community2);
+    configs.get(GAMMANODE).setRouteFilterLists(ImmutableMap.of(PREFIX_LABEL, prefixMatch));
 
     // Create the BGP processes
     Map<NodeRecord, BgpProcess> processes =
         getBgpProcesses(configs, ALPHANODE, BETANODE, GAMMANODE);
 
+    // alpha, beta, and gamma share AS 65003 over iBGP, so local preference is carried along the
+    // path; beta reflects routes from its client alpha to gamma
     long internalAs = 65003L;
     processes
         .get(ALPHANODE)
@@ -993,7 +1036,7 @@ public class ReachabilityAnswererTest {
             ImmutableSortedMap.of(
                 ALPHANODE.getIp(),
                 getPeerConfigWithAs(
-                    INTERNAL, importALPHA2BETA, exportDefault, internalAs, internalAs),
+                    INTERNAL, importALPHA2BETA, exportDefault, internalAs, internalAs, true),
                 GAMMANODE.getIp(),
                 getPeerConfigWithAs(
                     INTERNAL, importDefault, exportDefault, internalAs, internalAs)));
@@ -1040,7 +1083,7 @@ public class ReachabilityAnswererTest {
 
     makePolicy(configs.get(GAMMANODE), importBETA2GAMMA, betaGammaImportStatements);
     makePolicy(
-        configs.get(BETANODE),
+        configs.get(GAMMANODE),
         externalGammaImport,
         ifStatement(
             checkForPrefixListMatch(PREFIX_LABEL),
@@ -1103,30 +1146,39 @@ public class ReachabilityAnswererTest {
     Map<NodeRecord, BgpProcess> processes =
         getBgpProcesses(configs, ALPHANODE, BETANODE, GAMMANODE);
 
+    // alpha, beta, and gamma share AS 65003 over iBGP, so local preference is carried along the
+    // path; beta reflects routes from its client alpha to gamma
+    long internalAs = 65003L;
     processes
         .get(ALPHANODE)
         .setNeighbors(
             ImmutableSortedMap.of(
                 alphaIncoming,
-                getBgpActivePeerConfig(EXTERNAL, externalAlphaImport, exportDefault),
+                getPeerConfigWithAs(
+                    EXTERNAL, externalAlphaImport, exportDefault, internalAs, 65101L),
                 BETANODE.getIp(),
-                getBgpActivePeerConfig(INTERNAL, importDefault, exportDefault)));
+                getPeerConfigWithAs(
+                    INTERNAL, importDefault, exportDefault, internalAs, internalAs)));
     processes
         .get(BETANODE)
         .setNeighbors(
             ImmutableSortedMap.of(
                 ALPHANODE.getIp(),
-                getBgpActivePeerConfig(INTERNAL, importALPHA2BETA, exportDefault),
+                getPeerConfigWithAs(
+                    INTERNAL, importALPHA2BETA, exportDefault, internalAs, internalAs, true),
                 GAMMANODE.getIp(),
-                getBgpActivePeerConfig(INTERNAL, importDefault, exportDefault)));
+                getPeerConfigWithAs(
+                    INTERNAL, importDefault, exportDefault, internalAs, internalAs)));
     processes
         .get(GAMMANODE)
         .setNeighbors(
             ImmutableSortedMap.of(
                 BETANODE.getIp(),
-                getBgpActivePeerConfig(INTERNAL, importBETA2GAMMA, exportDefault),
+                getPeerConfigWithAs(
+                    INTERNAL, importBETA2GAMMA, exportDefault, internalAs, internalAs),
                 gammaIncoming,
-                getBgpActivePeerConfig(EXTERNAL, externalGammaImport, exportDefault)));
+                getPeerConfigWithAs(
+                    EXTERNAL, externalGammaImport, exportDefault, internalAs, 65102L)));
 
     makePolicy(
         configs.get(ALPHANODE),
@@ -1769,6 +1821,36 @@ public class ReachabilityAnswererTest {
             .getLeft());
   }
 
+  @Test
+  public void sessionAsInfoTest() {
+    NodeRecord ALPHANODE_R = new NodeRecord("10.0.0.1", "alphaNode");
+    NodeRecord BETANODE_R = new NodeRecord("10.0.0.2", "betaNode");
+    NodeRecord GAMMANODE_R = new NodeRecord("10.0.0.3", "gammaNode");
+    Ip incomingAlpha = Ip.parse("100.0.0.10");
+    String prefixStr = "2.4.8.0/24";
+
+    TestConfigConstructionUtils.Networkv2 net =
+        pathWithAsPathLengthExample(ALPHANODE_R, BETANODE_R, GAMMANODE_R, incomingAlpha, prefixStr);
+    NetworkInfo info = net.getInfo(new PrefixSpace(PrefixRange.fromString(prefixStr)));
+
+    Node ALPHANODE = ALPHANODE_R.instantiate(info);
+    Node BETANODE = BETANODE_R.instantiate(info);
+
+    // the edge from the external neighbor into alpha
+    Edge external = info.checkForEdgeViaIps(incomingAlpha, ALPHANODE.getSingleIp()).get();
+    assertEquals(Long.valueOf(65100L), external.getSrcAs());
+    assertEquals(Long.valueOf(65001L), external.getDstAs());
+    assertFalse(external.dstAllowsLocalAsIn());
+
+    // the edge from beta into alpha, and its flip
+    Edge betaToAlpha = ALPHANODE.getIncomingFrom(BETANODE).get();
+    assertEquals(Long.valueOf(65002L), betaToAlpha.getSrcAs());
+    assertEquals(Long.valueOf(65001L), betaToAlpha.getDstAs());
+    Edge alphaToBeta = betaToAlpha.flipEdge();
+    assertEquals(Long.valueOf(65001L), alphaToBeta.getSrcAs());
+    assertEquals(Long.valueOf(65002L), alphaToBeta.getDstAs());
+  }
+
   private TestConfigConstructionUtils.Networkv2 weakerPathConstraints(
       NodeRecord ALPHANODE,
       NodeRecord BETANODE,
@@ -1806,57 +1888,78 @@ public class ReachabilityAnswererTest {
     Map<NodeRecord, BgpProcess> processes =
         getBgpProcesses(configs, ALPHANODE, BETANODE, GAMMANODE, DELTANODE, EPSILONNODE);
 
+    // every router and external neighbor is in its own AS, so every session is eBGP
+    long alphaAs = 65001L;
+    long betaAs = 65002L;
+    long gammaAs = 65003L;
+    long deltaAs = 65004L;
+    long epsilonAs = 65005L;
+    long alphaExtAs = 65101L;
+    long deltaExtAs = 65102L;
+
     processes
         .get(ALPHANODE)
         .setNeighbors(
             ImmutableSortedMap.of(
                 alphaIncoming,
-                getBgpActivePeerConfig(EXTERNAL, importDefault, exportDefault),
+                getBgpActivePeerConfig(EXTERNAL, importDefault, exportDefault, alphaAs, alphaExtAs),
                 BETANODE.getIp(),
-                getBgpActivePeerConfig(INTERNAL, importDefault, removesAllCommunities),
+                getBgpActivePeerConfig(
+                    INTERNAL, importDefault, removesAllCommunities, alphaAs, betaAs),
                 DELTANODE.getIp(),
-                getBgpActivePeerConfig(INTERNAL, importDefault, exportDefault)));
+                getBgpActivePeerConfig(INTERNAL, importDefault, exportDefault, alphaAs, deltaAs)));
     processes
         .get(BETANODE)
         .setNeighbors(
             ImmutableSortedMap.of(
                 ALPHANODE.getIp(),
-                getBgpActivePeerConfig(INTERNAL, importDefault, exportDefault),
+                getBgpActivePeerConfig(INTERNAL, importDefault, exportDefault, betaAs, alphaAs),
                 DELTANODE.getIp(),
-                getBgpActivePeerConfig(INTERNAL, importDefault, exportDefault),
+                getBgpActivePeerConfig(INTERNAL, importDefault, exportDefault, betaAs, deltaAs),
                 GAMMANODE.getIp(),
                 getBgpActivePeerConfig(
                     // if the variation is not 0, we deny traffic with community going to gamma
-                    INTERNAL, importDefault, 0 < variation ? denyCommunity : exportDefault),
+                    INTERNAL,
+                    importDefault,
+                    0 < variation ? denyCommunity : exportDefault,
+                    betaAs,
+                    gammaAs),
                 EPSILONNODE.getIp(),
-                getBgpActivePeerConfig(INTERNAL, importDefault, exportDefault)));
+                getBgpActivePeerConfig(INTERNAL, importDefault, exportDefault, betaAs, epsilonAs)));
     processes
         .get(GAMMANODE)
         .setNeighbors(
             ImmutableSortedMap.of(
-                BETANODE.getIp(), getBgpActivePeerConfig(INTERNAL, importDefault, exportDefault),
+                BETANODE.getIp(),
+                getBgpActivePeerConfig(
+                    INTERNAL, importDefault, exportDefault, gammaAs, betaAs),
                 EPSILONNODE.getIp(),
-                    getBgpActivePeerConfig(INTERNAL, importDefault, exportDefault)));
+                    getBgpActivePeerConfig(
+                        INTERNAL, importDefault, exportDefault, gammaAs, epsilonAs)));
     processes
         .get(DELTANODE)
         .setNeighbors(
             ImmutableSortedMap.of(
                 deltaIncoming,
-                getBgpActivePeerConfig(EXTERNAL, importDefault, exportDefault),
+                getBgpActivePeerConfig(EXTERNAL, importDefault, exportDefault, deltaAs, deltaExtAs),
                 ALPHANODE.getIp(),
-                getBgpActivePeerConfig(INTERNAL, importDefault, exportDefault),
+                getBgpActivePeerConfig(INTERNAL, importDefault, exportDefault, deltaAs, alphaAs),
                 BETANODE.getIp(),
-                getBgpActivePeerConfig(INTERNAL, importDefault, tagOnExport)));
+                getBgpActivePeerConfig(INTERNAL, importDefault, tagOnExport, deltaAs, betaAs)));
 
     processes
         .get(EPSILONNODE)
         .setNeighbors(
             ImmutableSortedMap.of(
                 BETANODE.getIp(),
-                getBgpActivePeerConfig(INTERNAL, importDefault, exportDefault),
+                getBgpActivePeerConfig(INTERNAL, importDefault, exportDefault, epsilonAs, betaAs),
                 GAMMANODE.getIp(),
                 getBgpActivePeerConfig(
-                    INTERNAL, importDefault, variation == 2 ? denyEverything : exportDefault)));
+                    INTERNAL,
+                    importDefault,
+                    variation == 2 ? denyEverything : exportDefault,
+                    epsilonAs,
+                    gammaAs)));
 
     // Create the policies
     RoutingPolicy alphaDefaultImport =
@@ -2030,64 +2133,82 @@ public class ReachabilityAnswererTest {
     Map<NodeRecord, BgpProcess> processes =
         getBgpProcesses(configs, ALPHANODE, BETANODE, GAMMANODE, DELTANODE, EPSILONNODE);
 
+    // every router and external neighbor is in its own AS, so every session is eBGP
+    long alphaAs = 65001L;
+    long betaAs = 65002L;
+    long gammaAs = 65003L;
+    long deltaAs = 65004L;
+    long epsilonAs = 65005L;
+    long alphaExtAs = 65101L;
+    long deltaExtAs = 65102L;
+
     processes
         .get(ALPHANODE)
         .setNeighbors(
             ImmutableSortedMap.of(
                 alphaIncoming,
-                getBgpActivePeerConfig(EXTERNAL, importDefault, exportDefault),
+                getBgpActivePeerConfig(EXTERNAL, importDefault, exportDefault, alphaAs, alphaExtAs),
                 BETANODE.getIp(),
                 getBgpActivePeerConfig(
-                    INTERNAL, importDefault, 0 < variation ? tagOnExport : exportDefault),
+                    INTERNAL,
+                    importDefault,
+                    0 < variation ? tagOnExport : exportDefault,
+                    alphaAs,
+                    betaAs),
                 DELTANODE.getIp(),
-                getBgpActivePeerConfig(INTERNAL, importDefault, tagOnExport)));
+                getBgpActivePeerConfig(INTERNAL, importDefault, tagOnExport, alphaAs, deltaAs)));
     processes
         .get(BETANODE)
         .setNeighbors(
             ImmutableSortedMap.of(
                 ALPHANODE.getIp(),
-                getBgpActivePeerConfig(INTERNAL, importDefault, exportDefault),
+                getBgpActivePeerConfig(INTERNAL, importDefault, exportDefault, betaAs, alphaAs),
                 DELTANODE.getIp(),
-                getBgpActivePeerConfig(INTERNAL, importDefault, exportDefault),
+                getBgpActivePeerConfig(INTERNAL, importDefault, exportDefault, betaAs, deltaAs),
                 GAMMANODE.getIp(),
-                getBgpActivePeerConfig(INTERNAL, importDefault, exportDefault),
+                getBgpActivePeerConfig(INTERNAL, importDefault, exportDefault, betaAs, gammaAs),
                 EPSILONNODE.getIp(),
-                getBgpActivePeerConfig(INTERNAL, importDefault, exportDefault)));
+                getBgpActivePeerConfig(INTERNAL, importDefault, exportDefault, betaAs, epsilonAs)));
     processes
         .get(GAMMANODE)
         .setNeighbors(
             ImmutableSortedMap.of(
                 BETANODE.getIp(),
-                getBgpActivePeerConfig(INTERNAL, importDefault, exportDefault),
+                getBgpActivePeerConfig(INTERNAL, importDefault, exportDefault, gammaAs, betaAs),
                 EPSILONNODE.getIp(),
-                getBgpActivePeerConfig(INTERNAL, importDefault, exportDefault)));
+                getBgpActivePeerConfig(
+                    INTERNAL, importDefault, exportDefault, gammaAs, epsilonAs)));
     processes
         .get(DELTANODE)
         .setNeighbors(
             ImmutableSortedMap.of(
                 deltaIncoming,
-                getBgpActivePeerConfig(EXTERNAL, importDefault, exportDefault),
+                getBgpActivePeerConfig(EXTERNAL, importDefault, exportDefault, deltaAs, deltaExtAs),
                 ALPHANODE.getIp(),
-                getBgpActivePeerConfig(INTERNAL, importDefault, exportDefault),
+                getBgpActivePeerConfig(INTERNAL, importDefault, exportDefault, deltaAs, alphaAs),
                 BETANODE.getIp(),
                 getBgpActivePeerConfig(
                     INTERNAL,
                     importDefault,
                     variation == 1 || variation == 3 || variation == 5
                         ? denyEverything
-                        : exportDefault)));
+                        : exportDefault, deltaAs, betaAs)));
     processes
         .get(EPSILONNODE)
         .setNeighbors(
             ImmutableSortedMap.of(
                 BETANODE.getIp(),
                 getBgpActivePeerConfig(
-                    INTERNAL, variation == 5 ? denyEverything : importDefault, exportDefault),
+                    INTERNAL,
+                    variation == 5 ? denyEverything : importDefault,
+                    exportDefault,
+                    epsilonAs,
+                    betaAs),
                 GAMMANODE.getIp(),
                 getBgpActivePeerConfig(
                     INTERNAL,
                     variation == 5 ? denyEverything : importDefault,
-                    3 <= variation ? removesAllCommunities : exportDefault)));
+                    3 <= variation ? removesAllCommunities : exportDefault, epsilonAs, gammaAs)));
 
     // Create the policies
     RoutingPolicy alphaDefaultImport =
@@ -2245,63 +2366,77 @@ public class ReachabilityAnswererTest {
         getBgpProcesses(
             configs, ALPHA_NODE, BETA_NODE, GAMMA_NODE, DELTA_NODE, EPSILON_NODE, ZETA_NODE);
 
+    // every router and external neighbor is in its own AS, so every session is eBGP
+    long alphaAs = 65001L;
+    long betaAs = 65002L;
+    long gammaAs = 65003L;
+    long deltaAs = 65004L;
+    long epsilonAs = 65005L;
+    long zetaAs = 65006L;
+    long alphaExtAs = 65101L;
+    long deltaExtAs = 65102L;
+
     processes
         .get(ALPHA_NODE)
         .setNeighbors(
             ImmutableSortedMap.of(
                 alphaIncoming,
-                getBgpActivePeerConfig(EXTERNAL, tagOnImport, exportDefault),
+                getBgpActivePeerConfig(EXTERNAL, tagOnImport, exportDefault, alphaAs, alphaExtAs),
                 BETA_NODE.getIp(),
-                getBgpActivePeerConfig(INTERNAL, importDefault, tagOnExport)));
+                getBgpActivePeerConfig(INTERNAL, importDefault, tagOnExport, alphaAs, betaAs)));
     processes
         .get(BETA_NODE)
         .setNeighbors(
             ImmutableSortedMap.of(
                 ALPHA_NODE.getIp(),
-                getBgpActivePeerConfig(INTERNAL, importDefault, exportDefault),
+                getBgpActivePeerConfig(INTERNAL, importDefault, exportDefault, betaAs, alphaAs),
                 DELTA_NODE.getIp(),
-                getBgpActivePeerConfig(INTERNAL, importDefault, exportDefault),
+                getBgpActivePeerConfig(INTERNAL, importDefault, exportDefault, betaAs, deltaAs),
                 EPSILON_NODE.getIp(),
-                getBgpActivePeerConfig(INTERNAL, importDefault, exportDefault)));
+                getBgpActivePeerConfig(INTERNAL, importDefault, exportDefault, betaAs, epsilonAs)));
     processes
         .get(GAMMA_NODE)
         .setNeighbors(
             ImmutableSortedMap.of(
                 EPSILON_NODE.getIp(),
-                getBgpActivePeerConfig(INTERNAL, importDefault, exportDefault),
+                getBgpActivePeerConfig(INTERNAL, importDefault, exportDefault, gammaAs, epsilonAs),
                 ZETA_NODE.getIp(),
-                getBgpActivePeerConfig(INTERNAL, importDefault, exportDefault)));
+                getBgpActivePeerConfig(INTERNAL, importDefault, exportDefault, gammaAs, zetaAs)));
     processes
         .get(DELTA_NODE)
         .setNeighbors(
             ImmutableSortedMap.of(
                 deltaIncoming,
-                getBgpActivePeerConfig(EXTERNAL, tagOnImport, exportDefault),
+                getBgpActivePeerConfig(EXTERNAL, tagOnImport, exportDefault, deltaAs, deltaExtAs),
                 BETA_NODE.getIp(),
-                getBgpActivePeerConfig(INTERNAL, importDefault, exportDefault),
+                getBgpActivePeerConfig(INTERNAL, importDefault, exportDefault, deltaAs, betaAs),
                 ZETA_NODE.getIp(),
-                getBgpActivePeerConfig(INTERNAL, importDefault, exportDefault)));
+                getBgpActivePeerConfig(INTERNAL, importDefault, exportDefault, deltaAs, zetaAs)));
     processes
         .get(EPSILON_NODE)
         .setNeighbors(
             ImmutableSortedMap.of(
                 BETA_NODE.getIp(),
-                getBgpActivePeerConfig(INTERNAL, checkCommunities, exportDefault),
+                getBgpActivePeerConfig(
+                    INTERNAL, checkCommunities, exportDefault, epsilonAs, betaAs),
                 GAMMA_NODE.getIp(),
-                getBgpActivePeerConfig(INTERNAL, checkCommunities, exportDefault)));
+                getBgpActivePeerConfig(
+                    INTERNAL, checkCommunities, exportDefault, epsilonAs, gammaAs)));
     processes
         .get(ZETA_NODE)
         .setNeighbors(
             ImmutableSortedMap.of(
                 DELTA_NODE.getIp(),
-                getBgpActivePeerConfig(INTERNAL, importDefault, exportDefault),
+                getBgpActivePeerConfig(INTERNAL, importDefault, exportDefault, zetaAs, deltaAs),
                 GAMMA_NODE.getIp(),
                 getBgpActivePeerConfig(
                     INTERNAL,
                     importDefault,
                     variation == 2
                         ? deniesAll
-                        : (variation == 3 ? removesAllCommunities : exportDefault))));
+                        : (variation == 3 ? removesAllCommunities : exportDefault),
+                    zetaAs,
+                    gammaAs)));
 
     // Create the policies
     RoutingPolicy alphaDefaultImport =
@@ -2473,50 +2608,62 @@ public class ReachabilityAnswererTest {
     Map<NodeRecord, BgpProcess> processes =
         getBgpProcesses(configs, ALPHA_NODE, BETA_NODE, GAMMA_NODE, DELTA_NODE, EPSILON_NODE);
 
+    // every router and external neighbor is in its own AS, so every session is eBGP
+    long alphaAs = 65001L;
+    long betaAs = 65002L;
+    long gammaAs = 65003L;
+    long deltaAs = 65004L;
+    long epsilonAs = 65005L;
+    long alphaExt1As = 65101L;
+    long alphaExt2As = 65102L;
+
     processes
         .get(ALPHA_NODE)
         .setNeighbors(
             ImmutableSortedMap.of(
                 alphaIncoming1,
-                getBgpActivePeerConfig(EXTERNAL, tagOnImport1, exportDefault),
+                getBgpActivePeerConfig(EXTERNAL, tagOnImport1, exportDefault, alphaAs, alphaExt1As),
                 alphaIncoming2,
-                getBgpActivePeerConfig(EXTERNAL, tagOnImport2, exportDefault),
+                getBgpActivePeerConfig(EXTERNAL, tagOnImport2, exportDefault, alphaAs, alphaExt2As),
                 BETA_NODE.getIp(),
-                getBgpActivePeerConfig(INTERNAL, importDefault, exportDefault)));
+                getBgpActivePeerConfig(INTERNAL, importDefault, exportDefault, alphaAs, betaAs)));
     processes
         .get(BETA_NODE)
         .setNeighbors(
             ImmutableSortedMap.of(
                 ALPHA_NODE.getIp(),
-                getBgpActivePeerConfig(INTERNAL, importDefault, exportDefault),
+                getBgpActivePeerConfig(INTERNAL, importDefault, exportDefault, betaAs, alphaAs),
                 DELTA_NODE.getIp(),
-                getBgpActivePeerConfig(INTERNAL, importDefault, exportDefault),
+                getBgpActivePeerConfig(INTERNAL, importDefault, exportDefault, betaAs, deltaAs),
                 EPSILON_NODE.getIp(),
-                getBgpActivePeerConfig(INTERNAL, importDefault, exportDefault)));
+                getBgpActivePeerConfig(INTERNAL, importDefault, exportDefault, betaAs, epsilonAs)));
     processes
         .get(GAMMA_NODE)
         .setNeighbors(
             ImmutableSortedMap.of(
                 BETA_NODE.getIp(),
-                getBgpActivePeerConfig(INTERNAL, deniesCommunity1, exportDefault),
+                getBgpActivePeerConfig(INTERNAL, deniesCommunity1, exportDefault, gammaAs, betaAs),
                 EPSILON_NODE.getIp(),
-                getBgpActivePeerConfig(INTERNAL, importDefault, exportDefault)));
+                getBgpActivePeerConfig(
+                    INTERNAL, importDefault, exportDefault, gammaAs, epsilonAs)));
     processes
         .get(DELTA_NODE)
         .setNeighbors(
             ImmutableSortedMap.of(
                 BETA_NODE.getIp(),
-                getBgpActivePeerConfig(INTERNAL, deniesCommunity2, exportDefault),
+                getBgpActivePeerConfig(INTERNAL, deniesCommunity2, exportDefault, deltaAs, betaAs),
                 EPSILON_NODE.getIp(),
-                getBgpActivePeerConfig(INTERNAL, importDefault, exportDefault)));
+                getBgpActivePeerConfig(
+                    INTERNAL, importDefault, exportDefault, deltaAs, epsilonAs)));
     processes
         .get(EPSILON_NODE)
         .setNeighbors(
             ImmutableSortedMap.of(
                 GAMMA_NODE.getIp(),
-                getBgpActivePeerConfig(INTERNAL, importDefault, exportDefault),
+                getBgpActivePeerConfig(INTERNAL, importDefault, exportDefault, epsilonAs, gammaAs),
                 DELTA_NODE.getIp(),
-                getBgpActivePeerConfig(INTERNAL, importDefault, exportDefault)));
+                getBgpActivePeerConfig(
+                    INTERNAL, importDefault, exportDefault, epsilonAs, deltaAs)));
 
     // Create the policies
     RoutingPolicy alphaDefaultImport =

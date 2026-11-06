@@ -19,6 +19,10 @@ public class Node extends Location {
   /// Included for sorting purposes only
   private @Nullable Ip representativeIp;
 
+  /// Route-reflection settings of this node's BGP process (see setRouteReflectionInfo)
+  private boolean clientToClientReflection = true;
+  private @Nonnull Set<Long> clusterIds = Set.of();
+
   public Node(@Nonnull Set<Edge> incomingEdges, @Nonnull String name) {
     this.name = name.toLowerCase();
     this.resetNeighbors(incomingEdges);
@@ -78,6 +82,25 @@ public class Node extends Location {
       throw new BatfishException(
           "Node.getIp() - Trying to get distinct Ip address from node with multiple.");
     }
+  }
+
+  /// Whether this node reflects routes learned from route-reflector clients to other clients
+  public boolean clientToClientReflection() {
+    return clientToClientReflection;
+  }
+
+  /// The cluster IDs this node uses on any of its sessions; it rejects a route whose cluster list
+  /// contains one of them
+  @Nonnull
+  public Set<Long> getClusterIds() {
+    return clusterIds;
+  }
+
+  /// Records the route-reflection settings of this node's BGP process
+  public void setRouteReflectionInfo(
+      boolean clientToClientReflection, @Nonnull Set<Long> clusterIds) {
+    this.clientToClientReflection = clientToClientReflection;
+    this.clusterIds = Set.copyOf(clusterIds);
   }
 
   @Nonnull
@@ -149,12 +172,15 @@ public class Node extends Location {
 
   @Override
   public Node copy() {
-    return new Node(
-        neighbors.values().stream()
-            .flatMap(map -> map.values().stream())
-            .map(Edge::copy)
-            .collect(Collectors.toSet()),
-        name);
+    Node copy =
+        new Node(
+            neighbors.values().stream()
+                .flatMap(map -> map.values().stream())
+                .map(Edge::copy)
+                .collect(Collectors.toSet()),
+            name);
+    copy.setRouteReflectionInfo(clientToClientReflection, clusterIds);
+    return copy;
   }
 
   @Override

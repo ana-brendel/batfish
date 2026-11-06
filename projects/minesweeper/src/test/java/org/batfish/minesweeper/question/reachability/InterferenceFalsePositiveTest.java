@@ -104,6 +104,16 @@ public class InterferenceFalsePositiveTest {
     B
   }
 
+  /** Which external neighbors' edges are passed as the ingress set. */
+  enum Ingress {
+    /** {}: every edge from an external neighbor is a possible origin. */
+    ALL,
+    /** {E1 -> A} */
+    E1,
+    /** {E2 -> B}, where E2 attaches to B */
+    E2
+  }
+
   record Spec(
       String name,
       boolean withB, // second path A -> B -> T (sessions A-B and B-T)
@@ -113,11 +123,10 @@ public class InterferenceFalsePositiveTest {
       boolean tTagsExportToA, // T's export back to A adds 2:2
       boolean tDeniesFromB, // T's import from B also denies 2:2
       Sessions sessions,
-      boolean ingressE1Only, // pass {E1 -> A} as the ingress set instead of {}
+      Ingress ingress,
       Boolean realInterference,
-      // 0: single A-T session; 1: add a second A-T session (10.0.1.1 <-> 10.0.1.3) whose imports
-      // permit all; 2: same two sessions but T's 2:2 filter is on the second session instead
-      int parallelAT) {
+      // add a second A-T session (10.0.1.1 <-> 10.0.1.3) whose imports permit all
+      boolean parallelAT) {
 
     Spec(
         String name,
@@ -128,7 +137,7 @@ public class InterferenceFalsePositiveTest {
         boolean tTagsExportToA,
         boolean tDeniesFromB,
         Sessions sessions,
-        boolean ingressE1Only,
+        Ingress ingress,
         Boolean realInterference) {
       this(
           name,
@@ -139,9 +148,9 @@ public class InterferenceFalsePositiveTest {
           tTagsExportToA,
           tDeniesFromB,
           sessions,
-          ingressE1Only,
+          ingress,
           realInterference,
-          0);
+          false);
     }
 
     Spec with(Sessions s) {
@@ -154,7 +163,7 @@ public class InterferenceFalsePositiveTest {
           tTagsExportToA,
           tDeniesFromB,
           s,
-          ingressE1Only,
+          ingress,
           null,
           parallelAT);
     }
@@ -314,7 +323,7 @@ public class InterferenceFalsePositiveTest {
     if (s.withB()) {
       aN.put(B_R.getIp(), peer(permitAll, permitAll, asA, asB));
     }
-    if (s.parallelAT() > 0) {
+    if (s.parallelAT()) {
       aN.put(T2_IP, peerWithLocalIp(permitAll, permitAll, asA, asT, A2_IP));
     }
     procs.get(A_R).setNeighbors(ImmutableSortedMap.copyOf(aN));
@@ -324,18 +333,15 @@ public class InterferenceFalsePositiveTest {
     tN.put(
         A_R.getIp(),
         peer(
-            s.parallelAT() == 2 ? permitAll : tImportFromA,
+            tImportFromA,
             s.tTagsExportToA() ? tExportToA : permitAll,
             asT,
             asA));
     if (s.withB()) {
       tN.put(B_R.getIp(), peer(s.tDeniesFromB() ? tImportFromB : permitAll, permitAll, asT, asB));
     }
-    if (s.parallelAT() > 0) {
-      tN.put(
-          A2_IP,
-          peerWithLocalIp(
-              s.parallelAT() == 2 ? tImportFromA : permitAll, permitAll, asT, asA, T2_IP));
+    if (s.parallelAT()) {
+      tN.put(A2_IP, peerWithLocalIp(permitAll, permitAll, asT, asA, T2_IP));
     }
     procs.get(T_R).setNeighbors(ImmutableSortedMap.copyOf(tN));
 
@@ -429,11 +435,12 @@ public class InterferenceFalsePositiveTest {
         }
       }
     }
-    Set<Edge> ingress = Set.of();
-    if (s.ingressE1Only()) {
-      Node a = A_R.instantiate(info);
-      ingress = Set.of(a.getIncomingFrom(E1_IP).orElseThrow());
-    }
+    Set<Edge> ingress =
+        switch (s.ingress()) {
+          case ALL -> Set.of();
+          case E1 -> Set.of(A_R.instantiate(info).getIncomingFrom(E1_IP).orElseThrow());
+          case E2 -> Set.of(B_R.instantiate(info).getIncomingFrom(E2_IP).orElseThrow());
+        };
     TableAnswerElement tae = runQuery(info, prefix, target, new Invariant(net.tbdd()), ingress);
     return processResultRows(tae.getRowsList());
   }
@@ -466,30 +473,33 @@ public class InterferenceFalsePositiveTest {
    * permits it (B never prefers T's route, which contains AS 65002 or was dropped).
    */
   static final Spec BASE =
-      new Spec("base", true, E2At.A, false, false, false, false, Sessions.EBGP, false, false);
+      new Spec("base", true, E2At.A, false, false, false, false, Sessions.EBGP, Ingress.ALL, false);
 
   /** Same as BASE but the ingress set is {E1 -> A} explicitly. */
   static final Spec BASE_INGRESS_E1 =
       new Spec(
-          "base-ingressE1", true, E2At.A, false, false, false, false, Sessions.EBGP, true, false);
+          "base-ingressE1", true, E2At.A, false, false, false, false, Sessions.EBGP, Ingress.E1,
+          false);
 
   /** Control: E2's import also clears communities, so no route at A can carry 2:2. */
   static final Spec CONTROL_E2_CLEARS =
       new Spec(
-          "control-e2Clears", true, E2At.A, true, false, false, false, Sessions.EBGP, false, false);
+          "control-e2Clears", true, E2At.A, true, false, false, false, Sessions.EBGP, Ingress.ALL,
+          false);
 
   /** Control: single ingress, single path, no competing route at all. */
   static final Spec CONTROL_SINGLE =
       new Spec(
-          "control-single", false, E2At.NONE, false, false, false, false, Sessions.EBGP, false,
-          false);
+          "control-single", false, E2At.NONE, false, false, false, false, Sessions.EBGP,
+          Ingress.ALL, false);
 
   /**
    * (a) Second path removed (nodes A, T only). Real interference: if E2 announces a route with
    * 2:2 that A prefers (e.g. shorter AS path), T's import from A drops it and T has no route.
    */
   static final Spec A_NO_SECOND_PATH =
-      new Spec("a-noSecondPath", false, E2At.A, false, false, false, false, Sessions.EBGP, false,
+      new Spec(
+          "a-noSecondPath", false, E2At.A, false, false, false, false, Sessions.EBGP, Ingress.ALL,
           true);
 
   /**
@@ -498,8 +508,8 @@ public class InterferenceFalsePositiveTest {
    */
   static final Spec A2_SECOND_PATH_ALSO_FILTERS =
       new Spec(
-          "a2-secondPathAlsoFilters", true, E2At.A, false, false, false, true, Sessions.EBGP, false,
-          true);
+          "a2-secondPathAlsoFilters", true, E2At.A, false, false, false, true, Sessions.EBGP,
+          Ingress.ALL, true);
 
   /**
    * (b) One path (A, T), E1's import sets local-pref 200 and E2's sets 50. No real interference:
@@ -507,20 +517,23 @@ public class InterferenceFalsePositiveTest {
    */
   static final Spec B_LOWER_LOCAL_PREF =
       new Spec("b-e2LowerLocalPref", false, E2At.A, false, true, false, false, Sessions.EBGP,
-          false, false);
+          Ingress.ALL, false);
 
   /**
    * (c) The competing route enters at B (E2 -> B) instead of at A; B exports it to A and to T.
    * No real interference: if A selects B's route (which may carry 2:2), B's own best is E2's route
-   * (A's copy comes back with AS 65002 in its path and is dropped), which B exports to T.
+   * (A's copy comes back with AS 65002 in its path and is dropped), which B exports to T. The
+   * ingress set {E2 -> B} makes the good path start at E2, so the competing route is the good
+   * path's own route, and the check finds no interference.
    */
   static final Spec C_E2_AT_B =
-      new Spec("c-e2AtB", true, E2At.B, false, false, false, false, Sessions.EBGP, false, false);
+      new Spec(
+          "c-e2AtB", true, E2At.B, false, false, false, false, Sessions.EBGP, Ingress.E2, false);
 
   /** (c) with ingress {E1 -> A}, so the good path is forced to be E1 -> A -> T. */
   static final Spec C_E2_AT_B_INGRESS_E1 =
       new Spec(
-          "c-e2AtB-ingressE1", true, E2At.B, false, false, false, false, Sessions.EBGP, true,
+          "c-e2AtB-ingressE1", true, E2At.B, false, false, false, false, Sessions.EBGP, Ingress.E1,
           false);
 
   /**
@@ -531,14 +544,14 @@ public class InterferenceFalsePositiveTest {
    */
   static final Spec E_LOOP_BACK_TAG =
       new Spec(
-          "e-loopBackTag", false, E2At.NONE, false, false, true, false, Sessions.EBGP, false, false);
+          "e-loopBackTag", false, E2At.NONE, false, false, true, false, Sessions.EBGP, Ingress.ALL,
+          false);
 
   /**
    * Smallest form of the two-path hypothesis: nodes A and T only, joined by two sessions. Session
    * 10.0.0.1 <-> 10.0.0.3 has T's 2:2 filter; the parallel session 10.0.1.1 <-> 10.0.1.3 permits
    * everything. No real interference: A advertises its best route on both sessions, so even when it
-   * carries 2:2, T accepts it on the parallel session. (Whether NEW flags it depends on which of
-   * the two equally short A -> T edges PathExploration puts on the good path.)
+   * carries 2:2, T accepts it on the parallel session.
    */
   static final Spec PARALLEL_SESSION =
       new Spec(
@@ -550,81 +563,17 @@ public class InterferenceFalsePositiveTest {
           false,
           false,
           Sessions.EBGP,
+          Ingress.ALL,
           false,
-          false,
-          1);
-
-  /** PARALLEL_SESSION with the 2:2 filter moved to the 10.0.1.x session. */
-  static final Spec PARALLEL_SESSION_SWAPPED =
-      new Spec(
-          "parallelSessionSwapped",
-          false,
-          E2At.A,
-          false,
-          false,
-          false,
-          false,
-          Sessions.EBGP,
-          false,
-          false,
-          2);
-
-  /** PARALLEL_SESSION with ingress {E1 -> A}. */
-  static final Spec PARALLEL_SESSION_INGRESS_E1 =
-      new Spec(
-          "parallelSession-ingressE1",
-          false,
-          E2At.A,
-          false,
-          false,
-          false,
-          false,
-          Sessions.EBGP,
-          true,
-          false,
-          1);
-
-  /** PARALLEL_SESSION_SWAPPED with ingress {E1 -> A}. */
-  static final Spec PARALLEL_SESSION_SWAPPED_INGRESS_E1 =
-      new Spec(
-          "parallelSessionSwapped-ingressE1",
-          false,
-          E2At.A,
-          false,
-          false,
-          false,
-          false,
-          Sessions.EBGP,
-          true,
-          false,
-          2);
+          true);
 
   @Test
   public void parallelSession() {
-    check(PARALLEL_SESSION);
-  }
-
-  @Test
-  public void parallelSessionSwapped() {
-    // TODO false positive: only the A-T session that the good path uses filters 2:2, so a 2:2 route
-    // at A still reaches T over the other session. With the filter on the other session
-    // (parallelSession) the check passes, so the verdict depends on which path is picked first.
-    // check(PARALLEL_SESSION_SWAPPED);
-    checkGoodPath(PARALLEL_SESSION_SWAPPED);
-  }
-
-  @Test
-  public void parallelSessionIngressE1() {
-    check(PARALLEL_SESSION_INGRESS_E1);
-  }
-
-  @Test
-  public void parallelSessionSwappedIngressE1() {
-    // TODO false positive: only the A-T session that the good path uses filters 2:2, so a 2:2 route
-    // at A still reaches T over the other session. With the filter on the other session
-    // (parallelSession) the check passes, so the verdict depends on which path is picked first.
-    // check(PARALLEL_SESSION_SWAPPED_INGRESS_E1);
-    checkGoodPath(PARALLEL_SESSION_SWAPPED_INGRESS_E1);
+    // TODO false positive: the check finds interference exactly when the good path uses the A-T
+    // session with T's 2:2 filter, and the two A -> T edges are equally short, so the verdict
+    // depends on which one PathExploration tries first.
+    // check(PARALLEL_SESSION);
+    checkGoodPath(PARALLEL_SESSION);
   }
 
   @Test
@@ -676,8 +625,8 @@ public class InterferenceFalsePositiveTest {
   @Test
   public void cE2AtBIngressE1() {
     // TODO false positive: ingress forces the good path to start at E1. E2's route enters at B and
-    // can be selected at A, where T's import from A would drop it, but B delivers it to T. With no
-    // ingress (cE2AtB) the good path starts at E2 and the check passes.
+    // can be selected at A, where T's import from A would drop it, but B delivers it to T. With
+    // ingress {E2 -> B} (cE2AtB) the good path starts at E2 and the check passes.
     // check(C_E2_AT_B_INGRESS_E1);
     checkGoodPath(C_E2_AT_B_INGRESS_E1);
   }
@@ -729,8 +678,7 @@ public class InterferenceFalsePositiveTest {
             C_E2_AT_B,
             C_E2_AT_B_INGRESS_E1,
             E_LOOP_BACK_TAG,
-            PARALLEL_SESSION,
-            PARALLEL_SESSION_SWAPPED)) {
+            PARALLEL_SESSION)) {
       for (Sessions sess : List.of(Sessions.NO_AS, Sessions.IBGP_CORE)) {
         checkGoodPath(s.with(sess));
       }

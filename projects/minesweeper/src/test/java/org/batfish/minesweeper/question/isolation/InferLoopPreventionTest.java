@@ -11,6 +11,7 @@ import static org.junit.Assert.assertTrue;
 
 import com.google.common.collect.ImmutableSortedMap;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
@@ -24,6 +25,7 @@ import org.batfish.datamodel.Ip;
 import org.batfish.datamodel.NetworkFactory;
 import org.batfish.datamodel.PrefixRange;
 import org.batfish.datamodel.PrefixSpace;
+import org.batfish.datamodel.RoutingProtocol;
 import org.batfish.datamodel.Vrf;
 import org.batfish.datamodel.bgp.AddressFamilyCapabilities;
 import org.batfish.datamodel.bgp.Ipv4UnicastAddressFamily;
@@ -32,6 +34,8 @@ import org.batfish.datamodel.bgp.NextHopIpTieBreaker;
 import org.batfish.datamodel.routing_policy.RoutingPolicy;
 import org.batfish.datamodel.routing_policy.expr.ExplicitAs;
 import org.batfish.datamodel.routing_policy.expr.LiteralAsList;
+import org.batfish.datamodel.routing_policy.expr.MatchProtocol;
+import org.batfish.datamodel.routing_policy.statement.If;
 import org.batfish.datamodel.routing_policy.statement.PrependAsPath;
 import org.batfish.datamodel.routing_policy.statement.Statement;
 import org.batfish.minesweeper.bdd.TransferBDD;
@@ -46,10 +50,13 @@ import org.junit.Test;
 
 /// Tests that invariant inference takes BGP's loop prevention into account: a route that BGP drops
 /// on its way to a router need not satisfy that router's invariant. The rules are AS-path loop
-/// detection, iBGP relaying with route reflection, the originator ID, and cluster lists. Each test
-/// checks a property of the form "no route at x carries 2:2". The external neighbors' imports
-/// clear all communities, so a route with 2:2 can only reach x from another router, which tags it
-/// on export.
+/// detection, iBGP relaying with route reflection, the originator ID, and cluster lists. It also
+/// tests the protocol that BGP records for a route, which the iBGP rules depend on and which
+/// policies can match.
+///
+/// Each test checks a property of the form "no route at x carries 2:2". The external neighbors'
+/// imports clear all communities, so a route with 2:2 can only reach x after some policy tags it,
+/// which is an export unless the test says otherwise.
 public class InferLoopPreventionTest {
   private static final String PERMIT_ALL = "permitAll";
   private static final String CLEAR = "clearCommunities";
@@ -92,6 +99,10 @@ public class InferLoopPreventionTest {
       boolean replaceAses) {
     PeerSpec withExport(String policy) {
       return new PeerSpec(remoteAs, importPolicy, policy, allowLocalAsIn, replaceAses);
+    }
+
+    PeerSpec withImport(String policy) {
+      return new PeerSpec(remoteAs, policy, exportPolicy, allowLocalAsIn, replaceAses);
     }
 
     PeerSpec allowingLocalAsIn() {
@@ -170,6 +181,25 @@ public class InferLoopPreventionTest {
   /// Sets the policy that sender exports to receiver with
   private void export(NodeRecord sender, NodeRecord receiver, String policy) {
     neighbors.get(sender).compute(receiver.getIp(), (ip, spec) -> spec.withExport(policy));
+  }
+
+  /// Sets the policy that receiver imports with from the neighbor at the given IP
+  private void importFrom(NodeRecord receiver, Ip neighbor, String policy) {
+    neighbors.get(receiver).compute(neighbor, (ip, spec) -> spec.withImport(policy));
+  }
+
+  /// Defines a policy on the node that tags exactly the routes of the given protocols and permits
+  /// every route, after clearing all communities if clearFirst is true; returns its name
+  private String tagProtocols(NodeRecord node, boolean clearFirst, RoutingProtocol... protocols) {
+    String name = "tag" + Arrays.toString(protocols) + (clearFirst ? "AfterClear" : "");
+    List<Statement> statements = new ArrayList<>();
+    if (clearFirst) {
+      statements.addAll(clearCommunities().subList(0, 1));
+    }
+    statements.add(
+        new If(new MatchProtocol(protocols), addToCommunities(COMM), permitRoute(true)));
+    policy(configs.get(node), name, statements);
+    return name;
   }
 
   private Networkv2 build() {
@@ -470,5 +500,111 @@ public class InferLoopPreventionTest {
     reflector(rr2, 2);
     client(rr1, a);
     assertFalse(noTagAt(build(), rr2));
+  }
+
+  // The protocol BGP records for a route, which policies can match. As in Batfish, an import
+  // policy sees the protocol of the session the route arrives on (BGP for eBGP, IBGP for iBGP),
+  // and an export policy sees the protocol of the session the sender learned the route on, not of
+  // the one it sends it on. In each test, one policy tags the routes of some protocols.
+
+  @Test
+  public void ebgpImportSeesBgp() {
+    // a's import from its external neighbor tags iBGP routes, but routes arrive over eBGP
+    NodeRecord a = router("a", 1);
+    external(a, "100.0.0.1", 100);
+    importFrom(a, Ip.parse("100.0.0.1"), tagProtocols(a, true, RoutingProtocol.IBGP));
+    assertTrue(noTagAt(build(), a));
+  }
+
+  @Test
+  public void ebgpImportOfBgpIsTagged() {
+    // control: the import tags eBGP routes
+    NodeRecord a = router("a", 1);
+    external(a, "100.0.0.1", 100);
+    importFrom(a, Ip.parse("100.0.0.1"), tagProtocols(a, true, RoutingProtocol.BGP));
+    assertFalse(noTagAt(build(), a));
+  }
+
+  @Test
+  public void ibgpImportSeesIbgp() {
+    // b's import from a tags eBGP routes, but routes arrive from a over iBGP
+    NodeRecord a = router("a", 1);
+    NodeRecord b = router("b", 1);
+    external(a, "100.0.0.1", 100);
+    session(a, b);
+    importFrom(b, a.getIp(), tagProtocols(b, false, RoutingProtocol.BGP));
+    assertTrue(noTagAt(build(), b));
+  }
+
+  @Test
+  public void ibgpImportOfIbgpIsTagged() {
+    // control: b's import tags iBGP routes
+    NodeRecord a = router("a", 1);
+    NodeRecord b = router("b", 1);
+    external(a, "100.0.0.1", 100);
+    session(a, b);
+    importFrom(b, a.getIp(), tagProtocols(b, false, RoutingProtocol.IBGP));
+    assertFalse(noTagAt(build(), b));
+  }
+
+  @Test
+  public void exportSeesProtocolRouteWasLearnedWith() {
+    // a's export to b over iBGP tags iBGP routes, but a learned its routes over eBGP
+    NodeRecord a = router("a", 1);
+    NodeRecord b = router("b", 1);
+    external(a, "100.0.0.1", 100);
+    session(a, b);
+    export(a, b, tagProtocols(a, false, RoutingProtocol.IBGP));
+    assertTrue(noTagAt(build(), b));
+  }
+
+  @Test
+  public void exportOfEbgpLearnedRouteIsTagged() {
+    // control: a's export to b tags eBGP routes
+    NodeRecord a = router("a", 1);
+    NodeRecord b = router("b", 1);
+    external(a, "100.0.0.1", 100);
+    session(a, b);
+    export(a, b, tagProtocols(a, false, RoutingProtocol.BGP));
+    assertFalse(noTagAt(build(), b));
+  }
+
+  @Test
+  public void ebgpExportSeesIbgpLearnedRoute() {
+    // b's export to c over eBGP tags eBGP routes, but b learns from a over iBGP; the routes c sends
+    // back to b carry b's AS, so b drops them
+    NodeRecord a = router("a", 1);
+    NodeRecord b = router("b", 1);
+    NodeRecord c = router("c", 2);
+    external(a, "100.0.0.1", 100);
+    session(a, b);
+    session(b, c);
+    export(b, c, tagProtocols(b, false, RoutingProtocol.BGP));
+    assertTrue(noTagAt(build(), c));
+  }
+
+  @Test
+  public void ebgpExportOfIbgpLearnedRouteIsTagged() {
+    // control: b's export to c tags iBGP routes
+    NodeRecord a = router("a", 1);
+    NodeRecord b = router("b", 1);
+    NodeRecord c = router("c", 2);
+    external(a, "100.0.0.1", 100);
+    session(a, b);
+    session(b, c);
+    export(b, c, tagProtocols(b, false, RoutingProtocol.IBGP));
+    assertFalse(noTagAt(build(), c));
+  }
+
+  @Test
+  public void exportTermForLocalRoutesDoesNotMatchLearnedRoutes() {
+    // a's export to b tags aggregate and static routes; inference only covers routes that enter
+    // the network over an edge, which a learns over BGP, so the term never matches
+    NodeRecord a = router("a", 1);
+    NodeRecord b = router("b", 2);
+    external(a, "100.0.0.1", 100);
+    session(a, b);
+    export(a, b, tagProtocols(a, false, RoutingProtocol.AGGREGATE, RoutingProtocol.STATIC));
+    assertTrue(noTagAt(build(), b));
   }
 }

@@ -454,9 +454,10 @@ public class NetworkInfo {
     }
   }
 
-  /// Records on the node the route-reflection settings of its BGP process
+  /// Records on the node the route-reflection settings and router ID of its BGP process
   private static void setNodeInfo(@Nonnull Node node, @Nonnull BgpProcess process) {
     node.setRouteReflectionInfo(process.getClientToClientReflection(), process.getClusterIds());
+    node.setRouterId(process.getRouterId());
   }
 
   /// String representation of the provided location within context of the network (ie using node

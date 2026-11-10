@@ -71,11 +71,8 @@ public final class ConfigAtomicPredicates {
 
   private final List<TunnelEncapsulationAttribute> _tunnelEncapsulationAttributes;
 
-  /**
-   * The AS numbers for which a symbolic route tracks whether its AS path contains them (see {@link
-   * org.batfish.minesweeper.bdd.BDDRoute#getAsPathContains(long)}).
-   */
-  private final List<Long> _trackedAses;
+  /** The BGP loop-prevention state that a symbolic route tracks (see {@link BgpLoopTracking}) */
+  private final BgpLoopTracking _loopTracking;
 
   private static boolean isStandardCommunity(CommunityVar var) {
     if (var.getType() == CommunityVar.Type.REGEX) {
@@ -97,20 +94,20 @@ public final class ConfigAtomicPredicates {
       List<Map.Entry<Configuration, Collection<RoutingPolicy>>> configAndPolicies,
       Set<CommunityVar> extraCommunities,
       Set<String> extraAsPathRegexes) {
-    this(configAndPolicies, extraCommunities, extraAsPathRegexes, ImmutableList.of());
+    this(configAndPolicies, extraCommunities, extraAsPathRegexes, BgpLoopTracking.NONE);
   }
 
   /**
-   * Like {@link #ConfigAtomicPredicates(List, Set, Set)}, but also tracking whether a route's AS
-   * path contains each of the given AS numbers.
+   * Like {@link #ConfigAtomicPredicates(List, Set, Set)}, but also tracking the given parts of
+   * BGP's loop-prevention state in each route.
    *
-   * @param trackedAses the AS numbers to track in AS paths
+   * @param loopTracking the loop-prevention state to track
    */
   public ConfigAtomicPredicates(
       List<Map.Entry<Configuration, Collection<RoutingPolicy>>> configAndPolicies,
       Set<CommunityVar> extraCommunities,
       Set<String> extraAsPathRegexes,
-      List<Long> trackedAses) {
+      BgpLoopTracking loopTracking) {
     ImmutableSet.Builder<CommunityVar> allCommunitiesB = ImmutableSet.builder();
     ImmutableSet.Builder<SymbolicAsPathRegex> allAsPathRegexesB = ImmutableSet.builder();
     Set<String> allTrackNames = new TreeSet<>();
@@ -161,7 +158,7 @@ public final class ConfigAtomicPredicates {
     _tracks = ImmutableList.copyOf(allTrackNames);
     _sourceVrfs = ImmutableList.copyOf(allSourceVrfNames);
     _tunnelEncapsulationAttributes = ImmutableList.copyOf(allTunnelEncapsulationAttributes.build());
-    _trackedAses = ImmutableList.copyOf(trackedAses);
+    _loopTracking = loopTracking;
   }
 
   public ConfigAtomicPredicates(ConfigAtomicPredicates other) {
@@ -175,7 +172,7 @@ public final class ConfigAtomicPredicates {
     _tracks = other._tracks;
     _sourceVrfs = other._sourceVrfs;
     _tunnelEncapsulationAttributes = other._tunnelEncapsulationAttributes;
-    _trackedAses = other._trackedAses;
+    _loopTracking = other._loopTracking;
   }
 
   /**
@@ -365,7 +362,7 @@ public final class ConfigAtomicPredicates {
     return _sourceVrfs;
   }
 
-  public List<Long> getTrackedAses() {
-    return _trackedAses;
+  public BgpLoopTracking getLoopTracking() {
+    return _loopTracking;
   }
 }

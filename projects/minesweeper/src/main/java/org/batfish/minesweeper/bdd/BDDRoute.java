@@ -28,6 +28,7 @@ import org.batfish.datamodel.Ip;
 import org.batfish.datamodel.OriginType;
 import org.batfish.datamodel.RoutingProtocol;
 import org.batfish.datamodel.bgp.TunnelEncapsulationAttribute;
+import org.batfish.minesweeper.BgpLoopTracking;
 import org.batfish.minesweeper.ConfigAtomicPredicates;
 import org.batfish.minesweeper.IDeepCopy;
 import org.batfish.minesweeper.OspfType;
@@ -179,6 +180,29 @@ public final class BDDRoute implements IDeepCopy<BDDRoute> {
 
   private BDD[] _asPathContains;
 
+  /**
+   * Whether the route was received from a route-reflector client, as recorded by BGP on import
+   * (Batfish's receivedFromRouteReflectorClient). Like the fields below, it is updated only by
+   * clients that model BGP's own behavior between routers; route policies cannot change it.
+   */
+  private BDD _receivedFromRrClient;
+
+  /**
+   * The route-reflection cluster IDs tracked in cluster lists, and for each one (at the same index)
+   * a BDD for whether the route's cluster list contains it.
+   */
+  private final List<Long> _trackedClusterIds;
+
+  private BDD[] _clusterListContains;
+
+  /**
+   * The router IDs that the route's originator ID is told apart from, and the originator ID
+   * itself: the index of one of those router IDs, or -1 for any other originator ID.
+   */
+  private final List<Ip> _trackedRouterIds;
+
+  private BDDDomain<Integer> _originator;
+
   private MutableBDDInteger _weight;
 
   // whether the analysis encountered an unsupported route-policy
@@ -207,7 +231,7 @@ public final class BDDRoute implements IDeepCopy<BDDRoute> {
         aps.getSourceVrfs().size(),
         aps.getTracks().size(),
         aps.getTunnelEncapsulationAttributes(),
-        aps.getTrackedAses());
+        aps.getLoopTracking());
   }
 
   /**
@@ -235,12 +259,15 @@ public final class BDDRoute implements IDeepCopy<BDDRoute> {
         numSourceVrfs,
         numTracks,
         tunnelEncapsulationAttributes,
-        ImmutableList.of());
+        BgpLoopTracking.NONE);
   }
 
   /**
-   * As above, and also allocating one BDD variable per tracked AS number, representing whether
-   * the route's AS path contains it.
+   * As above, and also allocating BDD variables for the given parts of BGP's loop-prevention state:
+   * one per tracked AS number, representing whether the route's AS path contains it; one for
+   * whether the route was received from a route-reflector client; one per tracked cluster ID,
+   * representing whether the route's cluster list contains it; and enough to tell the tracked
+   * router IDs, and any other, apart in the route's originator ID.
    */
   private BDDRoute(
       BDDFactory factory,
@@ -251,8 +278,9 @@ public final class BDDRoute implements IDeepCopy<BDDRoute> {
       int numSourceVrfs,
       int numTracks,
       List<TunnelEncapsulationAttribute> tunnelEncapsulationAttributes,
-      List<Long> trackedAses) {
+      BgpLoopTracking loopTracking) {
     _factory = factory;
+    List<Long> trackedAses = loopTracking.ases();
 
     int bitsToRepresentAdmin =
         LongMath.log2(AbstractRoute.MAX_ADMIN_DISTANCE, RoundingMode.CEILING);
@@ -280,7 +308,11 @@ public final class BDDRoute implements IDeepCopy<BDDRoute> {
             + numBits(OriginType.values().length)
             + numBits(RoutingProtocol.values().length)
             + numBits(allMetricTypes.size())
-            + trackedAses.size();
+            + trackedAses.size()
+            + 1
+            + loopTracking.clusterIds().size()
+            // one extra value for an originator ID other than the tracked router IDs
+            + numBits(loopTracking.routerIds().size() + 1);
     if (numVars < numNeeded) {
       factory.setVarNum(numNeeded);
     }
@@ -405,6 +437,29 @@ public final class BDDRoute implements IDeepCopy<BDDRoute> {
       idx++;
     }
 
+    _receivedFromRrClient = factory.ithVar(idx);
+    _bitNames.put(idx, "received from route-reflector client");
+    idx++;
+
+    // Initialize one BDD per tracked cluster ID, each of which has a corresponding BDD variable
+    _trackedClusterIds = loopTracking.clusterIds();
+    _clusterListContains = new BDD[_trackedClusterIds.size()];
+    for (int i = 0; i < _trackedClusterIds.size(); i++) {
+      _clusterListContains[i] = factory.ithVar(idx);
+      _bitNames.put(idx, "cluster list contains " + _trackedClusterIds.get(i));
+      idx++;
+    }
+
+    _trackedRouterIds = loopTracking.routerIds();
+    _originator =
+        new BDDDomain<>(
+            factory,
+            IntStream.range(-1, _trackedRouterIds.size()).boxed().collect(Collectors.toList()),
+            idx);
+    len = _originator.getInteger().size();
+    addBitNames("originator", len, idx, false);
+    idx += len;
+
     _prependedASes = new ArrayList<>();
 
     // Initially there are no unsupported statements encountered
@@ -445,6 +500,11 @@ public final class BDDRoute implements IDeepCopy<BDDRoute> {
     _tracks = other._tracks.clone();
     _trackedAses = other._trackedAses;
     _asPathContains = other._asPathContains.clone();
+    _receivedFromRrClient = other._receivedFromRrClient;
+    _trackedClusterIds = other._trackedClusterIds;
+    _clusterListContains = other._clusterListContains.clone();
+    _trackedRouterIds = other._trackedRouterIds;
+    _originator = new BDDDomain<>(other._originator);
     _tunnelEncapsulationAttribute =
         BDDTunnelEncapsulationAttribute.copyOf(other._tunnelEncapsulationAttribute);
     _unsupported = other._unsupported;
@@ -495,6 +555,14 @@ public final class BDDRoute implements IDeepCopy<BDDRoute> {
     for (int i = 0; i < _asPathContains.length; i++) {
       _asPathContains[i] = route._asPathContains[i].and(pred);
     }
+    _receivedFromRrClient = route._receivedFromRrClient.and(pred);
+    _trackedClusterIds = route._trackedClusterIds;
+    _clusterListContains = new BDD[route._clusterListContains.length];
+    for (int i = 0; i < _clusterListContains.length; i++) {
+      _clusterListContains[i] = route._clusterListContains[i].and(pred);
+    }
+    _trackedRouterIds = route._trackedRouterIds;
+    _originator = new BDDDomain<>(pred, route._originator);
     _tunnelEncapsulationAttribute = route._tunnelEncapsulationAttribute.and(pred);
   }
 
@@ -566,7 +634,9 @@ public final class BDDRoute implements IDeepCopy<BDDRoute> {
     BDD peerAddressValid = _peerAddress.getIsValidConstraint();
     BDD sourceVrfValid = _sourceVrfs.getIsValidConstraint();
     BDD tunnelEncapValid = _tunnelEncapsulationAttribute.getIsValidConstraint();
+    BDD originatorValid = _originator.getIsValidConstraint();
     return _factory.andAllAndFree(
+        originatorValid,
         prefLenConstraint,
         nextHopConstraint,
         asPathRegexValid,
@@ -607,6 +677,9 @@ public final class BDDRoute implements IDeepCopy<BDDRoute> {
     _sourceVrfs.augmentPairing(other._sourceVrfs, pairing);
     pairing.set(other._tracks, _tracks);
     pairing.set(other._asPathContains, _asPathContains);
+    pairing.set(other._receivedFromRrClient.var(), _receivedFromRrClient);
+    pairing.set(other._clusterListContains, _clusterListContains);
+    _originator.augmentPairing(other._originator, pairing);
     _tunnelEncapsulationAttribute.augmentPairing(other._tunnelEncapsulationAttribute, pairing);
   }
 
@@ -838,6 +911,39 @@ public final class BDDRoute implements IDeepCopy<BDDRoute> {
     }
   }
 
+  /** Whether the route was received from a route-reflector client */
+  public BDD getReceivedFromRrClient() {
+    return _receivedFromRrClient;
+  }
+
+  /** The BDDs for whether the cluster list contains each tracked cluster ID, in that order */
+  public BDD[] getClusterListContains() {
+    return _clusterListContains;
+  }
+
+  /**
+   * The BDD for whether the route's cluster list contains the given cluster ID, or null if that
+   * cluster ID is not tracked
+   */
+  public @Nullable BDD getClusterListContains(long clusterId) {
+    int i = _trackedClusterIds.indexOf(clusterId);
+    return i < 0 ? null : _clusterListContains[i];
+  }
+
+  /** The route's originator ID, as an index into the tracked router IDs or -1 for any other */
+  public BDDDomain<Integer> getOriginator() {
+    return _originator;
+  }
+
+  /**
+   * The BDD for whether the route's originator ID is the given router ID, or null if that router
+   * ID is not tracked
+   */
+  public @Nullable BDD originatorIs(Ip routerId) {
+    int i = _trackedRouterIds.indexOf(routerId);
+    return i < 0 ? null : _originator.value(i);
+  }
+
   public @Nonnull BDDTunnelEncapsulationAttribute getTunnelEncapsulationAttribute() {
     return _tunnelEncapsulationAttribute;
   }
@@ -889,6 +995,9 @@ public final class BDDRoute implements IDeepCopy<BDDRoute> {
         && Objects.equals(_sourceVrfs, other._sourceVrfs)
         && Arrays.equals(_tracks, other._tracks)
         && Arrays.equals(_asPathContains, other._asPathContains)
+        && Objects.equals(_receivedFromRrClient, other._receivedFromRrClient)
+        && Arrays.equals(_clusterListContains, other._clusterListContains)
+        && Objects.equals(_originator, other._originator)
         && _tunnelEncapsulationAttribute.equals(other._tunnelEncapsulationAttribute)
         && Objects.equals(_unsupported, other._unsupported);
   }

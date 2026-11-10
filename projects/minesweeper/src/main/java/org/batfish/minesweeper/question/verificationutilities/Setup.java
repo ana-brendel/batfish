@@ -6,6 +6,7 @@ import org.apache.commons.lang3.tuple.Pair;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.batfish.datamodel.BgpPeerConfig;
+import org.batfish.datamodel.BgpProcess;
 import org.batfish.datamodel.BgpRoute;
 import org.batfish.datamodel.Bgpv4Route;
 import org.batfish.datamodel.Configuration;
@@ -16,6 +17,7 @@ import org.batfish.datamodel.RoutingProtocol;
 import org.batfish.datamodel.routing_policy.RoutingPolicy;
 import org.batfish.datamodel.table.ColumnMetadata;
 import org.batfish.datamodel.table.TableMetadata;
+import org.batfish.minesweeper.BgpLoopTracking;
 import org.batfish.minesweeper.CommunityVar;
 import org.batfish.minesweeper.ConfigAtomicPredicates;
 import org.batfish.minesweeper.communities.CommunityMatchExprVarCollector;
@@ -87,20 +89,25 @@ public class Setup {
         asPathRegexes.stream()
             .map(RegexConstraint::getRegex)
             .collect(ImmutableSet.toImmutableSet()),
-        loopCheckedAses(configAndPolicies.keySet()));
+        loopTracking(configAndPolicies.keySet()));
   }
 
-  /// The ASes that BGP loop detection may check in the given configs: every local AS and
-  /// confederation AS number configured on a BGP session. A receiver checks the AS it uses on the
-  /// session, which is one of these.
-  private static List<Long> loopCheckedAses(Collection<Configuration> configs) {
+  /// The BGP loop-prevention state that symbolic routes track for the given configs:
+  ///
+  /// - every local AS and confederation AS number configured on a BGP session, since a receiver's
+  ///   AS-path loop check looks for the AS it uses on the session, which is one of these;
+  /// - every cluster ID of a BGP process, which are the ones its cluster-list check looks for;
+  /// - every BGP process's router ID, which its originator check looks for.
+  private static BgpLoopTracking loopTracking(Collection<Configuration> configs) {
     Set<Long> ases = new TreeSet<>();
+    Set<Long> clusterIds = new TreeSet<>();
+    Set<Ip> routerIds = new TreeSet<>();
     for (Configuration config : configs) {
       if (config.getDefaultVrf() == null || config.getDefaultVrf().getBgpProcess() == null) {
         continue;
       }
-      for (BgpPeerConfig peer :
-          config.getDefaultVrf().getBgpProcess().getActiveNeighbors().values()) {
+      BgpProcess process = config.getDefaultVrf().getBgpProcess();
+      for (BgpPeerConfig peer : process.getActiveNeighbors().values()) {
         if (peer.getLocalAs() != null) {
           ases.add(peer.getLocalAs());
         }
@@ -108,8 +115,15 @@ public class Setup {
           ases.add(peer.getConfederationAsn());
         }
       }
+      clusterIds.addAll(process.getClusterIds());
+      if (process.getRouterId() != null) {
+        routerIds.add(process.getRouterId());
+      }
     }
-    return ImmutableList.copyOf(ases);
+    return new BgpLoopTracking(
+        ImmutableList.copyOf(ases),
+        ImmutableList.copyOf(clusterIds),
+        ImmutableList.copyOf(routerIds));
   }
 
   /// This function takes the provided invariants and builds them in the context of the current

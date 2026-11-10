@@ -23,6 +23,9 @@ public class Node extends Location {
   private boolean clientToClientReflection = true;
   private @Nonnull Set<Long> clusterIds = Set.of();
 
+  /// The router ID of this node's BGP process, null if unknown
+  private @Nullable Ip routerId;
+
   public Node(@Nonnull Set<Edge> incomingEdges, @Nonnull String name) {
     this.name = name.toLowerCase();
     this.resetNeighbors(incomingEdges);
@@ -103,6 +106,17 @@ public class Node extends Location {
     this.clusterIds = Set.copyOf(clusterIds);
   }
 
+  /// The router ID of this node's BGP process, which BGP uses as the originator ID of the routes
+  /// it injects into iBGP; null if unknown
+  @Nullable
+  public Ip getRouterId() {
+    return routerId;
+  }
+
+  public void setRouterId(@Nullable Ip routerId) {
+    this.routerId = routerId;
+  }
+
   @Nonnull
   public String getName() {
     return name;
@@ -180,6 +194,7 @@ public class Node extends Location {
                 .collect(Collectors.toSet()),
             name);
     copy.setRouteReflectionInfo(clientToClientReflection, clusterIds);
+    copy.setRouterId(routerId);
     return copy;
   }
 

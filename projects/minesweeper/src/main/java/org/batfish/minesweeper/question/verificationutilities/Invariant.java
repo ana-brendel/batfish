@@ -28,9 +28,11 @@ import net.sf.javabdd.BDDFactory;
 import net.sf.javabdd.BDDPairing;
 import org.batfish.common.BatfishException;
 import org.batfish.common.bdd.MutableBDDInteger;
+import org.batfish.datamodel.Ip;
 import org.batfish.datamodel.LineAction;
 import org.batfish.datamodel.PrefixRange;
 import org.batfish.datamodel.PrefixSpace;
+import org.batfish.datamodel.RoutingProtocol;
 import org.batfish.datamodel.routing_policy.RoutingPolicy;
 import org.batfish.datamodel.routing_policy.communities.CommunityMatchExpr;
 import org.batfish.minesweeper.ConfigAtomicPredicates;
@@ -759,6 +761,116 @@ public class Invariant {
       }
     }
     return new Invariant(tbdd, restricted);
+  }
+
+  /// Substitutes, for a route the receiver of the edge learns, the state that BGP records for it
+  /// on import, before the import policy runs: the protocol of the session, and whether the route
+  /// came from one of the receiver's route-reflector clients. If the session's type is unknown, the
+  /// result requires this invariant for either type. Consumes this.bdd.
+  ///
+  /// Only invariant inference (Infer) tracks this state; path constraints leave the protocol free.
+  public Invariant withImportState(Edge edge) {
+    RoutingProtocol protocol = edge.sessionProtocol();
+    if (protocol != null) {
+      return new Invariant(tbdd, importState(bdd, edge, protocol));
+    }
+    BDD asIbgp = importState(bdd.id(), edge, RoutingProtocol.IBGP);
+    BDD asEbgp = importState(bdd, edge, RoutingProtocol.BGP);
+    return new Invariant(tbdd, asIbgp.andWith(asEbgp));
+  }
+
+  /// The constraint with the state set on import over the edge with the given protocol
+  /// substituted; consumes the constraint
+  private BDD importState(BDD constraint, Edge edge, RoutingProtocol protocol) {
+    BDDRoute route = tbdd.getOriginalRoute();
+    BDD result = restrictToValue(constraint, route.getProtocolHistory().value(protocol));
+    boolean fromClient = protocol == RoutingProtocol.IBGP && edge.dstTreatsSrcAsClient();
+    return restrictTo(result, route.getReceivedFromRrClient(), fromClient);
+  }
+
+  /// Substitutes, for a route sent over the edge, the protocol that the sender's pre-export
+  /// processing gives it: that of the session. The sender's export policy still sees the protocol
+  /// the route had at the sender, as in Batfish, so this applies to the invariant on the policy's
+  /// output, before its weakest precondition is taken. If the session's type is unknown, the result
+  /// requires this invariant for either type. Consumes this.bdd.
+  public Invariant withSentProtocol(Edge edge) {
+    BDDRoute route = tbdd.getOriginalRoute();
+    RoutingProtocol protocol = edge.sessionProtocol();
+    if (protocol != null) {
+      return new Invariant(tbdd, restrictToValue(bdd, route.getProtocolHistory().value(protocol)));
+    }
+    BDD asIbgp =
+        restrictToValue(bdd.id(), route.getProtocolHistory().value(RoutingProtocol.IBGP));
+    BDD asEbgp = restrictToValue(bdd, route.getProtocolHistory().value(RoutingProtocol.BGP));
+    return new Invariant(tbdd, asIbgp.andWith(asEbgp));
+  }
+
+  /// Undoes the updates that the sender's pre-export processing makes, for routes sent over the
+  /// edge, to the state that route reflection uses (BgpProtocolHelper.transformBgpRoutePreExport):
+  ///
+  /// - A route the sender learned over iBGP and sends over iBGP keeps its originator ID, and its
+  ///   cluster list gains the cluster ID the sender uses on the session, if any. (Batfish does not
+  ///   send such a route unless the sender reflects it; see Infer for that excuse.)
+  /// - Any other route gets the sender's router ID as its originator ID and an empty cluster list.
+  ///
+  /// This invariant describes the route after the updates, and the result describes it before, in
+  /// terms of the protocol it had at the sender. If the session's type is unknown, the result
+  /// requires this invariant for either type. Consumes this.bdd.
+  public Invariant beforePreExport(Edge edge) {
+    RoutingProtocol protocol = edge.sessionProtocol();
+    if (protocol == RoutingProtocol.BGP) {
+      return new Invariant(tbdd, injected(bdd, edge));
+    }
+    BDDRoute route = tbdd.getOriginalRoute();
+    BDD learnedOverIbgp = route.getProtocolHistory().value(RoutingProtocol.IBGP);
+    BDD reflected = bdd.id();
+    Long clusterId = edge.senderClusterId();
+    BDD inClusterList = clusterId == null ? null : route.getClusterListContains(clusterId);
+    if (inClusterList != null) {
+      reflected = restrictTo(reflected, inClusterList, true);
+    }
+    BDD overIbgp =
+        learnedOverIbgp
+            .and(reflected)
+            .orWith(learnedOverIbgp.not().andWith(injected(bdd.id(), edge)));
+    reflected.free();
+    learnedOverIbgp.free();
+    if (protocol == null) {
+      overIbgp.andWith(injected(bdd.id(), edge));
+    }
+    bdd.free();
+    return new Invariant(tbdd, overIbgp);
+  }
+
+  /// The constraint with the originator ID set to the sender's router ID and the cluster list
+  /// cleared substituted; consumes the constraint
+  private BDD injected(BDD constraint, Edge edge) {
+    BDDRoute route = tbdd.getOriginalRoute();
+    BDD result = constraint;
+    for (BDD contains : route.getClusterListContains()) {
+      result = restrictTo(result, contains, false);
+    }
+    Node sender = edge.getSrcNode();
+    Ip senderId = sender == null ? null : sender.getRouterId();
+    BDD isSender = senderId == null ? null : route.originatorIs(senderId);
+    if (isSender != null) {
+      return restrictToValue(result, isSender);
+    }
+    // the originator ID is unknown, so the constraint must hold for any value of it
+    BDD support = route.getOriginator().support();
+    BDD forAll = result.forAll(support);
+    support.free();
+    result.free();
+    return forAll;
+  }
+
+  /// Substitutes the given values for BDD variables, given as a conjunction of literals, in the
+  /// constraint; consumes both
+  private static BDD restrictToValue(BDD constraint, BDD cube) {
+    BDD result = constraint.restrict(cube);
+    cube.free();
+    constraint.free();
+    return result;
   }
 
   /// Substitutes the given value for the given BDD variable in the constraint, which it consumes

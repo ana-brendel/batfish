@@ -5,8 +5,10 @@ import net.sf.javabdd.BDDFactory;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.batfish.datamodel.Bgpv4Route;
+import org.batfish.datamodel.Ip;
 import org.batfish.datamodel.PrefixRange;
 import org.batfish.datamodel.PrefixSpace;
+import org.batfish.datamodel.RoutingProtocol;
 import org.batfish.datamodel.routing_policy.RoutingPolicy;
 import org.batfish.minesweeper.bdd.BDDRoute;
 import org.batfish.minesweeper.bdd.TransferBDD;
@@ -208,6 +210,80 @@ public class Infer {
     return excused;
   }
 
+  /// Weakens the given requirement on routes that the sender of the iBGP edge would send over it
+  /// to allow those it does not send because it would not be reflecting them: a route learned over
+  /// iBGP goes to another iBGP peer only if the sender reflects it, as in Batfish
+  /// (BgpProtocolHelper.isReflectable). A route reflector reflects a route learned from one of its
+  /// clients to its non-clients, and to its other clients if client-to-client reflection is on; it
+  /// reflects a route learned from a non-client to its clients only. A router that is not a
+  /// reflector has no clients, so it relays no iBGP route. Consumes the given invariant.
+  ///
+  /// The requirement describes the routes at the sender, before its export policy, whose protocol
+  /// and route-reflector-client state are those its import recorded (see
+  /// Invariant.withImportState).
+  private Invariant excuseUnreflected(Invariant requirement, Edge edge) {
+    Node sender = edge.getSrcNode();
+    if (edge.sessionProtocol() != RoutingProtocol.IBGP || sender == null) {
+      return requirement;
+    }
+    BDDRoute route = tbdd.getOriginalRoute();
+    BDD fromClient = route.getReceivedFromRrClient();
+    BDD notReflected;
+    if (edge.senderTreatsDstAsClient()) {
+      notReflected =
+          sender.clientToClientReflection() ? tbdd.getFactory().zero() : fromClient.id();
+    } else {
+      notReflected = fromClient.not();
+    }
+    BDD excuse = route.getProtocolHistory().value(RoutingProtocol.IBGP).andWith(notReflected);
+    Invariant excused = new Invariant(tbdd, requirement.getBDD().or(excuse));
+    excuse.free();
+    requirement.free();
+    return excused;
+  }
+
+  /// Weakens the given requirement on routes received over the iBGP edge to allow those that the
+  /// route-reflection loop checks drop: a route whose originator ID is the receiver's router ID, or
+  /// whose cluster list contains one of the receiver's cluster IDs. Batfish performs these checks
+  /// before sending the route, but they are on the attributes of the route as sent, so as RFC 4456
+  /// says, they are done here at the receiver. Consumes the given invariant.
+  ///
+  /// The two differ in one case, which is not excused: Batfish compares the originator ID before
+  /// the sender sets it to its own router ID (for a route it injects into iBGP), so a sender with
+  /// the receiver's router ID does not have its routes dropped. A sender outside the network is
+  /// not known to have a different router ID, but as with the AS path, a route entering the
+  /// network can have any originator ID and cluster list, whatever an assumption on it says.
+  private Invariant excuseReflectionLoop(Invariant requirement, Edge edge) {
+    Node receiver = edge.getDstNode();
+    if (edge.sessionProtocol() != RoutingProtocol.IBGP || receiver == null) {
+      return requirement;
+    }
+    BDDRoute route = tbdd.getOriginalRoute();
+    BDD dropped = tbdd.getFactory().zero();
+    for (long clusterId : receiver.getClusterIds()) {
+      BDD contains = route.getClusterListContains(clusterId);
+      if (contains != null) {
+        dropped.orWith(contains.id());
+      }
+    }
+    Ip routerId = receiver.getRouterId();
+    Node sender = edge.getSrcNode();
+    if (routerId != null && (sender == null || !routerId.equals(sender.getRouterId()))) {
+      BDD isReceiver = route.originatorIs(routerId);
+      if (isReceiver != null) {
+        dropped.orWith(isReceiver);
+      }
+    }
+    if (dropped.isZero()) {
+      dropped.free();
+      return requirement;
+    }
+    Invariant excused = new Invariant(tbdd, requirement.getBDD().or(dropped));
+    dropped.free();
+    requirement.free();
+    return excused;
+  }
+
   /// Performs iterative invariant inference using the weakest preconditions
   private Optional<CounterExample> inferenceLoop(boolean pushFalse) {
     while (!working.isEmpty()) {
@@ -224,7 +300,11 @@ public class Infer {
           inferred.put(src, Invariant.getFalse(this.tbdd));
         } else {
           RoutingPolicy exportPolicy = exports.get(edge);
-          Invariant wp = this.getWeakestPrecondition(property, exportPolicy);
+          Invariant sent = property.copy().withSentProtocol(edge);
+          Invariant wp = this.getWeakestPrecondition(sent, exportPolicy);
+          sent.free();
+          wp = wp.beforePreExport(edge);
+          wp = excuseUnreflected(wp, edge);
           boolean firstVisit = !inferred.containsKey(src);
           // get inferred if present, otherwise get enforced assumption, otherwise default is true
           Invariant existing =
@@ -255,7 +335,9 @@ public class Infer {
           } else {
             RoutingPolicy importPolicy = imports.get(edge);
             Invariant wp = this.getWeakestPrecondition(property, importPolicy);
+            wp = wp.withImportState(edge);
             wp = excuseAsPathLoop(wp, edge);
+            wp = excuseReflectionLoop(wp, edge);
             wp = wp.preImport(edge);
             boolean firstVisit = !inferred.containsKey(edge);
             // get inferred if present, otherwise get enforced assumption, otherwise default is true

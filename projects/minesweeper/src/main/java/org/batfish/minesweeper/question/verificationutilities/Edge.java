@@ -2,6 +2,7 @@ package org.batfish.minesweeper.question.verificationutilities;
 
 import org.batfish.common.BatfishException;
 import org.batfish.datamodel.Ip;
+import org.batfish.datamodel.RoutingProtocol;
 import org.batfish.datamodel.bgp.BgpTopologyUtils.ConfedSessionType;
 
 import javax.annotation.Nonnull;
@@ -226,6 +227,32 @@ public class Edge extends Location {
   /// session, from its own config; false if the sender is not in the network
   public boolean senderReplacesAses() {
     return reverse().map(r -> r.dstReplacesAsesOnExport).orElse(false);
+  }
+
+  /// The protocol of the routes sent over this session, which the receiver also records for the
+  /// routes it learns: BGP if the session is eBGP, IBGP if it is iBGP, and null if its type is
+  /// unknown. NetworkInfo marks a session iBGP when the receiver's local AS is unknown, but its
+  /// type is then unknown.
+  @Nullable
+  public RoutingProtocol sessionProtocol() {
+    if (eBGP) {
+      return RoutingProtocol.BGP;
+    }
+    return dstAs != null ? RoutingProtocol.IBGP : null;
+  }
+
+  /// Whether the sender treats the receiver as a route-reflector client on this session, from its
+  /// own config; false if the sender is not in the network
+  public boolean senderTreatsDstAsClient() {
+    return reverse().map(Edge::dstTreatsSrcAsClient).orElse(false);
+  }
+
+  /// The cluster ID the sender uses on this session, which it adds to the cluster list of a route
+  /// it reflects to the receiver, from its own config; null if none is configured or the sender is
+  /// not in the network
+  @Nullable
+  public Long senderClusterId() {
+    return reverse().map(Edge::getDstClusterId).orElse(null);
   }
 
   @Nonnull

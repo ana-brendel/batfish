@@ -11,6 +11,7 @@ import static org.junit.Assert.assertTrue;
 
 import com.google.common.collect.ImmutableSortedMap;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -59,6 +60,8 @@ public class InterferenceLoopTest {
   private Map<NodeRecord, Configuration> configs;
   private Map<NodeRecord, Long> ases;
   private Map<NodeRecord, Map<Ip, PeerSpec>> neighbors;
+  private Map<NodeRecord, Long> clusterIds;
+  private Map<NodeRecord, Set<NodeRecord>> clients;
   private RoutingPolicy template;
   private int nextRouter;
 
@@ -67,6 +70,8 @@ public class InterferenceLoopTest {
     configs = new LinkedHashMap<>();
     ases = new HashMap<>();
     neighbors = new HashMap<>();
+    clusterIds = new HashMap<>();
+    clients = new HashMap<>();
     nextRouter = 1;
   }
 
@@ -115,6 +120,16 @@ public class InterferenceLoopTest {
     neighbors.get(node).put(Ip.parse(ip), new PeerSpec(externalAs, importPolicy, PERMIT_ALL));
   }
 
+  /// Makes the router a route reflector that uses the given cluster ID on all its sessions
+  private void reflector(NodeRecord router, long clusterId) {
+    clusterIds.put(router, clusterId);
+  }
+
+  /// Makes the client a route-reflector client of the reflector
+  private void client(NodeRecord reflector, NodeRecord client) {
+    clients.computeIfAbsent(reflector, k -> new HashSet<>()).add(client);
+  }
+
   /// Makes sender strip all communities from the routes it sends receiver
   private void strips(NodeRecord sender, NodeRecord receiver) {
     neighbors
@@ -125,6 +140,8 @@ public class InterferenceLoopTest {
   }
 
   private Networkv2 build() {
+    Map<Ip, NodeRecord> routerByIp = new HashMap<>();
+    configs.keySet().forEach(node -> routerByIp.put(node.getIp(), node));
     for (NodeRecord node : configs.keySet()) {
       Vrf vrf =
           nf.vrfBuilder()
@@ -141,8 +158,14 @@ public class InterferenceLoopTest {
                       BgpActivePeerConfig.builder()
                           .setLocalAs(ases.get(node))
                           .setRemoteAs(spec.remoteAs())
+                          .setClusterId(clusterIds.get(node))
                           .setIpv4UnicastAddressFamily(
                               Ipv4UnicastAddressFamily.builder()
+                                  .setRouteReflectorClient(
+                                      routerByIp.containsKey(ip)
+                                          && clients
+                                              .getOrDefault(node, Set.of())
+                                              .contains(routerByIp.get(ip)))
                                   .setImportPolicy(spec.importPolicy())
                                   .setExportPolicy(spec.exportPolicy())
                                   .build())
@@ -273,8 +296,24 @@ public class InterferenceLoopTest {
     strips(b, a);
     Pair<Boolean, Boolean> res = run(build(), t);
     assertTrue(res.getLeft());
-    // TODO iBGP loop prevention is not modeled in the interference check yet, so interference is
-    // reported: the analysis lets b send the good route back to a with 1:1 stripped
-    // assertFalse(res.getRight());
+    assertFalse(res.getRight());
+  }
+
+  @Test
+  public void reflectorEchoToClient() {
+    // a is a client of the route reflector rr in AS 1; rr reflects routes between its clients, but
+    // not a's route back to a, which is its originator
+    NodeRecord a = router("a", 1);
+    NodeRecord rr = router("rr", 1);
+    NodeRecord t = router("t", 3);
+    external(a, "100.0.0.1", 100, TAG);
+    session(a, rr);
+    session(rr, t);
+    strips(rr, a);
+    reflector(rr, 1);
+    client(rr, a);
+    Pair<Boolean, Boolean> res = run(build(), t);
+    assertTrue(res.getLeft());
+    assertFalse(res.getRight());
   }
 }

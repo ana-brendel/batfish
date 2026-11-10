@@ -2933,10 +2933,10 @@ public class ReachabilityAnswererTest {
   public void ibgpLoopBackNoInterferenceTest() {
     Pair<Boolean, Boolean> checks = runLoopBackExample(true, true, null);
     assertTrue(checks.getLeft());
-    // TODO iBGP loop prevention is not modeled, so interference is currently reported: the analysis
-    // lets bNode send the good route back to aNode over iBGP with 1:1 stripped, and that copy ties
-    // with the good route on every attribute we compare, so route preference cannot excuse it
-    // assertFalse(checks.getRight());
+    // bNode does not send the good route it learned from aNode over iBGP back to its iBGP peer
+    // aNode.  Route preference alone cannot excuse the copy: it ties with the good route on every
+    // attribute we compare
+    assertFalse(checks.getRight());
   }
 
   @Test

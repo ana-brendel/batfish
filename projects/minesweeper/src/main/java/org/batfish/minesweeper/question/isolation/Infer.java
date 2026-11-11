@@ -190,7 +190,10 @@ public class Infer {
 
   /// Weakens the given requirement on routes received over the edge to allow routes whose AS path
   /// contains the receiver's AS for the session, which BGP's loop detection drops before the
-  /// import policy, unless the session allows them (allowas-in). Consumes the given invariant.
+  /// import policy, unless the session allows them (allowas-in). As in Batfish, the check looks
+  /// at every segment of the AS path, including confederation segments: within a confederation the
+  /// receiver's AS for the session is its member AS, which other members add as a confederation
+  /// segment. Consumes the given invariant.
   ///
   /// The AS path's tracked ASes are known only as far as the model updates them (see
   /// BDDRoute.getAsPathContains): routes entering the network can have any values for them, so
@@ -201,11 +204,22 @@ public class Infer {
     if (receiverAs == null || edge.dstAllowsLocalAsIn()) {
       return requirement;
     }
-    BDD containsReceiverAs = tbdd.getOriginalRoute().getAsPathContains(receiverAs);
-    if (containsReceiverAs == null) {
+    BDDRoute route = tbdd.getOriginalRoute();
+    BDD loop = tbdd.getFactory().zero();
+    BDD contains = route.getAsPathContains(receiverAs);
+    if (contains != null) {
+      loop.orWith(contains.id());
+    }
+    BDD containsConfed = route.getAsPathContainsConfed(receiverAs);
+    if (containsConfed != null) {
+      loop.orWith(containsConfed.id());
+    }
+    if (loop.isZero()) {
+      loop.free();
       return requirement;
     }
-    Invariant excused = new Invariant(tbdd, requirement.getBDD().or(containsReceiverAs));
+    Invariant excused = new Invariant(tbdd, requirement.getBDD().or(loop));
+    loop.free();
     requirement.free();
     return excused;
   }

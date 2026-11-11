@@ -173,7 +173,7 @@ public class BgpPathValidity {
     }
     // the ASes added by the sender's export policy and, on an eBGP session, the sender's AS,
     // which within a confederation is its member AS, added as a confederation segment
-    ConfedSessionType confedType = confedType(edge);
+    ConfedSessionType confedType = edge.confedSessionType();
     Set<Long> sent = new HashSet<>();
     addPrepended(sent, exports.get(edge), edge, true);
     Long senderAs = edge.senderAs();
@@ -238,21 +238,6 @@ public class BgpPathValidity {
         Set.copyOf(ibgpRunClusterIds),
         Set.copyOf(checkedAses),
         Set.copyOf(checkedConfedAses));
-  }
-
-  /// Whether the session is within a confederation or across its border, as configured at the
-  /// receiver if it is in a confederation, and otherwise at the sender, found on the reverse edge
-  private static ConfedSessionType confedType(Edge edge) {
-    ConfedSessionType type = edge.getDstConfed().type();
-    Node sender = edge.getSrcNode();
-    if (type == ConfedSessionType.NO_CONFED && sender != null) {
-      type =
-          sender
-              .getIncoming(edge.getDst(), edge.getSrc())
-              .map(reverse -> reverse.getDstConfed().type())
-              .orElse(ConfedSessionType.NO_CONFED);
-    }
-    return type;
   }
 
   /// The AS the receiver expects of the sender: the remote AS in the sender's config, found on the

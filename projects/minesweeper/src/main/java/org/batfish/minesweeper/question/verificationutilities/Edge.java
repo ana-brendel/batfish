@@ -202,6 +202,17 @@ public class Edge extends Location {
     this.dstConfed = dstConfed;
   }
 
+  /// Whether the session is within a confederation or across its border, as configured at the
+  /// receiver if it is in a confederation, and otherwise at the sender, found on the reverse edge
+  @Nonnull
+  public ConfedSessionType confedSessionType() {
+    ConfedSessionType type = dstConfed.type();
+    if (type == ConfedSessionType.NO_CONFED) {
+      type = reverse().map(r -> r.dstConfed.type()).orElse(ConfedSessionType.NO_CONFED);
+    }
+    return type;
+  }
+
   /// Records whether the receiver replaces the ASes in the AS paths it exports back to the sender,
   /// as configured at the receiving end
   public void setReplacesAsesOnExport(boolean dstReplacesAsesOnExport) {

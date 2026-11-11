@@ -18,6 +18,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import net.sf.javabdd.BDD;
 import org.batfish.datamodel.BgpActivePeerConfig;
 import org.batfish.datamodel.Configuration;
 import org.batfish.datamodel.ConfigurationFormat;
@@ -28,16 +29,20 @@ import org.batfish.datamodel.PrefixSpace;
 import org.batfish.datamodel.RoutingProtocol;
 import org.batfish.datamodel.Vrf;
 import org.batfish.datamodel.bgp.AddressFamilyCapabilities;
+import org.batfish.datamodel.bgp.BgpConfederation;
 import org.batfish.datamodel.bgp.Ipv4UnicastAddressFamily;
 import org.batfish.datamodel.bgp.LocalOriginationTypeTieBreaker;
 import org.batfish.datamodel.bgp.NextHopIpTieBreaker;
 import org.batfish.datamodel.routing_policy.RoutingPolicy;
 import org.batfish.datamodel.routing_policy.expr.ExplicitAs;
 import org.batfish.datamodel.routing_policy.expr.LiteralAsList;
+import org.batfish.datamodel.routing_policy.expr.LiteralLong;
 import org.batfish.datamodel.routing_policy.expr.MatchProtocol;
 import org.batfish.datamodel.routing_policy.statement.If;
 import org.batfish.datamodel.routing_policy.statement.PrependAsPath;
+import org.batfish.datamodel.routing_policy.statement.SetLocalPreference;
 import org.batfish.datamodel.routing_policy.statement.Statement;
+import org.batfish.datamodel.routing_policy.statement.Statements;
 import org.batfish.minesweeper.bdd.TransferBDD;
 import org.batfish.minesweeper.question.searchroutepolicies.RegexConstraint;
 import org.batfish.minesweeper.question.searchroutepolicies.RegexConstraints;
@@ -74,6 +79,7 @@ public class InferLoopPreventionTest {
   private Map<NodeRecord, Long> clusterIds;
   private Map<NodeRecord, Set<NodeRecord>> clients;
   private Set<NodeRecord> noClientToClient;
+  private Map<NodeRecord, Long> confederations;
   private RoutingPolicy template;
   private int nextRouter;
 
@@ -85,6 +91,7 @@ public class InferLoopPreventionTest {
     clusterIds = new HashMap<>();
     clients = new HashMap<>();
     noClientToClient = new HashSet<>();
+    confederations = new HashMap<>();
     nextRouter = 1;
   }
 
@@ -178,6 +185,37 @@ public class InferLoopPreventionTest {
     noClientToClient.add(router);
   }
 
+  /// Puts the routers in a confederation with the given AS number; each router's AS is its member
+  /// AS. Like FRR, each router lists only its own member AS as a member.
+  private void confederation(long confederationAs, NodeRecord... routers) {
+    for (NodeRecord router : routers) {
+      confederations.put(router, confederationAs);
+    }
+  }
+
+  /// The AS that node's neighbor uses on their session: the neighbor's confederation AS number if
+  /// node is outside that confederation, and the neighbor's own AS otherwise
+  private long remoteAs(NodeRecord node, NodeRecord neighbor) {
+    Long confederation = confederations.get(neighbor);
+    if (confederation != null && !confederation.equals(confederations.get(node))) {
+      return confederation;
+    }
+    return ases.get(neighbor);
+  }
+
+  /// Defines a policy on the node that sets the local preference of every route and permits it;
+  /// returns its name
+  private String setLocalPreference(NodeRecord node, long localPreference) {
+    String name = "setLocalPreference" + localPreference;
+    policy(
+        configs.get(node),
+        name,
+        List.of(
+            new SetLocalPreference(new LiteralLong(localPreference)),
+            new Statements.StaticStatement(Statements.ExitAccept)));
+    return name;
+  }
+
   /// Sets the policy that sender exports to receiver with
   private void export(NodeRecord sender, NodeRecord receiver, String policy) {
     neighbors.get(sender).compute(receiver.getIp(), (ip, spec) -> spec.withExport(policy));
@@ -220,7 +258,11 @@ public class InferLoopPreventionTest {
                       ip,
                       BgpActivePeerConfig.builder()
                           .setLocalAs(ases.get(node))
-                          .setRemoteAs(spec.remoteAs())
+                          .setRemoteAs(
+                              routerByIp.containsKey(ip)
+                                  ? remoteAs(node, routerByIp.get(ip))
+                                  : spec.remoteAs())
+                          .setConfederation(confederations.get(node))
                           .setReplaceNonLocalAsesOnExport(spec.replaceAses())
                           .setClusterId(clusterIds.get(node))
                           .setIpv4UnicastAddressFamily(
@@ -238,7 +280,12 @@ public class InferLoopPreventionTest {
                                   .setExportPolicy(spec.exportPolicy())
                                   .build())
                           .build()));
+      BgpConfederation confederation =
+          confederations.containsKey(node)
+              ? new BgpConfederation(confederations.get(node), Set.of(ases.get(node)))
+              : null;
       nf.bgpProcessBuilder()
+          .setConfederation(confederation)
           .setRouterId(node.getIp())
           .setEbgpAdminCost(0)
           .setIbgpAdminCost(0)
@@ -260,16 +307,31 @@ public class InferLoopPreventionTest {
 
   /// Whether inference verifies that no route at node carries 2:2
   private boolean noTagAt(Networkv2 net, NodeRecord node) {
+    return holdsAt(
+        net,
+        node,
+        Invariant.clauseBuilder()
+            .setCommunities(new RegexConstraints(List.of(RegexConstraint.parse("!" + COMM))))
+            .build(net.tbdd(), net.template()));
+  }
+
+  /// Whether inference verifies that every route at node satisfies the given property
+  private boolean holdsAt(Networkv2 net, NodeRecord node, BDD property) {
     NetworkInfo info = net.getInfo(PREFIX_SPACE);
     Infer infer = info.toInfer();
-    Invariant noTag =
-        new Invariant(
-            net.tbdd(),
-            Invariant.clauseBuilder()
-                .setCommunities(new RegexConstraints(List.of(RegexConstraint.parse("!" + COMM))))
-                .build(net.tbdd(), net.template()));
-    infer.addProperty(node.instantiate(info), noTag);
+    infer.addProperty(node.instantiate(info), new Invariant(net.tbdd(), property));
     return infer.run().verified;
+  }
+
+  /// Whether inference verifies that no route at node has the given local preference
+  private boolean noLocalPreferenceAt(Networkv2 net, NodeRecord node, long localPreference) {
+    return holdsAt(
+        net, node, net.tbdd().getOriginalRoute().getLocalPref().value(localPreference).not());
+  }
+
+  /// Whether inference verifies that no route at node has an AS path of the given length
+  private boolean noAsPathLengthAt(Networkv2 net, NodeRecord node, long length) {
+    return holdsAt(net, node, net.tbdd().getOriginalRoute().getAsPathLength().value(length).not());
   }
 
   @Test
@@ -606,5 +668,100 @@ public class InferLoopPreventionTest {
     session(a, b);
     export(a, b, tagProtocols(a, false, RoutingProtocol.AGGREGATE, RoutingProtocol.STATIC));
     assertTrue(noTagAt(build(), b));
+  }
+
+  // Confederations. In each test, confederation 100 has members 65001 (c1) and 65002 (c2), and c1
+  // has an external neighbor. As in Batfish, a router sending over eBGP within the confederation
+  // adds its member AS as a confederation segment of the AS path, which does not count toward the
+  // path's length, and keeps the local preference; one sending across the border removes the
+  // confederation segments and adds the confederation's AS number. A receiver's loop check looks
+  // for the AS it uses on the session in every segment.
+
+  @Test
+  public void memberAsLoopIsExcused() {
+    // c2's routes all come from c1, so they carry c1's member AS
+    NodeRecord c1 = router("c1", 65001);
+    NodeRecord c2 = router("c2", 65002);
+    confederation(100, c1, c2);
+    external(c1, "100.0.0.1", 1000);
+    session(c1, c2);
+    export(c2, c1, TAG);
+    assertTrue(noTagAt(build(), c1));
+  }
+
+  @Test
+  public void confederationAsLoopIsExcused() {
+    // the route leaves the confederation at c1 and comes back in at c2, which checks the
+    // confederation's AS number on its session with x
+    NodeRecord c1 = router("c1", 65001);
+    NodeRecord c2 = router("c2", 65002);
+    NodeRecord x = router("x", 2);
+    confederation(100, c1, c2);
+    external(c1, "100.0.0.1", 1000);
+    session(c1, x);
+    session(x, c2);
+    export(x, c2, TAG);
+    assertTrue(noTagAt(build(), c2));
+  }
+
+  @Test
+  public void memberAsIsRemovedAtBorder() {
+    // c2 removes the member ASes when sending to f, outside the confederation, so f accepts the
+    // route although f is also in AS 65001
+    NodeRecord c1 = router("c1", 65001);
+    NodeRecord c2 = router("c2", 65002);
+    NodeRecord f = router("f", 65001);
+    confederation(100, c1, c2);
+    external(c1, "100.0.0.1", 1000);
+    session(c1, c2);
+    session(c2, f);
+    export(c2, f, TAG);
+    assertFalse(noTagAt(build(), f));
+  }
+
+  @Test
+  public void localPreferenceIsKeptWithinConfederation() {
+    NodeRecord c1 = router("c1", 65001);
+    NodeRecord c2 = router("c2", 65002);
+    confederation(100, c1, c2);
+    external(c1, "100.0.0.1", 1000);
+    session(c1, c2);
+    export(c1, c2, setLocalPreference(c1, 200));
+    assertFalse(noLocalPreferenceAt(build(), c2, 200));
+  }
+
+  @Test
+  public void localPreferenceIsResetAcrossBorder() {
+    // control: x is outside the confederation, so it sees the default local preference
+    NodeRecord c1 = router("c1", 65001);
+    NodeRecord x = router("x", 2);
+    confederation(100, c1);
+    external(c1, "100.0.0.1", 1000);
+    session(c1, x);
+    export(c1, x, setLocalPreference(c1, 200));
+    assertTrue(noLocalPreferenceAt(build(), x, 200));
+  }
+
+  @Test
+  public void asPathLengthIsUnchangedWithinConfederation() {
+    // c1's external neighbor can send a route with an empty AS path, which has length 1 at c1, and
+    // c1's member AS does not add to it
+    NodeRecord c1 = router("c1", 65001);
+    NodeRecord c2 = router("c2", 65002);
+    confederation(100, c1, c2);
+    external(c1, "100.0.0.1", 1000);
+    session(c1, c2);
+    assertFalse(noAsPathLengthAt(build(), c2, 1));
+  }
+
+  @Test
+  public void asPathLengthGrowsAcrossBorder() {
+    // control: c1 adds the confederation's AS number when sending to x
+    NodeRecord c1 = router("c1", 65001);
+    NodeRecord x = router("x", 2);
+    confederation(100, c1);
+    external(c1, "100.0.0.1", 1000);
+    session(c1, x);
+    assertTrue(noAsPathLengthAt(build(), x, 1));
   }
 }

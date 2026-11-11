@@ -181,6 +181,16 @@ public final class BDDRoute implements IDeepCopy<BDDRoute> {
   private BDD[] _asPathContains;
 
   /**
+   * The confederation member AS numbers tracked in AS paths, and for each one (at the same index) a
+   * BDD for whether the route's AS path contains it in a confederation segment, which BGP adds on
+   * sessions between member ASes and removes when the route leaves the confederation. Policies
+   * only prepend ordinary segments (see {@link #getAsPathContains}).
+   */
+  private final List<Long> _trackedConfedAses;
+
+  private BDD[] _asPathContainsConfed;
+
+  /**
    * Whether the route was received from a route-reflector client, as recorded by BGP on import
    * (Batfish's receivedFromRouteReflectorClient). Like the fields below, it is updated only by
    * clients that model BGP's own behavior between routers; route policies cannot change it.
@@ -309,6 +319,7 @@ public final class BDDRoute implements IDeepCopy<BDDRoute> {
             + numBits(RoutingProtocol.values().length)
             + numBits(allMetricTypes.size())
             + trackedAses.size()
+            + loopTracking.confedAses().size()
             + 1
             + loopTracking.clusterIds().size()
             // one extra value for an originator ID other than the tracked router IDs
@@ -437,6 +448,16 @@ public final class BDDRoute implements IDeepCopy<BDDRoute> {
       idx++;
     }
 
+    // Initialize one BDD per tracked confederation member AS, each of which has a corresponding BDD
+    // variable
+    _trackedConfedAses = loopTracking.confedAses();
+    _asPathContainsConfed = new BDD[_trackedConfedAses.size()];
+    for (int i = 0; i < _trackedConfedAses.size(); i++) {
+      _asPathContainsConfed[i] = factory.ithVar(idx);
+      _bitNames.put(idx, "AS path contains confederation member " + _trackedConfedAses.get(i));
+      idx++;
+    }
+
     _receivedFromRrClient = factory.ithVar(idx);
     _bitNames.put(idx, "received from route-reflector client");
     idx++;
@@ -500,6 +521,8 @@ public final class BDDRoute implements IDeepCopy<BDDRoute> {
     _tracks = other._tracks.clone();
     _trackedAses = other._trackedAses;
     _asPathContains = other._asPathContains.clone();
+    _trackedConfedAses = other._trackedConfedAses;
+    _asPathContainsConfed = other._asPathContainsConfed.clone();
     _receivedFromRrClient = other._receivedFromRrClient;
     _trackedClusterIds = other._trackedClusterIds;
     _clusterListContains = other._clusterListContains.clone();
@@ -554,6 +577,11 @@ public final class BDDRoute implements IDeepCopy<BDDRoute> {
     _asPathContains = new BDD[route._asPathContains.length];
     for (int i = 0; i < _asPathContains.length; i++) {
       _asPathContains[i] = route._asPathContains[i].and(pred);
+    }
+    _trackedConfedAses = route._trackedConfedAses;
+    _asPathContainsConfed = new BDD[route._asPathContainsConfed.length];
+    for (int i = 0; i < _asPathContainsConfed.length; i++) {
+      _asPathContainsConfed[i] = route._asPathContainsConfed[i].and(pred);
     }
     _receivedFromRrClient = route._receivedFromRrClient.and(pred);
     _trackedClusterIds = route._trackedClusterIds;
@@ -677,6 +705,7 @@ public final class BDDRoute implements IDeepCopy<BDDRoute> {
     _sourceVrfs.augmentPairing(other._sourceVrfs, pairing);
     pairing.set(other._tracks, _tracks);
     pairing.set(other._asPathContains, _asPathContains);
+    pairing.set(other._asPathContainsConfed, _asPathContainsConfed);
     pairing.set(other._receivedFromRrClient.var(), _receivedFromRrClient);
     pairing.set(other._clusterListContains, _clusterListContains);
     _originator.augmentPairing(other._originator, pairing);
@@ -911,6 +940,23 @@ public final class BDDRoute implements IDeepCopy<BDDRoute> {
     }
   }
 
+  /**
+   * The BDDs for whether the AS path contains each tracked confederation member AS in a
+   * confederation segment, in that order
+   */
+  public BDD[] getAsPathContainsConfed() {
+    return _asPathContainsConfed;
+  }
+
+  /**
+   * The BDD for whether the route's AS path contains the given AS number in a confederation
+   * segment, or null if that AS is not tracked as a confederation member
+   */
+  public @Nullable BDD getAsPathContainsConfed(long as) {
+    int i = _trackedConfedAses.indexOf(as);
+    return i < 0 ? null : _asPathContainsConfed[i];
+  }
+
   /** Whether the route was received from a route-reflector client */
   public BDD getReceivedFromRrClient() {
     return _receivedFromRrClient;
@@ -995,6 +1041,7 @@ public final class BDDRoute implements IDeepCopy<BDDRoute> {
         && Objects.equals(_sourceVrfs, other._sourceVrfs)
         && Arrays.equals(_tracks, other._tracks)
         && Arrays.equals(_asPathContains, other._asPathContains)
+        && Arrays.equals(_asPathContainsConfed, other._asPathContainsConfed)
         && Objects.equals(_receivedFromRrClient, other._receivedFromRrClient)
         && Arrays.equals(_clusterListContains, other._clusterListContains)
         && Objects.equals(_originator, other._originator)

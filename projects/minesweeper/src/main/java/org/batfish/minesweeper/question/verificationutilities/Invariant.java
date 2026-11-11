@@ -33,6 +33,7 @@ import org.batfish.datamodel.LineAction;
 import org.batfish.datamodel.PrefixRange;
 import org.batfish.datamodel.PrefixSpace;
 import org.batfish.datamodel.RoutingProtocol;
+import org.batfish.datamodel.bgp.BgpTopologyUtils.ConfedSessionType;
 import org.batfish.datamodel.routing_policy.RoutingPolicy;
 import org.batfish.datamodel.routing_policy.communities.CommunityMatchExpr;
 import org.batfish.minesweeper.ConfigAtomicPredicates;
@@ -712,55 +713,72 @@ public class Invariant {
     return new Invariant(left.tbdd, left.bdd.and(right.bdd));
   }
 
-  // Returns a version of the current invariant that represents what must hold on export
-  // from the neighbor in order for this invariant to hold on import over the given edge.  In
-  // other words, it represents the transformations that BGP performs when it exports a route.
-  // Consumes this.bdd
+  /// Returns a version of the current invariant that represents what must hold on export from the
+  /// neighbor in order for this invariant to hold on import over the given edge. In other words, it
+  /// undoes the transformations that BGP performs after the export policy runs, as in Batfish
+  /// (BgpProtocolHelper.transformBgpRoutePostExport):
+  ///
+  /// - The weight is reset to 0.
+  /// - On eBGP, the local preference is reset to 100, except within a confederation, where it is
+  ///   kept.
+  /// - On eBGP, the sender adds its AS for the session to the AS path. Within a confederation it is
+  ///   added as a confederation segment, which does not count toward the path's length. Otherwise
+  ///   it is added as an ordinary segment, which adds one to the length, after the confederation
+  ///   segments are removed if the session crosses a confederation's border. A sender that replaces
+  ///   the ASes in the path (Batfish's replaceNonLocalAsesOnExport) then turns every segment into
+  ///   an ordinary one with its own AS; within a confederation the resulting length depends on the
+  ///   number of confederation segments, which is not tracked, so it is treated as unknown.
+  ///
+  /// An iBGP session across a confederation's border, with a router whose AS is the
+  /// confederation's AS number, changes none of this, so the confederation segments are kept, as
+  /// in Batfish. Consumes this.bdd.
   public Invariant preImport(Edge edge) {
-    // for now the only transformations that we handle are the weight and (if EBGP) local
-    // preference, which are reset to default (0 and 100 respectively), and (if EBGP) the
-    // AS path, to which the sender prepends its own ASN, possibly after replacing the ASes in it
-    // with its own
-    boolean isEBGP = edge.isEBGP();
-
-    MutableBDDInteger weight = tbdd.getOriginalRoute().getWeight();
-    MutableBDDInteger localPref = tbdd.getOriginalRoute().getLocalPref();
-
-    // first restrict the current bdd to only those routes that have default values
-    BDD weight0 = weight.value(0L);
-    BDD restricted = bdd.andWith(weight0);
-    if (isEBGP) {
-      BDD localPref100 = localPref.value(100L);
-      restricted.andWith(localPref100);
+    BDDRoute route = tbdd.getOriginalRoute();
+    BDD result = restrictToValue(bdd, route.getWeight().value(0L));
+    if (!edge.isEBGP()) {
+      return new Invariant(tbdd, result);
     }
-
-    // then quantify out the weight and (if EBGP) local pref variables, since the sent route can
-    // have any value for them
-    BDD wsupport = weight.support();
-    restricted.existEq(wsupport);
-    wsupport.free();
-    if (isEBGP) {
-      BDD lsupport = localPref.support();
-      restricted.existEq(lsupport);
-      lsupport.free();
-      // the length the importer sees is one more than the length the exporter sent
-      BDD beforePrepend = shiftAsPathLength(restricted, false);
-      restricted.free();
-      restricted = beforePrepend;
-      // the importer sees the tracked ASes of the path after any replacement, plus the sender's
-      BDDRoute route = tbdd.getOriginalRoute();
-      if (edge.senderReplacesAses()) {
-        for (BDD contains : route.getAsPathContains()) {
-          restricted = restrictTo(restricted, contains, false);
-        }
-      }
-      Long senderAs = edge.senderAs();
-      BDD senderContains = senderAs == null ? null : route.getAsPathContains(senderAs);
-      if (senderContains != null) {
-        restricted = restrictTo(restricted, senderContains, true);
+    ConfedSessionType confedType = edge.confedSessionType();
+    boolean withinConfed = confedType == ConfedSessionType.WITHIN_CONFED;
+    boolean replaces = edge.senderReplacesAses();
+    if (!withinConfed) {
+      result = restrictToValue(result, route.getLocalPref().value(100L));
+    }
+    // the length the importer sees, in terms of the length the exporter sent
+    if (!withinConfed) {
+      BDD beforePrepend = shiftAsPathLength(result, false);
+      result.free();
+      result = beforePrepend;
+    } else if (replaces) {
+      BDD support = route.getAsPathLength().support();
+      BDD anyLength = result.forAll(support);
+      support.free();
+      result.free();
+      result = anyLength;
+    }
+    // the tracked ASes the importer sees. Each substitution eliminates its variable, so the
+    // sender's AS, which BGP adds last, is substituted first.
+    Long senderAs = edge.senderAs();
+    if (senderAs != null) {
+      BDD added =
+          withinConfed && !replaces
+              ? route.getAsPathContainsConfed(senderAs)
+              : route.getAsPathContains(senderAs);
+      if (added != null) {
+        result = restrictTo(result, added, true);
       }
     }
-    return new Invariant(tbdd, restricted);
+    if (replaces) {
+      for (BDD contains : route.getAsPathContains()) {
+        result = restrictTo(result, contains, false);
+      }
+    }
+    if (replaces || confedType == ConfedSessionType.ACROSS_CONFED_BORDER) {
+      for (BDD contains : route.getAsPathContainsConfed()) {
+        result = restrictTo(result, contains, false);
+      }
+    }
+    return new Invariant(tbdd, result);
   }
 
   /// Substitutes, for a route the receiver of the edge learns, the state that BGP records for it
@@ -928,37 +946,54 @@ public class Invariant {
     return result;
   }
 
-  // Like preImport above, but in the reverse direction (for use in a strongest postcondition
-  // computation)
-  // Consumes this.bdd
+  /// Like preImport above, but in the reverse direction (for use in a strongest postcondition
+  /// computation): applies the transformations that BGP performs after the export policy runs.
+  /// Consumes this.bdd.
   public Invariant postExport(Edge edge) {
-    // for now the only transformations are to reset the weight and (if EBGP) local preference
-    // to default (0 and 100 respectively), and (if EBGP) to prepend the sender's ASN to the AS
-    // path, possibly after replacing the ASes in it with its own -- all of which BGP does after
-    // the export policy has run
-    boolean isEBGP = edge.isEBGP();
-    MutableBDDInteger weight = tbdd.getOriginalRoute().getWeight();
+    BDDRoute route = tbdd.getOriginalRoute();
+    MutableBDDInteger weight = route.getWeight();
     BDD wsupport = weight.support();
     BDD result = bdd.existEq(wsupport).andWith(weight.value(0L));
     wsupport.free();
-    if (isEBGP) {
-      MutableBDDInteger localPref = tbdd.getOriginalRoute().getLocalPref();
+    if (!edge.isEBGP()) {
+      return new Invariant(tbdd, result);
+    }
+    ConfedSessionType confedType = edge.confedSessionType();
+    boolean withinConfed = confedType == ConfedSessionType.WITHIN_CONFED;
+    boolean replaces = edge.senderReplacesAses();
+    if (!withinConfed) {
+      MutableBDDInteger localPref = route.getLocalPref();
       BDD lsupport = localPref.support();
       result = result.existEq(lsupport).andWith(localPref.value(100L));
       lsupport.free();
+    }
+    if (!withinConfed) {
       BDD prepended = shiftAsPathLength(result, true);
       result.free();
       result = prepended;
-      BDDRoute route = tbdd.getOriginalRoute();
-      if (edge.senderReplacesAses()) {
-        for (BDD contains : route.getAsPathContains()) {
-          result = setTo(result, contains, false);
-        }
+    } else if (replaces) {
+      BDD support = route.getAsPathLength().support();
+      result = result.existEq(support);
+      support.free();
+    }
+    if (replaces || confedType == ConfedSessionType.ACROSS_CONFED_BORDER) {
+      for (BDD contains : route.getAsPathContainsConfed()) {
+        result = setTo(result, contains, false);
       }
-      Long senderAs = edge.senderAs();
-      BDD senderContains = senderAs == null ? null : route.getAsPathContains(senderAs);
-      if (senderContains != null) {
-        result = setTo(result, senderContains, true);
+    }
+    if (replaces) {
+      for (BDD contains : route.getAsPathContains()) {
+        result = setTo(result, contains, false);
+      }
+    }
+    Long senderAs = edge.senderAs();
+    if (senderAs != null) {
+      BDD added =
+          withinConfed && !replaces
+              ? route.getAsPathContainsConfed(senderAs)
+              : route.getAsPathContains(senderAs);
+      if (added != null) {
+        result = setTo(result, added, true);
       }
     }
     return new Invariant(tbdd, result);

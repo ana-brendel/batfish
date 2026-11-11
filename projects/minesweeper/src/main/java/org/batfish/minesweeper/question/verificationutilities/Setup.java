@@ -96,10 +96,13 @@ public class Setup {
   ///
   /// - every local AS and confederation AS number configured on a BGP session, since a receiver's
   ///   AS-path loop check looks for the AS it uses on the session, which is one of these;
+  /// - every local AS configured on a session of a router in a confederation, which is the member
+  ///   AS that the router adds as a confederation segment;
   /// - every cluster ID of a BGP process, which are the ones its cluster-list check looks for;
   /// - every BGP process's router ID, which its originator check looks for.
   private static BgpLoopTracking loopTracking(Collection<Configuration> configs) {
     Set<Long> ases = new TreeSet<>();
+    Set<Long> confedAses = new TreeSet<>();
     Set<Long> clusterIds = new TreeSet<>();
     Set<Ip> routerIds = new TreeSet<>();
     for (Configuration config : configs) {
@@ -113,6 +116,9 @@ public class Setup {
         }
         if (peer.getConfederationAsn() != null) {
           ases.add(peer.getConfederationAsn());
+          if (peer.getLocalAs() != null) {
+            confedAses.add(peer.getLocalAs());
+          }
         }
       }
       clusterIds.addAll(process.getClusterIds());
@@ -122,6 +128,7 @@ public class Setup {
     }
     return new BgpLoopTracking(
         ImmutableList.copyOf(ases),
+        ImmutableList.copyOf(confedAses),
         ImmutableList.copyOf(clusterIds),
         ImmutableList.copyOf(routerIds));
   }

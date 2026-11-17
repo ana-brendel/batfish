@@ -301,7 +301,7 @@ public class Path {
         // the edge is internal so do a strongest post computation
         RoutingPolicy exportPolicy = context.exports.get(edge);
         if (exportPolicy != null) {
-          curr = curr.strongestPostcondition(exportPolicy);
+          curr = strongestPostconditionFreeing(curr, exportPolicy);
         }
         // we need to account for the export transformations that BGP does, to
         // convert curr to an invariant on the routes that the importer will receive
@@ -309,7 +309,7 @@ public class Path {
       }
       RoutingPolicy importPolicy = context.imports.get(edge);
       if (importPolicy != null) {
-        curr = curr.strongestPostcondition(importPolicy);
+        curr = strongestPostconditionFreeing(curr, importPolicy);
       }
       // store a copy: the transformations applied on the next iteration consume curr in place,
       // which would otherwise corrupt the invariant recorded for this node
@@ -318,7 +318,27 @@ public class Path {
       // next edge
       i -= 2;
     }
+    curr.free();
     return result.build();
+  }
+
+  /// The strongest postcondition of the invariant through the policy, which is always a new
+  /// invariant; frees the given one
+  private static Invariant strongestPostconditionFreeing(Invariant inv, RoutingPolicy policy) {
+    Invariant post = inv.strongestPostcondition(policy);
+    inv.free();
+    return post;
+  }
+
+  /// The weakest precondition of the invariant through the policy, which is always a new
+  /// invariant; frees the given one
+  private static Invariant weakestPreconditionFreeing(
+      Invariant inv,
+      RoutingPolicy policy,
+      Map<Tuple<String, RoutingPolicy>, List<TransferReturn>> cache) {
+    Invariant pre = inv.weakestPrecondition(policy, true, cache);
+    inv.free();
+    return pre;
   }
 
   /// Returns a map from each node on the path that forwards the route to another node on the path
@@ -352,12 +372,12 @@ public class Path {
       // a route denied on the way is never selected at the next node, so it is unconstrained
       RoutingPolicy importPolicy = context.imports.get(edge);
       if (importPolicy != null) {
-        requirement = requirement.weakestPrecondition(importPolicy, true, cache);
+        requirement = weakestPreconditionFreeing(requirement, importPolicy, cache);
       }
       requirement = requirement.preImport(edge);
       RoutingPolicy exportPolicy = context.exports.get(edge);
       if (exportPolicy != null) {
-        requirement = requirement.weakestPrecondition(exportPolicy, true, cache);
+        requirement = weakestPreconditionFreeing(requirement, exportPolicy, cache);
       }
       result.put(current, requirement);
     }

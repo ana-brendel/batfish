@@ -106,7 +106,10 @@ public class Infer {
     return this.targets;
   }
 
+  /// Records, for each node, the routes less preferred than every route that can reach it (see
+  /// relaxByPreference), replacing any recorded before. Does not consume the given invariants.
   public void addPreferenceRestrictions(@Nonnull Map<Node, Invariant> reachableGood) {
+    lessPreferredByNode.values().forEach(BDD::free);
     lessPreferredByNode.clear();
     reachableGood.forEach(
         (node, inv) -> lessPreferredByNode.put(node, lessPreferredThanBgp(inv.getBDD(), tbdd)));

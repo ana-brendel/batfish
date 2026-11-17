@@ -240,6 +240,9 @@ public class ReachabilityAnswerer extends Answerer {
           inference.addProperty(node, removeProtocolHistory);
         }
       }
+      // inference keeps its own copies of what it needs from these
+      reachableGood.values().forEach(Invariant::free);
+      nextHopRequirements.values().forEach(Invariant::free);
 
       /* for (Map.Entry<Location, BDD> entry : auxiliaryRequirements.entrySet()) {
         if (entry.getKey() instanceof Node) {

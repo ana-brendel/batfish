@@ -647,13 +647,18 @@ public class NetworkInfo {
   public static Bgpv4Route getRouteExample(TransferBDD tbdd, BDD constraint) {
     assert !constraint.isZero();
     BDD model = ModelGeneration.constraintsToModel(constraint, tbdd.getConfigAtomicPredicates());
-    if (!model.isAssignment() && model.isZero()) {
-      return null;
-    } else if (!model.isAssignment()) {
-      assert false; // throws error during testing
-      return null; // avoided otherwise
-    } else {
-      return ModelGeneration.satAssignmentToBgpInputRoute(model, tbdd.getConfigAtomicPredicates());
+    try {
+      if (!model.isAssignment() && model.isZero()) {
+        return null;
+      } else if (!model.isAssignment()) {
+        assert false; // throws error during testing
+        return null; // avoided otherwise
+      } else {
+        return ModelGeneration.satAssignmentToBgpInputRoute(
+            model, tbdd.getConfigAtomicPredicates());
+      }
+    } finally {
+      model.free();
     }
   }
 

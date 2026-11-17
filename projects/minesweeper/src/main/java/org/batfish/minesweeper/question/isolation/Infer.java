@@ -162,6 +162,31 @@ public class Infer {
     }
   }
 
+  /// The conjunction of the given requirement with what is already required at the location: the
+  /// invariant inferred there if any, otherwise the enforced assumption there if any, otherwise
+  /// true. Consumes neither.
+  private Invariant strengthen(Location location, Invariant requirement) {
+    Invariant existing = inferred.get(location);
+    if (existing == null) {
+      existing = enforcedAssumptions.get(location);
+    }
+    return existing == null ? requirement.copy() : strongestCommonImplicant(existing, requirement);
+  }
+
+  /// Records the invariant inferred at the location, freeing the one it replaces. Only invariants
+  /// in the inferred map belong to this object; enforced assumptions belong to the network, which
+  /// later inference runs reuse, so they are never freed here. Returns true if the location had no
+  /// inferred invariant before or it differed from the new one.
+  private boolean setInferred(Location location, Invariant invariant) {
+    Invariant replaced = inferred.put(location, invariant);
+    if (replaced == null) {
+      return true;
+    }
+    boolean changed = !replaced.equals(invariant);
+    replaced.free();
+    return changed;
+  }
+
   /// Performs iterative invariant inference using the weakest preconditions
   private Optional<CounterExample> inferenceLoop(boolean pushFalse) {
     while (!working.isEmpty()) {
@@ -175,24 +200,17 @@ public class Infer {
         assert src != null;
         if (this.checksFalseAssumption(src)) {
           // inferred can be false because false implies anything
-          inferred.put(src, Invariant.getFalse(this.tbdd));
+          setInferred(src, Invariant.getFalse(this.tbdd));
         } else {
           RoutingPolicy exportPolicy = exports.get(edge);
           Invariant wp = this.getWeakestPrecondition(property, exportPolicy);
-          boolean firstVisit = !inferred.containsKey(src);
-          // get inferred if present, otherwise get enforced assumption, otherwise default is true
-          Invariant existing =
-              inferred.getOrDefault(
-                  src, enforcedAssumptions.getOrDefault(src, new Invariant(tbdd)));
-          Invariant updated = strongestCommonImplicant(existing, wp);
+          Invariant updated = strengthen(src, wp);
           wp.free();
-          inferred.put(src, updated);
+          boolean changed = setInferred(src, updated);
           // a node will never be a checked assumption
           if (!pushFalse && updated.isFalse()) {
-            existing.free();
             return Optional.of(new CounterExample(src, property, location));
-          } else if ((firstVisit || !existing.equals(updated)) && !working.contains(src)) {
-            existing.free();
+          } else if (changed && !working.contains(src)) {
             working.add(src);
           }
         }
@@ -200,27 +218,21 @@ public class Infer {
         for (Edge edge : node.getAllIncomingEdges()) {
           if (this.checksFalseAssumption(edge)) {
             // inferred can be false because false implies anything
-            inferred.put(edge, Invariant.getFalse(this.tbdd));
+            setInferred(edge, Invariant.getFalse(this.tbdd));
           } else {
             RoutingPolicy importPolicy = imports.get(edge);
             Invariant wp = this.getWeakestPrecondition(property, importPolicy);
-            boolean firstVisit = !inferred.containsKey(edge);
-            // get inferred if present, otherwise get enforced assumption, otherwise default is true
-            Invariant existing =
-                inferred.getOrDefault(
-                    edge, enforcedAssumptions.getOrDefault(edge, new Invariant(tbdd)));
-            Invariant updated = strongestCommonImplicant(existing, wp);
+            Invariant updated = strengthen(edge, wp);
             wp.free();
-            inferred.put(edge, updated);
+            boolean changed = setInferred(edge, updated);
             // if we inferred false, but the edge is incoming then this isn't necessarily a
             // counterexample - rather a condition which should be checked if it holds
             if (!pushFalse && updated.isFalse() && !checkedAssumptions.containsKey(edge)) {
-              existing.free();
               return Optional.of(new CounterExample(edge, property, location));
             } else if (updated.isFalse() && checkedAssumptions.containsKey(edge)) {
-              existing.free();
-            } else if ((firstVisit || !existing.equals(updated)) && !working.contains(edge)) {
-              existing.free();
+              // don't push false back past a checked assumption: verificationAssumptionCheck
+              // reports whether the assumption implies it
+            } else if (changed && !working.contains(edge)) {
               working.add(edge);
             }
           }
@@ -255,6 +267,7 @@ public class Infer {
         checks.put(location, getRouteExample(tbdd, constraint));
         constraint.free();
       }
+      wellFormedAssumption.free();
     }
     return checks;
   }
@@ -309,8 +322,7 @@ public class Infer {
     BDDFactory factory = r.getPrefix().getFactory();
     BDD result = factory.zero();
     for (PrefixRange range : space.getPrefixRanges()) {
-      BDD rangeBDD = isRelevantForDestination(r, range);
-      result = result.or(rangeBDD);
+      result.orWith(isRelevantForDestination(r, range));
     }
     return result;
   }

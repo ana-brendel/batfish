@@ -43,6 +43,8 @@ import org.batfish.minesweeper.ConfigAtomicPredicates;
 import org.batfish.minesweeper.bdd.BDDRoute;
 import org.batfish.minesweeper.bdd.TransferBDD;
 import org.batfish.minesweeper.bdd.TransferBDDUtils;
+import org.batfish.minesweeper.bdd.TransferReturn;
+import org.batfish.minesweeper.utils.Tuple;
 import org.batfish.minesweeper.question.searchroutepolicies.RegexConstraint;
 import org.batfish.minesweeper.question.searchroutepolicies.RegexConstraints;
 import org.junit.Before;
@@ -669,6 +671,28 @@ public class InvariantTest {
     assertNotSame(post.getBDD(), wp.getBDD());
     wp.free();
     assertEquals(expected, post);
+  }
+
+  /// Weakest preconditions over cached paths must not accumulate BDDs. In particular the pairing
+  /// that composes the invariant with each path's output route is reused, not made anew per call.
+  @Test
+  public void weakestPreconditionDoesNotLeakTest() {
+    RoutingPolicy policy = exports.get(GAMMANODE);
+    Invariant post =
+        Invariant.builder()
+            .addClause(
+                Invariant.clauseBuilder()
+                    .matchPrefix(
+                        new PrefixSpace(PrefixRange.fromPrefix(Prefix.parse("13.25.0.0/16")))))
+            .build(tbdd, policy);
+    Map<Tuple<String, RoutingPolicy>, List<TransferReturn>> cache = new HashMap<>();
+    // the first call computes the policy's paths and caches them
+    post.weakestPrecondition(policy, true, cache).free();
+    long outstanding = tbdd.getFactory().numOutstandingBDDs();
+    for (int i = 0; i < 10; i++) {
+      post.weakestPrecondition(policy, true, cache).free();
+    }
+    assertEquals(outstanding, tbdd.getFactory().numOutstandingBDDs());
   }
 
   @Test

@@ -2,7 +2,6 @@ package org.batfish.minesweeper.question.verificationutilities;
 
 import static org.apache.commons.lang3.ObjectUtils.firstNonNull;
 import static org.batfish.minesweeper.bdd.TransferBDD.isRelevantForDestination;
-import static org.batfish.minesweeper.bdd.TransferBDDUtils.makeRoutePairing;
 import static org.batfish.minesweeper.question.searchroutepolicies.SearchRoutePoliciesAnswerer.asPathRegexConstraintListToBDD;
 
 import com.fasterxml.jackson.annotation.JsonCreator;
@@ -12,12 +11,14 @@ import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableSet;
 import java.util.ArrayList;
 import java.util.Collection;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
+import java.util.WeakHashMap;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 import javax.annotation.Nonnull;
@@ -93,11 +94,8 @@ public class Invariant {
   public String toString(boolean refinementOccurred) {
     if (this.isFalse()) {
       return refinementOccurred ? "no traffic" : "false";
-    } else if (this.isTrue()
-        // if the invariant is true, but well-formed, we can represent as true
-        || tbdd.getOriginalRoute()
-            .wellFormednessConstraints(true)
-            .equals(this.bdd.and(tbdd.getOriginalRoute().wellFormednessConstraints(true)))) {
+    } else if (this.isTrue() || this.holdsForAllWellFormedRoutes()) {
+      // if the invariant is true for every well-formed route, we can represent as true
       return "true";
     } else {
       String returned =
@@ -105,6 +103,14 @@ public class Invariant {
       assert !returned.trim().isEmpty();
       return returned;
     }
+  }
+
+  /// Returns true if every well-formed route satisfies this invariant
+  private boolean holdsForAllWellFormedRoutes() {
+    BDD wellFormed = tbdd.getOriginalRoute().wellFormednessConstraints(true);
+    boolean result = !wellFormed.diffSat(this.bdd);
+    wellFormed.free();
+    return result;
   }
 
   public String toString(boolean refinementOccurred, @Nonnull Map<BDD, String> cache) {
@@ -142,11 +148,11 @@ public class Invariant {
                 clauses.stream()
                     .map(ClauseBuilder::createDesiredStringRepresentation)
                     .collect(Collectors.toSet()));
-        Collection<BDD> BDDs =
-            clauses.stream()
-                .map(clause -> clause.build(tbdd, policy, exactCommunities))
-                .collect(Collectors.toSet());
-        return new Invariant(tbdd, tbdd.getFactory().orAll(BDDs), string);
+        // a list rather than a set: each clause's BDD is fresh and must be freed, even if two
+        // clauses produce equal BDDs
+        List<BDD> BDDs =
+            clauses.stream().map(clause -> clause.build(tbdd, policy, exactCommunities)).toList();
+        return new Invariant(tbdd, tbdd.getFactory().orAllAndFree(BDDs), string);
       }
     }
 
@@ -318,18 +324,18 @@ public class Invariant {
       BDD positiveBDD =
           communities.getPositiveRegexConstraints().isEmpty()
               ? factory.one()
-              : factory.andAll(
+              : factory.andAllAndFree(
                   communities.getPositiveRegexConstraints().stream()
                       .map(r -> communityBDD(r, tbdd, route, context))
-                      .collect(ImmutableSet.toImmutableSet()));
+                      .toList());
       if (communities.getNegativeRegexConstraints().isEmpty()) {
         return positiveBDD;
       } else {
         BDD negativeBDD =
-            factory.orAll(
+            factory.orAllAndFree(
                 communities.getNegativeRegexConstraints().stream()
                     .map(r -> communityBDD(r, tbdd, route, context))
-                    .collect(ImmutableSet.toImmutableSet()));
+                    .toList());
         return positiveBDD.diffWith(negativeBDD);
       }
     }
@@ -342,11 +348,10 @@ public class Invariant {
       } else {
         BDD result = factory.zero();
         for (PrefixRange range : space.getPrefixRanges()) {
-          BDD rangeBDD = isRelevantForDestination(r, range);
-          result = result.or(rangeBDD);
+          result.orWith(isRelevantForDestination(r, range));
         }
         if (!positive) {
-          result = result.not();
+          result.notEq();
         }
         return result;
       }
@@ -604,9 +609,25 @@ public class Invariant {
     if (inv.isOne()) { // if the invariant is always true... should I do one for always false too?
       return tbdd.getFactory().one();
     } else {
-      BDDPairing pairing = makeRoutePairing(r, tbdd);
-      return inv.veccompose(pairing);
+      return inv.veccompose(routePairing(tbdd, r));
     }
+  }
+
+  /// One pairing per TransferBDD, refilled for each route. The BDD library cannot free a pairing:
+  /// the factory keeps every pairing it makes, along with the BDDs that the pairing maps variables
+  /// to, so making a new pairing for each route (as TransferBDDUtils.makeRoutePairing does) leaks.
+  /// The map is weak so that a TransferBDD's pairing goes away along with it; the pairing refers
+  /// to the factory but not to the TransferBDD.
+  private static final Map<TransferBDD, BDDPairing> ROUTE_PAIRINGS =
+      Collections.synchronizedMap(new WeakHashMap<>());
+
+  /// Returns a pairing from each variable of the TransferBDD's original route to the corresponding
+  /// BDD in the given route. Every route has the same variables, so refilling the pairing replaces
+  /// (and releases) everything the previous route set. The pairing is valid until the next call.
+  private static BDDPairing routePairing(TransferBDD tbdd, BDDRoute r) {
+    BDDPairing pairing = ROUTE_PAIRINGS.computeIfAbsent(tbdd, t -> t.getFactory().makePair());
+    r.augmentPairing(tbdd.getOriginalRoute(), pairing);
+    return pairing;
   }
 
   /**

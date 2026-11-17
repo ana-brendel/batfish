@@ -734,49 +734,26 @@ public class Invariant {
   /// in Batfish. Consumes this.bdd.
   public Invariant preImport(Edge edge) {
     BDDRoute route = tbdd.getOriginalRoute();
-    BDD result = restrictToValue(bdd, route.getWeight().value(0L));
+    List<BDD> values = new ArrayList<>();
+    values.add(route.getWeight().value(0L));
     if (!edge.isEBGP()) {
-      return new Invariant(tbdd, result);
+      return new Invariant(tbdd, substitute(bdd, values));
     }
     ConfedSessionType confedType = edge.confedSessionType();
     boolean withinConfed = confedType == ConfedSessionType.WITHIN_CONFED;
     boolean replaces = edge.senderReplacesAses();
     if (!withinConfed) {
-      result = restrictToValue(result, route.getLocalPref().value(100L));
+      values.add(route.getLocalPref().value(100L));
     }
+    values.addAll(sentAsValues(edge, confedType, replaces));
+    BDD result = substitute(bdd, values);
     // the length the importer sees, in terms of the length the exporter sent
     if (!withinConfed) {
       BDD beforePrepend = shiftAsPathLength(result, false);
       result.free();
       result = beforePrepend;
     } else if (replaces) {
-      BDD support = route.getAsPathLength().support();
-      BDD anyLength = result.forAll(support);
-      support.free();
-      result.free();
-      result = anyLength;
-    }
-    // the tracked ASes the importer sees. Each substitution eliminates its variable, so the
-    // sender's AS, which BGP adds last, is substituted first.
-    Long senderAs = edge.senderAs();
-    if (senderAs != null) {
-      BDD added =
-          withinConfed && !replaces
-              ? route.getAsPathContainsConfed(senderAs)
-              : route.getAsPathContains(senderAs);
-      if (added != null) {
-        result = restrictTo(result, added, true);
-      }
-    }
-    if (replaces) {
-      for (BDD contains : route.getAsPathContains()) {
-        result = restrictTo(result, contains, false);
-      }
-    }
-    if (replaces || confedType == ConfedSessionType.ACROSS_CONFED_BORDER) {
-      for (BDD contains : route.getAsPathContainsConfed()) {
-        result = restrictTo(result, contains, false);
-      }
+      result = forAll(result, route.getAsPathLength().support());
     }
     return new Invariant(tbdd, result);
   }
@@ -801,9 +778,12 @@ public class Invariant {
   /// substituted; consumes the constraint
   private BDD importState(BDD constraint, Edge edge, RoutingProtocol protocol) {
     BDDRoute route = tbdd.getOriginalRoute();
-    BDD result = restrictToValue(constraint, route.getProtocolHistory().value(protocol));
     boolean fromClient = protocol == RoutingProtocol.IBGP && edge.dstTreatsSrcAsClient();
-    return restrictTo(result, route.getReceivedFromRrClient(), fromClient);
+    BDD client = route.getReceivedFromRrClient();
+    return substitute(
+        constraint,
+        List.of(
+            route.getProtocolHistory().value(protocol), fromClient ? client.id() : client.not()));
   }
 
   /// Substitutes, for a route sent over the edge, the protocol that the sender's pre-export
@@ -815,11 +795,12 @@ public class Invariant {
     BDDRoute route = tbdd.getOriginalRoute();
     RoutingProtocol protocol = edge.sessionProtocol();
     if (protocol != null) {
-      return new Invariant(tbdd, restrictToValue(bdd, route.getProtocolHistory().value(protocol)));
+      return new Invariant(
+          tbdd, substitute(bdd, List.of(route.getProtocolHistory().value(protocol))));
     }
     BDD asIbgp =
-        restrictToValue(bdd.id(), route.getProtocolHistory().value(RoutingProtocol.IBGP));
-    BDD asEbgp = restrictToValue(bdd, route.getProtocolHistory().value(RoutingProtocol.BGP));
+        substitute(bdd.id(), List.of(route.getProtocolHistory().value(RoutingProtocol.IBGP)));
+    BDD asEbgp = substitute(bdd, List.of(route.getProtocolHistory().value(RoutingProtocol.BGP)));
     return new Invariant(tbdd, asIbgp.andWith(asEbgp));
   }
 
@@ -835,18 +816,26 @@ public class Invariant {
   /// terms of the protocol it had at the sender. If the session's type is unknown, the result
   /// requires this invariant for either type. Consumes this.bdd.
   public Invariant beforePreExport(Edge edge) {
+    BDDRoute route = tbdd.getOriginalRoute();
+    // most invariants say nothing about the originator or cluster list, and are left unchanged
+    BDD reflectionVars =
+        tbdd.getFactory()
+            .andAll(route.getClusterListContains())
+            .andWith(route.getOriginator().support());
+    boolean mentioned = bdd.testsVars(reflectionVars);
+    reflectionVars.free();
+    if (!mentioned) {
+      return new Invariant(tbdd, bdd);
+    }
     RoutingProtocol protocol = edge.sessionProtocol();
     if (protocol == RoutingProtocol.BGP) {
       return new Invariant(tbdd, injected(bdd, edge));
     }
-    BDDRoute route = tbdd.getOriginalRoute();
     BDD learnedOverIbgp = route.getProtocolHistory().value(RoutingProtocol.IBGP);
-    BDD reflected = bdd.id();
     Long clusterId = edge.senderClusterId();
     BDD inClusterList = clusterId == null ? null : route.getClusterListContains(clusterId);
-    if (inClusterList != null) {
-      reflected = restrictTo(reflected, inClusterList, true);
-    }
+    BDD reflected =
+        inClusterList == null ? bdd.id() : substitute(bdd.id(), List.of(inClusterList.id()));
     BDD overIbgp =
         learnedOverIbgp
             .and(reflected)
@@ -864,45 +853,102 @@ public class Invariant {
   /// cleared substituted; consumes the constraint
   private BDD injected(BDD constraint, Edge edge) {
     BDDRoute route = tbdd.getOriginalRoute();
-    BDD result = constraint;
+    List<BDD> values = new ArrayList<>();
     for (BDD contains : route.getClusterListContains()) {
-      result = restrictTo(result, contains, false);
+      values.add(contains.not());
     }
     Node sender = edge.getSrcNode();
     Ip senderId = sender == null ? null : sender.getRouterId();
-    BDD isSender = senderId == null ? null : route.originatorIs(senderId);
-    if (isSender != null) {
-      return restrictToValue(result, isSender);
+    if (senderId != null) {
+      values.add(route.originatorValue(senderId));
+      return substitute(constraint, values);
     }
     // the originator ID is unknown, so the constraint must hold for any value of it
-    BDD support = route.getOriginator().support();
-    BDD forAll = result.forAll(support);
-    support.free();
-    result.free();
-    return forAll;
+    return forAll(substitute(constraint, values), route.getOriginator().support());
   }
 
-  /// Substitutes the given values for BDD variables, given as a conjunction of literals, in the
-  /// constraint; consumes both
-  private static BDD restrictToValue(BDD constraint, BDD cube) {
+  /// Substitutes the given values for some of the route's variables in the constraint, in a single
+  /// pass. Each value is a conjunction of literals over the variables it assigns, such as a
+  /// negated variable or a BDDDomain or MutableBDDInteger value. If the constraint tests none of
+  /// those variables it is returned as is, after one pass that builds nothing. Consumes the
+  /// constraint and the values.
+  private BDD substitute(BDD constraint, List<BDD> values) {
+    if (values.isEmpty()) {
+      return constraint;
+    }
+    BDD cube = tbdd.getFactory().andAllAndFree(values);
+    BDD vars = cube.support();
+    boolean tested = constraint.testsVars(vars);
+    vars.free();
+    if (!tested) {
+      cube.free();
+      return constraint;
+    }
     BDD result = constraint.restrict(cube);
     cube.free();
     constraint.free();
     return result;
   }
 
-  /// Substitutes the given value for the given BDD variable in the constraint, which it consumes
-  private static BDD restrictTo(BDD constraint, BDD variable, boolean value) {
-    BDD literal = value ? variable.id() : variable.not();
-    BDD result = constraint.restrict(literal);
-    literal.free();
+  /// Sets the given values for some of the route's variables in the constraint, in a single pass:
+  /// the forward counterpart of substitute, which forgets what the constraint said about those
+  /// variables and conjoins the values. Consumes the constraint and the values.
+  private BDD assign(BDD constraint, List<BDD> values) {
+    if (values.isEmpty()) {
+      return constraint;
+    }
+    BDD cube = tbdd.getFactory().andAllAndFree(values);
+    BDD vars = cube.support();
+    BDD result = constraint.existEq(vars).andWith(cube);
+    vars.free();
+    return result;
+  }
+
+  /// The constraint required for every value of the given variables; consumes both
+  private static BDD forAll(BDD constraint, BDD vars) {
+    if (!constraint.testsVars(vars)) {
+      vars.free();
+      return constraint;
+    }
+    BDD result = constraint.forAll(vars);
+    vars.free();
     constraint.free();
     return result;
   }
 
-  /// Sets the given BDD variable to the given value in the constraint, which it consumes
-  private static BDD setTo(BDD constraint, BDD variable, boolean value) {
-    return constraint.existEq(variable).andWith(value ? variable.id() : variable.not());
+  /// The values that an eBGP export over the edge gives the tracked AS-path state, as fresh
+  /// literals: the sender's AS is added, within a confederation as a confederation segment; and
+  /// the confederation segments are removed when crossing a confederation's border, as are all
+  /// segments when the sender replaces the ASes in the path (leaving only its own AS).
+  private List<BDD> sentAsValues(Edge edge, ConfedSessionType confedType, boolean replaces) {
+    BDDRoute route = tbdd.getOriginalRoute();
+    boolean withinConfed = confedType == ConfedSessionType.WITHIN_CONFED;
+    Long senderAs = edge.senderAs();
+    BDD added =
+        senderAs == null
+            ? null
+            : withinConfed && !replaces
+                ? route.getAsPathContainsConfed(senderAs)
+                : route.getAsPathContains(senderAs);
+    List<BDD> values = new ArrayList<>();
+    if (added != null) {
+      values.add(added.id());
+    }
+    if (replaces) {
+      for (BDD contains : route.getAsPathContains()) {
+        if (!contains.equals(added)) {
+          values.add(contains.not());
+        }
+      }
+    }
+    if (replaces || confedType == ConfedSessionType.ACROSS_CONFED_BORDER) {
+      for (BDD contains : route.getAsPathContainsConfed()) {
+        if (!contains.equals(added)) {
+          values.add(contains.not());
+        }
+      }
+    }
+    return values;
   }
 
   /**
@@ -951,22 +997,19 @@ public class Invariant {
   /// Consumes this.bdd.
   public Invariant postExport(Edge edge) {
     BDDRoute route = tbdd.getOriginalRoute();
-    MutableBDDInteger weight = route.getWeight();
-    BDD wsupport = weight.support();
-    BDD result = bdd.existEq(wsupport).andWith(weight.value(0L));
-    wsupport.free();
+    List<BDD> values = new ArrayList<>();
+    values.add(route.getWeight().value(0L));
     if (!edge.isEBGP()) {
-      return new Invariant(tbdd, result);
+      return new Invariant(tbdd, assign(bdd, values));
     }
     ConfedSessionType confedType = edge.confedSessionType();
     boolean withinConfed = confedType == ConfedSessionType.WITHIN_CONFED;
     boolean replaces = edge.senderReplacesAses();
     if (!withinConfed) {
-      MutableBDDInteger localPref = route.getLocalPref();
-      BDD lsupport = localPref.support();
-      result = result.existEq(lsupport).andWith(localPref.value(100L));
-      lsupport.free();
+      values.add(route.getLocalPref().value(100L));
     }
+    values.addAll(sentAsValues(edge, confedType, replaces));
+    BDD result = assign(bdd, values);
     if (!withinConfed) {
       BDD prepended = shiftAsPathLength(result, true);
       result.free();
@@ -975,26 +1018,6 @@ public class Invariant {
       BDD support = route.getAsPathLength().support();
       result = result.existEq(support);
       support.free();
-    }
-    if (replaces || confedType == ConfedSessionType.ACROSS_CONFED_BORDER) {
-      for (BDD contains : route.getAsPathContainsConfed()) {
-        result = setTo(result, contains, false);
-      }
-    }
-    if (replaces) {
-      for (BDD contains : route.getAsPathContains()) {
-        result = setTo(result, contains, false);
-      }
-    }
-    Long senderAs = edge.senderAs();
-    if (senderAs != null) {
-      BDD added =
-          withinConfed && !replaces
-              ? route.getAsPathContainsConfed(senderAs)
-              : route.getAsPathContains(senderAs);
-      if (added != null) {
-        result = setTo(result, added, true);
-      }
     }
     return new Invariant(tbdd, result);
   }

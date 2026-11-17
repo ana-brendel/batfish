@@ -990,6 +990,14 @@ public final class BDDRoute implements IDeepCopy<BDDRoute> {
     return i < 0 ? null : _originator.value(i);
   }
 
+  /**
+   * The BDD for the route's originator ID being the given router ID: its own value if that router
+   * ID is tracked, and otherwise the value for any other originator ID
+   */
+  public BDD originatorValue(Ip routerId) {
+    return _originator.value(_trackedRouterIds.indexOf(routerId));
+  }
+
   public @Nonnull BDDTunnelEncapsulationAttribute getTunnelEncapsulationAttribute() {
     return _tunnelEncapsulationAttribute;
   }

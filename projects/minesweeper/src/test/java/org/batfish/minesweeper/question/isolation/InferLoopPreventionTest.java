@@ -6,6 +6,7 @@ import static org.batfish.minesweeper.question.verificationutilities.TestConfigC
 import static org.batfish.minesweeper.question.verificationutilities.TestConfigConstructionUtils.clearCommunities;
 import static org.batfish.minesweeper.question.verificationutilities.TestConfigConstructionUtils.includeCommunities;
 import static org.batfish.minesweeper.question.verificationutilities.TestConfigConstructionUtils.permitRoute;
+import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 
@@ -43,6 +44,7 @@ import org.batfish.datamodel.routing_policy.statement.PrependAsPath;
 import org.batfish.datamodel.routing_policy.statement.SetLocalPreference;
 import org.batfish.datamodel.routing_policy.statement.Statement;
 import org.batfish.datamodel.routing_policy.statement.Statements;
+import org.batfish.minesweeper.BgpLoopTracking;
 import org.batfish.minesweeper.bdd.TransferBDD;
 import org.batfish.minesweeper.question.searchroutepolicies.RegexConstraint;
 import org.batfish.minesweeper.question.searchroutepolicies.RegexConstraints;
@@ -763,5 +765,38 @@ public class InferLoopPreventionTest {
     external(c1, "100.0.0.1", 1000);
     session(c1, x);
     assertTrue(noAsPathLengthAt(build(), x, 1));
+  }
+
+  // Which loop-prevention state is tracked. A cluster ID is added to a route only by a router that
+  // reflects it, which needs a route-reflector client, and the originator ID only matters if some
+  // route is reflected. State that nothing in the model sets cannot change a verdict, so it is not
+  // tracked.
+
+  @Test
+  public void onlyReflectorsClusterIdsAreTracked() {
+    // rr1 has a client; rr2 has a cluster ID but no clients, so it never adds it
+    NodeRecord a = router("a", 1);
+    NodeRecord rr1 = router("rr1", 1);
+    NodeRecord rr2 = router("rr2", 1);
+    session(a, rr1);
+    session(rr1, rr2);
+    reflector(rr1, 1);
+    reflector(rr2, 2);
+    client(rr1, a);
+    BgpLoopTracking tracking = build().tbdd().getConfigAtomicPredicates().getLoopTracking();
+    assertEquals(List.of(1L), tracking.clusterIds());
+    assertEquals(3, tracking.routerIds().size());
+  }
+
+  @Test
+  public void nothingForReflectionIsTrackedWithoutReflectors() {
+    // b has a cluster ID but no clients, so no route is ever reflected
+    NodeRecord a = router("a", 1);
+    NodeRecord b = router("b", 1);
+    session(a, b);
+    reflector(b, 1);
+    BgpLoopTracking tracking = build().tbdd().getConfigAtomicPredicates().getLoopTracking();
+    assertEquals(List.of(), tracking.clusterIds());
+    assertEquals(List.of(), tracking.routerIds());
   }
 }

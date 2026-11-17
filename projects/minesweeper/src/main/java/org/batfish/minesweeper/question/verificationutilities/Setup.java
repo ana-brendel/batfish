@@ -98,13 +98,29 @@ public class Setup {
   ///   AS-path loop check looks for the AS it uses on the session, which is one of these;
   /// - every local AS configured on a session of a router in a confederation, which is the member
   ///   AS that the router adds as a confederation segment;
-  /// - every cluster ID of a BGP process, which are the ones its cluster-list check looks for;
-  /// - every BGP process's router ID, which its originator check looks for.
+  /// - every cluster ID of a BGP process that has a route-reflector client. A router adds a cluster
+  ///   ID to a route only when it reflects the route, which needs a client, so the cluster IDs of
+  ///   other routers are never in a route's cluster list as far as the model knows;
+  /// - every BGP process's router ID, which its originator check looks for, if some process has a
+  ///   route-reflector client. Without reflection a route never comes back over iBGP to the router
+  ///   that injected it.
+  ///
+  /// The loop-prevention excuses only ever allow routes for which this state is set, so state that
+  /// nothing in the model sets cannot change a verdict: it can only be set on a route entering the
+  /// network, which must satisfy its requirement whatever that state is.
+  ///
+  /// That relies on assumptions about incoming routes saying nothing about this state, as is the
+  /// case today. If an assumption could say, for example, that the routes from some neighbor have a
+  /// given cluster ID in their cluster list, or a given originator ID, then the routers that check
+  /// it would drop those routes, and the cluster ID or router ID would have to be tracked even if
+  /// nothing in the network sets it. Otherwise the excuse is lost. That cannot make the analysis
+  /// unsound, since pruning only ever removes excuses, but it can add false positives.
   private static BgpLoopTracking loopTracking(Collection<Configuration> configs) {
     Set<Long> ases = new TreeSet<>();
     Set<Long> confedAses = new TreeSet<>();
     Set<Long> clusterIds = new TreeSet<>();
     Set<Ip> routerIds = new TreeSet<>();
+    boolean reflection = false;
     for (Configuration config : configs) {
       if (config.getDefaultVrf() == null || config.getDefaultVrf().getBgpProcess() == null) {
         continue;
@@ -121,7 +137,16 @@ public class Setup {
           }
         }
       }
-      clusterIds.addAll(process.getClusterIds());
+      boolean hasClient =
+          process.getActiveNeighbors().values().stream()
+              .anyMatch(
+                  peer ->
+                      peer.getIpv4UnicastAddressFamily() != null
+                          && peer.getIpv4UnicastAddressFamily().getRouteReflectorClient());
+      if (hasClient) {
+        reflection = true;
+        clusterIds.addAll(process.getClusterIds());
+      }
       if (process.getRouterId() != null) {
         routerIds.add(process.getRouterId());
       }
@@ -130,7 +155,7 @@ public class Setup {
         ImmutableList.copyOf(ases),
         ImmutableList.copyOf(confedAses),
         ImmutableList.copyOf(clusterIds),
-        ImmutableList.copyOf(routerIds));
+        reflection ? ImmutableList.copyOf(routerIds) : ImmutableList.of());
   }
 
   /// This function takes the provided invariants and builds them in the context of the current

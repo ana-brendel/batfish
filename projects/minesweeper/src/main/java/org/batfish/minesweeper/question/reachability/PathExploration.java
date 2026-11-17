@@ -203,7 +203,8 @@ public class PathExploration {
   private Invariant[] getPathConstraints(Location[] path) {
     Invariant[] properties = new Invariant[path.length];
     properties[0] =
-        new Invariant(context.tbdd(), target.getBDDCopy().and(context.prefixSpaceToBDD(prefix)));
+        new Invariant(
+            context.tbdd(), target.getBDDCopy().andWith(context.prefixSpaceToBDD(prefix)));
     for (int i = 1; i < properties.length; i++) {
       Invariant post = properties[i - 1];
       Location prev = path[i - 1];

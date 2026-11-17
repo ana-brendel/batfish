@@ -1730,6 +1730,58 @@ public class InferTest {
     assertTrue(result.counter.isEmpty());
   }
 
+  /// An enforced assumption belongs to the network, not to an inference run: later runs over the
+  /// same network (as in ViolationAnalysis) reuse it, so a run must not free it.
+  @Test
+  public void enforcedAssumptionSurvivesInferenceTest() {
+    String prefix = "25.13.0.0/16";
+    PrefixSpace PREFIX = new PrefixSpace(PrefixRange.fromPrefix(Prefix.parse(prefix)));
+
+    Ip entry = Ip.parse("10.10.0.0");
+    Ip exit = Ip.parse("10.10.10.0");
+    NodeRecord NODE_A_R = new NodeRecord("10.10.0.1", "node_A");
+    NodeRecord NODE_B_R = new NodeRecord("10.10.0.2", "node_B");
+    NodeRecord NODE_C_R = new NodeRecord("10.10.0.3", "node_C");
+
+    TestConfigConstructionUtils.Network net =
+        simpleNetwork(entry, exit, NODE_A_R, NODE_B_R, NODE_C_R, 0);
+    NetworkInfo info = net.getInfo();
+
+    Node NODE_B = NODE_B_R.instantiate(info);
+    Node NODE_C = NODE_C_R.instantiate(info);
+    info.addAssumption(
+        info.checkForEdgeViaIps(exit, NODE_C.getSingleIp()).get(), Invariant.getFalse(net.tbdd()));
+    // inference reaches node B, so on its first visit there it starts from this assumption
+    Invariant assumption =
+        new Invariant(
+            net.tbdd(), Invariant.clauseBuilder().matchPrefix(PREFIX).build(net.tbdd(), null));
+    Invariant expected = assumption.copy();
+    info.addAssumption(NODE_B, assumption);
+
+    Location target =
+        new Location.Builder(NODE_C_R.getIp().toString(), exit.toString(), null)
+            .instantiate(info)
+            .stream()
+            .findFirst()
+            .get();
+    Invariant property =
+        new Invariant(
+            net.tbdd(),
+            Invariant.clauseBuilder()
+                .avoidPrefix(PREFIX)
+                .build(net.tbdd(), net.imports().get(NODE_C_R)));
+
+    Infer first = info.toInfer().addProperty(target, property.copy());
+    Infer.Result firstResult = first.run();
+    assertEquals(expected, assumption);
+
+    Infer second = info.toInfer().addProperty(target, property.copy());
+    Infer.Result secondResult = second.run();
+    assertEquals(expected, assumption);
+    assertEquals(firstResult.verified, secondResult.verified);
+    assertEquals(firstResult.invariants, secondResult.invariants);
+  }
+
   private static RouteFilterList prefixList(String prefix) {
     return new RouteFilterList(
         PREFIX_MATCH,

@@ -91,8 +91,7 @@ public class Path {
       BDDFactory factory = r.getPrefix().getFactory();
       BDD result = factory.zero();
       for (PrefixRange range : space.getPrefixRanges()) {
-        BDD rangeBDD = isRelevantForDestination(r, range);
-        result = result.or(rangeBDD);
+        result.orWith(isRelevantForDestination(r, range));
       }
       return result;
     }
@@ -164,14 +163,16 @@ public class Path {
             context.tbdd,
             initialAssumption.andWith(
                 context.tbdd.getOriginalRoute().wellFormednessConstraints(true)));
+    BDD protocolHistory = context.tbdd.getOriginalRoute().getProtocolHistory().support();
     Invariant inferredWithOutProtocolHistory =
         new Invariant(
             context.tbdd,
-            properties[properties.length - 1]
-                .getBDDCopy()
-                .existEq(context.tbdd.getOriginalRoute().getProtocolHistory().support()));
+            properties[properties.length - 1].getBDDCopy().existEq(protocolHistory));
+    protocolHistory.free();
     boolean result = !initial.isFalse() && inferredWithOutProtocolHistory.impliedBy(initial);
+    // initial is initialAssumption, which andWith updated in place
     initialAssumption.free();
+    inferredWithOutProtocolHistory.free();
     return result;
   }
 

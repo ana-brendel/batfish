@@ -21,6 +21,8 @@ import org.batfish.minesweeper.question.verificationutilities.Node;
 import org.batfish.minesweeper.utils.Tuple;
 
 import javax.annotation.Nonnull;
+import javax.annotation.Nullable;
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.LinkedList;
 import java.util.List;
@@ -54,6 +56,9 @@ public class Infer {
   private final Map<Location, Invariant> inferred = new HashMap<>();
 
   private final Map<Tuple<String,RoutingPolicy>, List<TransferReturn>> computedPathsCache = new HashMap<>();
+
+  /// The restriction to the prefixes of interest, if any (see restrictToPrefix)
+  private @Nullable PrefixRestriction prefixRestriction = null;
 
   /// Inference counterexample, used for when we infer false within the network
   public record CounterExample(Location location, Invariant post, Location cause) {}
@@ -112,7 +117,15 @@ public class Infer {
     lessPreferredByNode.values().forEach(BDD::free);
     lessPreferredByNode.clear();
     reachableGood.forEach(
-        (node, inv) -> lessPreferredByNode.put(node, lessPreferredThanBgp(inv.getBDD(), tbdd)));
+        (node, inv) -> {
+          BDD lessPreferred = lessPreferredThanBgp(inv.getBDD(), tbdd);
+          if (prefixRestriction != null) {
+            BDD restricted = prefixRestriction.apply(lessPreferred);
+            lessPreferred.free();
+            lessPreferred = restricted;
+          }
+          lessPreferredByNode.put(node, lessPreferred);
+        });
   }
 
   /// An invariant at a node only has to hold for routes that could actually be selected there,
@@ -167,13 +180,13 @@ public class Infer {
     for (Location location : targets.keySet()) {
       // we don't expect the target to be in the inferred map
       assert !inferred.containsKey(location);
-      inferred.putIfAbsent(location, this.targets.get(location).copy());
+      inferred.putIfAbsent(location, restricted(this.targets.get(location).copy()));
       working.add(location);
     }
     for (Location location : enforcedAssumptions.keySet()) {
       if (location instanceof Edge edge && !edge.hasDstNode()) {
         assert !inferred.containsKey(location);
-        inferred.putIfAbsent(location, this.enforcedAssumptions.get(location).copy());
+        inferred.putIfAbsent(location, restricted(this.enforcedAssumptions.get(location).copy()));
         working.add(location);
       }
     }
@@ -186,9 +199,11 @@ public class Infer {
   private Invariant getWeakestPrecondition(Invariant post, RoutingPolicy policy) {
     if (policy == null) {
       return post.copy();
-    } else {
-      return post.weakestPrecondition(policy, true, computedPathsCache);
     }
+    if (prefixRestriction != null && !policy.getStatements().isEmpty()) {
+      cacheRestrictedPaths(policy);
+    }
+    return restricted(post.weakestPrecondition(policy, true, computedPathsCache));
   }
 
   /// Weakens the given requirement on routes received over the edge to allow routes whose AS path
@@ -352,6 +367,12 @@ public class Infer {
           if (updated != strengthened) {
             strengthened.free();
           }
+          // restrict again: strengthen may have conjoined an enforced assumption, which belongs to
+          // the network and is not restricted, and the excuses ORed in since the weakest
+          // precondition do not have the rest of the prefix constraint (see PrefixRestriction).
+          // Every stored invariant must be in restricted form, so that the check for a change
+          // compares them exactly.
+          updated = restricted(updated);
           wp.free();
           boolean changed = setInferred(src, updated);
           // a node will never be a checked assumption
@@ -373,7 +394,12 @@ public class Infer {
             wp = excuseAsPathLoop(wp, edge);
             wp = excuseReflectionLoop(wp, edge);
             wp = wp.preImport(edge);
-            Invariant updated = strengthen(edge, wp);
+            // restrict again: strengthen may have conjoined an enforced assumption, which belongs
+            // to the network and is not restricted, and the excuses ORed in since the weakest
+            // precondition do not have the rest of the prefix constraint (see PrefixRestriction).
+            // Every stored invariant must be in restricted form, so that the check for a change
+            // compares them exactly.
+            Invariant updated = restricted(strengthen(edge, wp));
             wp.free();
             boolean changed = setInferred(edge, updated);
             // if we inferred false, but the edge is incoming then this isn't necessarily a
@@ -382,7 +408,8 @@ public class Infer {
               return Optional.of(new CounterExample(edge, property, location));
             } else if (updated.isFalse() && checkedAssumptions.containsKey(edge)) {
               // don't push false back past a checked assumption: verificationAssumptionCheck
-              // reports whether the assumption implies it
+              // reports whether the assumption implies it. Under a prefix restriction, false
+              // means false for the prefixes of interest.
             } else if (changed && !working.contains(edge)) {
               working.add(edge);
             }
@@ -482,11 +509,106 @@ public class Infer {
     return result;
   }
 
-  public void addPrefixToAssumptions(PrefixSpace space) {
+  /// Restricts inference to routes for the given prefixes: conjoins them into the checked
+  /// assumptions, and represents every invariant only on routes for them (see PrefixRestriction).
+  /// Routing never changes a route's prefix, and the checked assumptions only allow these
+  /// prefixes, so every check gives the same answer as without the restriction. The one difference
+  /// is in what is reported: a requirement that is false for these prefixes at an edge with a
+  /// checked assumption is not pushed back past it (see inferenceLoop), so a failure there does not
+  /// also show up upstream.
+  public void restrictToPrefix(PrefixSpace space) {
+    BDD prefixes = prefixSpaceToBDD(space);
     for (Location location : checkedAssumptions.keySet()) {
       BDD existing = checkedAssumptions.get(location).getBDDCopy();
-      existing.andWith(prefixSpaceToBDD(space));
+      existing.andWith(prefixes.id());
       checkedAssumptions.put(location, new Invariant(tbdd, existing));
     }
+    if (prefixRestriction != null) {
+      prefixRestriction.free();
+    }
+    prefixRestriction = prefixes.isZero() ? null : new PrefixRestriction(prefixes);
+    prefixes.free();
+    // policy paths cached before the restriction are not restricted
+    computedPathsCache.clear();
+  }
+
+  /// The restriction of every invariant to routes for the prefixes of interest. The prefixes are
+  /// split into a cube, the literals on prefix and prefix-length variables that they fix, and the
+  /// rest of the constraint (for example a range of lengths, or nothing for a single prefix). A BDD
+  /// is restricted by substituting the cube's values for its variables, which removes them, and
+  /// conjoining the rest.
+  ///
+  /// The restriction agrees with the BDD on routes for the prefixes, and depends only on its value
+  /// there, so two invariants that agree on those routes have the same restriction. That keeps the
+  /// fixpoint's check for a change exact.
+  private static final class PrefixRestriction {
+    private final BDD _cube;
+    private final BDD _rest;
+
+    PrefixRestriction(BDD prefixes) {
+      BDDFactory factory = prefixes.getFactory();
+      BDD cube = factory.one();
+      BDD support = prefixes.support();
+      for (int var : support.scanSet()) {
+        BDD positive = factory.ithVar(var);
+        BDD negative = factory.nithVar(var);
+        if (!prefixes.andSat(negative)) {
+          cube.andWith(positive);
+          negative.free();
+        } else if (!prefixes.andSat(positive)) {
+          cube.andWith(negative);
+          positive.free();
+        } else {
+          positive.free();
+          negative.free();
+        }
+      }
+      support.free();
+      _cube = cube;
+      _rest = prefixes.restrict(cube);
+    }
+
+    /// The restriction of the BDD; does not consume it
+    BDD apply(BDD bdd) {
+      BDD restricted = bdd.restrict(_cube);
+      return _rest.isOne() ? restricted : restricted.andWith(_rest.id());
+    }
+
+    /// The restriction of the invariant; consumes it
+    Invariant apply(TransferBDD tbdd, Invariant invariant) {
+      Invariant restricted = new Invariant(tbdd, apply(invariant.getBDD()));
+      invariant.free();
+      return restricted;
+    }
+
+    void free() {
+      _cube.free();
+      _rest.free();
+    }
+  }
+
+  /// The invariant restricted to the prefixes of interest, if any; consumes it
+  private Invariant restricted(Invariant invariant) {
+    return prefixRestriction == null ? invariant : prefixRestriction.apply(tbdd, invariant);
+  }
+
+  /// The policy's paths with their input constraints restricted to the prefixes of interest,
+  /// leaving out those that no route for them takes. Caches the result where weakestPrecondition
+  /// looks for it.
+  private void cacheRestrictedPaths(RoutingPolicy policy) {
+    Tuple<String, RoutingPolicy> key = Invariant.pathsCacheKey(policy);
+    if (computedPathsCache.containsKey(key)) {
+      return;
+    }
+    List<TransferReturn> restricted = new ArrayList<>();
+    for (TransferReturn path : Invariant.computePaths(tbdd, policy)) {
+      BDD inputConstraints = prefixRestriction.apply(path.getInputConstraints());
+      if (inputConstraints.isZero()) {
+        inputConstraints.free();
+      } else {
+        restricted.add(new TransferReturn(path.getOutputRoute(), inputConstraints, path.getAccepted()));
+      }
+    }
+    computedPathsCache.put(key, restricted);
   }
 }

@@ -1782,6 +1782,77 @@ public class InferTest {
     assertEquals(firstResult.invariants, secondResult.invariants);
   }
 
+  /// Runs inference for a community property on the simple network, without and then with a
+  /// restriction to the given prefixes, and checks that at every location the two invariants agree
+  /// on routes for those prefixes. Returns the restricted invariants and the prefixes' BDD.
+  private Map.Entry<Map<Location, Invariant>, BDD> checkPrefixRestrictionAgrees(PrefixRange range) {
+    Ip entry = Ip.parse("10.10.0.0");
+    Ip exit = Ip.parse("10.10.10.0");
+    NodeRecord NODE_A_R = new NodeRecord("10.10.0.1", "node_A");
+    NodeRecord NODE_B_R = new NodeRecord("10.10.0.2", "node_B");
+    NodeRecord NODE_C_R = new NodeRecord("10.10.0.3", "node_C");
+    TestConfigConstructionUtils.Network net =
+        simpleNetwork(entry, exit, NODE_A_R, NODE_B_R, NODE_C_R, 0);
+    NetworkInfo info = net.getInfo();
+    TransferBDD tbdd = net.tbdd();
+    Location target =
+        new Location.Builder(NODE_C_R.getIp().toString(), exit.toString(), null)
+            .instantiate(info)
+            .stream()
+            .findFirst()
+            .get();
+    Invariant property =
+        new Invariant(
+            tbdd,
+            Invariant.clauseBuilder()
+                .setCommunities(new RegexConstraints(List.of(RegexConstraint.parse("100:1"))))
+                .build(tbdd, null));
+    PrefixSpace space = new PrefixSpace(range);
+    BDD prefixes = Invariant.clauseBuilder().matchPrefix(space).build(tbdd, null);
+
+    // the restriction changes the network's checked assumptions, so the unrestricted run is first
+    Infer.Result unrestricted = info.toInfer().addProperty(target, property.copy()).run(true);
+    Infer restrictedInfer = info.toInfer().addProperty(target, property.copy());
+    restrictedInfer.restrictToPrefix(space);
+    Infer.Result restricted = restrictedInfer.run(true);
+
+    assertEquals(unrestricted.verified, restricted.verified);
+    assertEquals(unrestricted.invariants.keySet(), restricted.invariants.keySet());
+    unrestricted.invariants.forEach(
+        (location, invariant) ->
+            assertEquals(
+                "invariant at " + location,
+                invariant.getBDD().and(prefixes),
+                restricted.invariants.get(location).getBDD().and(prefixes)));
+    // the restriction must have changed some invariant, or the comparison above proves nothing
+    assertTrue(
+        unrestricted.invariants.entrySet().stream()
+            .anyMatch(e -> !e.getValue().equals(restricted.invariants.get(e.getKey()))));
+    return Map.entry(restricted.invariants, prefixes);
+  }
+
+  /// For a single prefix, the restriction substitutes the prefix bits and length it fixes, so the
+  /// restricted invariants no longer mention them
+  @Test
+  public void prefixRestrictionToSinglePrefixTest() {
+    Map.Entry<Map<Location, Invariant>, BDD> result =
+        checkPrefixRestrictionAgrees(PrefixRange.fromPrefix(Prefix.parse("25.13.0.0/16")));
+    BDD fixedVars = result.getValue().support();
+    result
+        .getKey()
+        .forEach(
+            (location, invariant) ->
+                assertFalse(
+                    "invariant at " + location + " mentions the prefix",
+                    invariant.getBDD().testsVars(fixedVars)));
+  }
+
+  /// For a range of lengths, the restriction also conjoins the lengths it does not fix
+  @Test
+  public void prefixRestrictionToLengthRangeTest() {
+    checkPrefixRestrictionAgrees(PrefixRange.fromString("25.13.0.0/16:16-24"));
+  }
+
   private static RouteFilterList prefixList(String prefix) {
     return new RouteFilterList(
         PREFIX_MATCH,

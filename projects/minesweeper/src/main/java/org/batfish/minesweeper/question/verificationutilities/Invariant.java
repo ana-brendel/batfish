@@ -646,6 +646,24 @@ public class Invariant {
     return pairing;
   }
 
+  /// The key under which a cache of policy paths (see weakestPrecondition) stores the policy's paths
+  public static Tuple<String, RoutingPolicy> pathsCacheKey(RoutingPolicy policy) {
+    return new Tuple<>(policy.getOwner().getHostname(), policy);
+  }
+
+  /// The paths through the policy computed by the symbolic route analysis
+  public static List<TransferReturn> computePaths(TransferBDD tbdd, RoutingPolicy policy) {
+    try {
+      return tbdd.computePaths(
+          policy.getStatements(), TransferBDD.Context.forPolicy(policy), false);
+    } catch (Exception e) {
+      String name =
+          policy.getOwner() != null ? policy.getOwner().getHostname() : "policy owner null";
+      throw new BatfishException(
+          "Unexpected error analyzing policy " + policy.getName() + " in node " + name, e);
+    }
+  }
+
   /**
    * Synthesizes the weakest precondition for this invariant to hold after the provided policy is
    * executed. If the includeDenied flag is false, then only preconditions which result in routes
@@ -672,22 +690,14 @@ public class Invariant {
         return new Invariant(tbdd); // default is deny so the weakest precondition is true
       }
     } else {
-      TransferBDD.Context context = TransferBDD.Context.forPolicy(policy);
       List<TransferReturn> paths;
-      Tuple<String,RoutingPolicy> key = new Tuple<>(policy.getOwner().getHostname(),policy);
+      Tuple<String,RoutingPolicy> key = pathsCacheKey(policy);
       if (cache != null && cache.containsKey(key)) {
         paths = cache.get(key);
       } else {
-        try {
-          paths = tbdd.computePaths(policy.getStatements(), context, false);
-          if (cache != null) {
-            cache.put(key, paths);
-          }
-        } catch (Exception e) {
-          String name =
-              policy.getOwner() != null ? policy.getOwner().getHostname() : "policy owner null";
-          throw new BatfishException(
-              "Unexpected error analyzing policy " + policy.getName() + " in node " + name, e);
+        paths = computePaths(tbdd, policy);
+        if (cache != null) {
+          cache.put(key, paths);
         }
       }
       BDD acceptedWP =

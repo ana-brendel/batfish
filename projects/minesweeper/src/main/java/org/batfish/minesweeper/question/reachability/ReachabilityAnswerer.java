@@ -210,7 +210,7 @@ public class ReachabilityAnswerer extends Answerer {
           goodPath.nextHopPreferenceRequirements(reachableGood, computedPathsCache);
       Path weakenedPathConstraints = goodPath;
       Infer inference = info.toInfer();
-      inference.addPrefixToAssumptions(prefix);
+      inference.restrictToPrefix(prefix);
       inference.addPreferenceRestrictions(reachableGood);
 
       /// IN PROGRESS: commented out code attempts to weaken the reachability constraints

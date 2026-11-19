@@ -6,6 +6,7 @@ import static org.batfish.minesweeper.question.verificationutilities.TestConfigC
 import static org.batfish.minesweeper.question.verificationutilities.TestConfigConstructionUtils.permitRoute;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertNotEquals;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
@@ -13,9 +14,12 @@ import static org.junit.Assert.assertTrue;
 import com.google.common.collect.ImmutableSortedMap;
 import java.io.IOException;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
 import java.util.SortedMap;
+import net.sf.javabdd.BDD;
+import net.sf.javabdd.BDDFactory;
 import org.batfish.datamodel.BgpProcess;
 import org.batfish.datamodel.ConcreteInterfaceAddress;
 import org.batfish.datamodel.Configuration;
@@ -36,6 +40,7 @@ import org.batfish.datamodel.table.Row;
 import org.batfish.datamodel.table.TableAnswerElement;
 import org.batfish.main.Batfish;
 import org.batfish.main.BatfishTestUtils;
+import org.batfish.minesweeper.bdd.BDDRoute;
 import org.batfish.minesweeper.bdd.TransferBDD;
 import org.batfish.minesweeper.question.reachability.Path;
 import org.batfish.minesweeper.question.reachability.ReachabilityAnswerer;
@@ -262,6 +267,41 @@ public class NetworkInfoTest {
     assertTrue(r3.clientToClientReflection());
     assertEquals(Set.of(R3_CLUSTER), r3.getClusterIds());
     assertEquals(Set.of(), info.getNodeByName("r4").orElseThrow().getClusterIds());
+  }
+
+  /// The variables that inference's loop-prevention excuses test, and the AS-path length's, come
+  /// before all others in the variable order
+  @Test
+  public void excuseVariablesComeFirstTest() {
+    SortedMap<String, Configuration> configs = configs();
+    TransferBDD tbdd =
+        new TransferBDD(getConfigAtomicPredicates(Set.of(), Set.of(), configs.values()));
+    BDDRoute route = tbdd.getOriginalRoute();
+    Set<Integer> excuseVars = new HashSet<>();
+    for (BDD v : route.getAsPathContains()) {
+      excuseVars.add(v.var());
+    }
+    for (BDD v : route.getAsPathContainsConfed()) {
+      excuseVars.add(v.var());
+    }
+    excuseVars.add(route.getReceivedFromRrClient().var());
+    for (BDD v : route.getClusterListContains()) {
+      excuseVars.add(v.var());
+    }
+    for (int v : route.getOriginator().support().scanSet()) {
+      excuseVars.add(v);
+    }
+    for (int v : route.getAsPathLength().support().scanSet()) {
+      excuseVars.add(v);
+    }
+    // the network's route reflection gives the route cluster-list variables to order
+    assertNotEquals(0, route.getClusterListContains().length);
+    BDDFactory factory = tbdd.getFactory();
+    for (int level = 0; level < excuseVars.size(); level++) {
+      assertTrue(
+          "level " + level + " holds an excuse variable",
+          excuseVars.contains(factory.level2Var(level)));
+    }
   }
 
   @Test

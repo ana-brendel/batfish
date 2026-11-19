@@ -731,7 +731,7 @@ public class InvariantTest {
                         List.of(RegexConstraint.parse("100:1"), RegexConstraint.parse("!100:2"))))
                 .matchPrefix(PREFIX)
                 .build(tbdd, exports.get(ALPHANODE))
-                .and(tbdd.getFactory().ithVar(0).not()));
+                .and(tbdd.getOriginalRoute().getCommunityAtomicPredicates()[0].not()));
     assertEquals(sp1.getBDDCopy(), expected1.getBDDCopy());
 
     // [2] not P \/  (P /\ 100:1 /\ no other community (specifically 100:2 and match any)) =
@@ -770,7 +770,7 @@ public class InvariantTest {
                     new RegexConstraints(
                         List.of(RegexConstraint.parse("!100:1"), RegexConstraint.parse("100:2"))))
                 .build(tbdd, exports.get(BETANODE))
-                .and(tbdd.getFactory().ithVar(0).not()));
+                .and(tbdd.getOriginalRoute().getCommunityAtomicPredicates()[0].not()));
     BDD expected7 = avoid_100_1.build(tbdd, exports.get(BETANODE)).or(noneBut1002.getBDDCopy());
     assertEquals(sp7.getBDDCopy(), expected7);
 

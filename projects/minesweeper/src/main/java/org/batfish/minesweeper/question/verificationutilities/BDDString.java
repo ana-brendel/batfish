@@ -58,8 +58,20 @@ public class BDDString {
     int[] prefixVars = prefixOnlySupport.scanSet();
     this.maxPrefixVarNum = Arrays.stream(prefixVars).max().getAsInt();
 
+    // The BDD variables for each community regex's atomic predicates. The atomic predicates'
+    // numbers are not their variables' numbers (see BDDRoute's constructor). Building a new map
+    // also leaves the TransferBDD's own map alone, which the code below would otherwise modify.
+    BDD[] communityAtomicPredicates = this.base.getCommunityAtomicPredicates();
+    this.communities = new HashMap<>();
+    tbdd.getCommunityAtomicPredicates()
+        .forEach(
+            (regex, aps) ->
+                this.communities.put(
+                    regex,
+                    aps.stream()
+                        .map(ap -> communityAtomicPredicates[ap].var())
+                        .collect(Collectors.toSet())));
     // make the only variable corresponding to "all communities" be the one isolated for it
-    this.communities = tbdd.getCommunityAtomicPredicates();
     Set<Integer> communityVars =
         this.communities.entrySet().stream()
             .filter(entry -> !entry.getKey().getRegex().equals("[^^$]*"))

@@ -330,6 +330,61 @@ public final class BDDRoute implements IDeepCopy<BDDRoute> {
     _bitNames = new HashMap<>();
 
     int idx = 0;
+    int len;
+    // The variables that invariant inference's loop-prevention excuses test, and the AS-path length,
+    // come first in the variable order. Inference ORs these excuses into requirements and conjoins
+    // requirements from many locations; with the excuse variables at the top, a BDD splits on them
+    // first and each branch below is a plain conjunction, rather than having to track through every
+    // other variable which requirements failed. Code must therefore refer to variables through
+    // these fields, not assume their numbers (for example, that community atomic predicate i is
+    // variable i).
+
+    // Initialize one BDD per tracked AS number, each of which has a corresponding BDD variable
+    _trackedAses = ImmutableList.copyOf(trackedAses);
+    _asPathContains = new BDD[trackedAses.size()];
+    for (int i = 0; i < trackedAses.size(); i++) {
+      _asPathContains[i] = factory.ithVar(idx);
+      _bitNames.put(idx, "AS path contains " + trackedAses.get(i));
+      idx++;
+    }
+
+    // Initialize one BDD per tracked confederation member AS, each of which has a corresponding BDD
+    // variable
+    _trackedConfedAses = loopTracking.confedAses();
+    _asPathContainsConfed = new BDD[_trackedConfedAses.size()];
+    for (int i = 0; i < _trackedConfedAses.size(); i++) {
+      _asPathContainsConfed[i] = factory.ithVar(idx);
+      _bitNames.put(idx, "AS path contains confederation member " + _trackedConfedAses.get(i));
+      idx++;
+    }
+
+    _receivedFromRrClient = factory.ithVar(idx);
+    _bitNames.put(idx, "received from route-reflector client");
+    idx++;
+
+    // Initialize one BDD per tracked cluster ID, each of which has a corresponding BDD variable
+    _trackedClusterIds = loopTracking.clusterIds();
+    _clusterListContains = new BDD[_trackedClusterIds.size()];
+    for (int i = 0; i < _trackedClusterIds.size(); i++) {
+      _clusterListContains[i] = factory.ithVar(idx);
+      _bitNames.put(idx, "cluster list contains " + _trackedClusterIds.get(i));
+      idx++;
+    }
+
+    _trackedRouterIds = loopTracking.routerIds();
+    _originator =
+        new BDDDomain<>(
+            factory,
+            IntStream.range(-1, _trackedRouterIds.size()).boxed().collect(Collectors.toList()),
+            idx);
+    len = _originator.getInteger().size();
+    addBitNames("originator", len, idx, false);
+    idx += len;
+
+    _asPathLength = MutableBDDInteger.makeFromIndex(factory, 4, idx, false);
+    addBitNames("asPathLength", 4, idx, false);
+    idx += 4;
+
     // Initialize one BDD per community atomic predicate, each of which has a corresponding
     // BDD variable
     _communityAtomicPredicates = new BDD[numCommAtomicPredicates];
@@ -340,7 +395,7 @@ public final class BDDRoute implements IDeepCopy<BDDRoute> {
     }
     _protocolHistory =
         new BDDDomain<>(factory, ImmutableList.copyOf(RoutingProtocol.values()), idx);
-    int len = _protocolHistory.getInteger().size();
+    len = _protocolHistory.getInteger().size();
     addBitNames("proto", len, idx, false);
     idx += len;
     _originType = new BDDDomain<>(factory, ImmutableList.copyOf(OriginType.values()), idx);
@@ -387,10 +442,6 @@ public final class BDDRoute implements IDeepCopy<BDDRoute> {
     len = _asPathRegexAtomicPredicates.getInteger().size();
     addBitNames("as-path atomic predicates", len, idx, false);
     idx += len;
-
-    _asPathLength = MutableBDDInteger.makeFromIndex(factory, 4, idx, false);
-    addBitNames("asPathLength", 4, idx, false);
-    idx += 4;
 
     // we use the value -1 below to denote that an optional value is not there, or (in the case of
     // peer addresses) that the address is something other than one of the ones being tracked
@@ -439,47 +490,6 @@ public final class BDDRoute implements IDeepCopy<BDDRoute> {
     addBitNames("ospfMetric", len, idx, false);
     idx += len;
 
-    // Initialize one BDD per tracked AS number, each of which has a corresponding BDD variable
-    _trackedAses = ImmutableList.copyOf(trackedAses);
-    _asPathContains = new BDD[trackedAses.size()];
-    for (int i = 0; i < trackedAses.size(); i++) {
-      _asPathContains[i] = factory.ithVar(idx);
-      _bitNames.put(idx, "AS path contains " + trackedAses.get(i));
-      idx++;
-    }
-
-    // Initialize one BDD per tracked confederation member AS, each of which has a corresponding BDD
-    // variable
-    _trackedConfedAses = loopTracking.confedAses();
-    _asPathContainsConfed = new BDD[_trackedConfedAses.size()];
-    for (int i = 0; i < _trackedConfedAses.size(); i++) {
-      _asPathContainsConfed[i] = factory.ithVar(idx);
-      _bitNames.put(idx, "AS path contains confederation member " + _trackedConfedAses.get(i));
-      idx++;
-    }
-
-    _receivedFromRrClient = factory.ithVar(idx);
-    _bitNames.put(idx, "received from route-reflector client");
-    idx++;
-
-    // Initialize one BDD per tracked cluster ID, each of which has a corresponding BDD variable
-    _trackedClusterIds = loopTracking.clusterIds();
-    _clusterListContains = new BDD[_trackedClusterIds.size()];
-    for (int i = 0; i < _trackedClusterIds.size(); i++) {
-      _clusterListContains[i] = factory.ithVar(idx);
-      _bitNames.put(idx, "cluster list contains " + _trackedClusterIds.get(i));
-      idx++;
-    }
-
-    _trackedRouterIds = loopTracking.routerIds();
-    _originator =
-        new BDDDomain<>(
-            factory,
-            IntStream.range(-1, _trackedRouterIds.size()).boxed().collect(Collectors.toList()),
-            idx);
-    len = _originator.getInteger().size();
-    addBitNames("originator", len, idx, false);
-    idx += len;
 
     _prependedASes = new ArrayList<>();
 
